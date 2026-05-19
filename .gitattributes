@@ -1,0 +1,13 @@
+* text=auto
+
+*.cs text diff=csharp
+*.sql text
+*.json text
+*.md text
+*.sh text eol=lf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary

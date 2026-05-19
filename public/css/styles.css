@@ -1,0 +1,885 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   styles.css — Estilos globales del formulario SARLAFT (Persona Jurídica)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Reset y base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-primary:      #1b5e20;   /* verde oscuro — títulos               */
+  --color-accent:       #2e7d32;   /* verde medio  — bordes activos         */
+  --color-header-bg:    #e8f5e9;   /* verde claro  — fondo acordeón         */
+  --color-header-txt:   #1b5e20;
+  --color-border:       #bdbdbd;
+  --color-focus:        #1565c0;   /* azul — borde al enfocar               */
+  --color-error:        #c62828;
+  --color-required:     #c62828;
+  --color-disabled:     #f5f5f5;
+  --color-disabled-txt: #9e9e9e;
+  --radius:             6px;
+  --font:               'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: #fafafa;
+  color: #212121;
+  padding: 24px 16px 60px;
+  min-height: 100vh;
+}
+
+/* ── Cabecera de página ────────────────────────────────────────────────────── */
+.page-header {
+  max-width: 960px;
+  margin: 0 auto 28px;
+}
+.page-header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  border-left: 5px solid var(--color-accent);
+  padding-left: 12px;
+}
+.page-header p {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: #616161;
+  padding-left: 17px;
+}
+
+/* ── Contenedor del formulario ─────────────────────────────────────────────── */
+.form-wrapper {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Acordeón ──────────────────────────────────────────────────────────────── */
+.accordion {
+  border: 1px solid #c8e6c9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--color-header-bg);
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+}
+.accordion-header:hover { background: #dcedc8; }
+
+.accordion-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-header-txt);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.accordion-title .section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.chevron {
+  font-size: 1.1rem;
+  color: var(--color-accent);
+  transition: transform .25s;
+}
+.accordion.collapsed .chevron { transform: rotate(-90deg); }
+
+.accordion-body {
+  padding: 22px 18px 26px;
+  background: #fff;
+  display: grid;
+  row-gap: 18px;
+}
+.accordion.collapsed .accordion-body { display: none; }
+
+/* ── Grilla de campos ──────────────────────────────────────────────────────── */
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.col-full { grid-column: 1 / -1; }
+
+@media (max-width: 800px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 500px) {
+  .grid-4, .grid-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Campo (label + control) ───────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 5px; }
+
+.field label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #424242;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.field label .req {
+  color: var(--color-required);
+  margin-left: 2px;
+}
+
+.field input,
+.field select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-family: var(--font);
+  color: #212121;
+  background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+  width: 100%;
+}
+
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, .15);
+}
+
+.field input:disabled,
+.field select:disabled {
+  background: var(--color-disabled);
+  color: var(--color-disabled-txt);
+  cursor: not-allowed;
+  border-color: #e0e0e0;
+}
+
+.field select { appearance: auto; cursor: pointer; }
+
+/* ── Estado de error visual ────────────────────────────────────────────────── */
+.field.error input,
+.field.error select {
+  border-color: var(--color-error);
+  background: #fff8f8;
+}
+.field .error-msg {
+  font-size: 0.72rem;
+  color: var(--color-error);
+  display: none;
+}
+.field.error .error-msg { display: block; }
+
+/* ── Botones de acción ─────────────────────────────────────────────────────── */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  gap: 10px;
+}
+
+.btn {
+  padding: 10px 28px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s;
+}
+.btn-primary  { background: var(--color-accent); color: #fff; }
+.btn-primary:hover  { background: #1b5e20; box-shadow: 0 2px 8px rgba(0, 0, 0, .2); }
+.btn-secondary { background: #eeeeee; color: #424242; }
+.btn-secondary:hover { background: #e0e0e0; }
+
+/* ── Toast de notificaciones ───────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 28px; right: 28px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+  z-index: 9999;
+}
+.toast.show    { opacity: 1; }
+.toast.success { background: #2e7d32; }
+.toast.error   { background: #c62828; }
+
+/* ── Spinner de carga global ───────────────────────────────────────────────── */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: rgba(255, 255, 255, .65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 8888;
+}
+.spinner {
+  width: 42px; height: 42px;
+  border: 5px solid #c8e6c9;
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Separador interno de sección ─────────────────────────────────────────── */
+.section-divider {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #78909c;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* ── Bloques de Representante Legal ───────────────────────────────────────── */
+.rl-bloque { display: grid; row-gap: 14px; }
+
+.rl-block-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #424242;
+  margin-bottom: 2px;
+}
+
+.rl-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.rl-badge.principal { background: #1565c0; }
+.rl-badge.suplente  { background: #6a1b9a; }
+
+.rl-divider {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 20px 0 16px;
+}
+
+/* ── Campo condicional con transición suave ────────────────────────────────── */
+.campo-condicional {
+  overflow: hidden;
+  transition: opacity .2s ease, max-height .2s ease;
+}
+
+/* ── Lista dinámica de países de operación ─────────────────────────────────── */
+.paises-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pais-entry {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.pais-entry-field {
+  flex: 1;
+}
+
+.btn-eliminar-pais {
+  flex-shrink: 0;
+  height: 38px;
+  width: 38px;
+  border: 1px solid #ef9a9a;
+  background: #fff;
+  color: #c62828;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: background .15s;
+}
+.btn-eliminar-pais:hover:not([disabled]) { background: #ffebee; }
+.btn-eliminar-pais[disabled] {
+  opacity: .35;
+  cursor: not-allowed;
+  border-color: #e0e0e0;
+  color: #9e9e9e;
+}
+
+.pais-actions { padding-top: 6px; }
+
+.btn-agregar-pais {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: 1.5px solid var(--color-accent);
+  background: #fff;
+  color: var(--color-accent);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-agregar-pais:hover { background: #f1f8e9; }
+
+/* ── Textarea (campo de texto largo) ──────────────────────────────────────── */
+.field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-family: var(--font);
+  color: #212121;
+  background: #fff;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color .15s, box-shadow .15s;
+  width: 100%;
+  line-height: 1.5;
+}
+.field textarea:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, .15);
+}
+.field.error textarea {
+  border-color: var(--color-error);
+  background: #fff8f8;
+}
+
+/* ── Radio buttons en línea (Sí / No) ────────────────────────────────────── */
+.field-radio {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+.field-radio > label:first-child {
+  flex: 1;
+  margin-bottom: 0;
+}
+.radio-group {
+  display: flex;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #424242;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.radio-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+/* ── Bloque condicional grande (varios campos anidados) ───────────────────── */
+.bloque-condicional {
+  overflow: hidden;
+  transition: opacity .2s ease, max-height .25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Nota informativa de cumplimiento ─────────────────────────────────────── */
+.cump-note {
+  font-size: 0.85rem;
+  color: #888;
+  margin-top: 4px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* ── Sub-título "Información del oficial de cumplimiento" ─────────────────── */
+.cump-subtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  color: #212121;
+  padding: 4px 0;
+}
+
+/* ── Grupos dinámicos (JD / RF / AC) ──────────────────────────────────────── */
+.grupo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grupo-item {
+  border: 1px solid #e0e0e0;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.grupo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f9f9f9;
+  border-left: 3px solid #4caf50;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+}
+.grupo-header:hover { background: #f1f8e9; }
+
+.grupo-titulo {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #424242;
+}
+
+.btn-eliminar-grupo {
+  background: transparent;
+  border: none;
+  color: #e53935;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 8px;
+  line-height: 1;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.btn-eliminar-grupo:hover:not([disabled]) { background: #ffebee; }
+.btn-eliminar-grupo[disabled] {
+  opacity: .3;
+  cursor: not-allowed;
+}
+
+.grupo-body {
+  padding: 18px;
+  background: #fff;
+  display: grid;
+  row-gap: 16px;
+}
+.grupo-body.collapsed { display: none; }
+
+/* ── Indicador de suma de porcentajes (AC) ────────────────────────────────── */
+.pct-indicador {
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.pct-indicador.pct-ok      { background: #f1f8e9; color: #2e7d32; }
+.pct-indicador.pct-error   { background: #ffebee; color: #c62828; }
+.pct-indicador.pct-neutro  { background: #f5f5f5; color: #616161; }
+
+/* ── Envoltorio de la lista condicional (JD / RF) ─────────────────────────── */
+.lista-grupos-wrap {
+  overflow: hidden;
+  transition: opacity .2s ease, max-height .25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Condicional de firma (RF) ────────────────────────────────────────────── */
+.firma-wrap {
+  overflow: hidden;
+  transition: opacity .2s ease, max-height .2s ease;
+}
+
+/* ── Grilla de 3 columnas (Sección financiera) ────────────────────────────── */
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 800px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .grid-3 { grid-template-columns: 1fr; } }
+
+/* ── Campo monetario con prefijo $ ────────────────────────────────────────── */
+.money-wrapper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .15s;
+}
+.money-wrapper:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, .15);
+}
+.money-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #f5f5f5;
+  border-right: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #616161;
+  flex-shrink: 0;
+  user-select: none;
+}
+.money-wrapper input {
+  flex: 1;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  height: 38px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  font-family: var(--font);
+  color: #212121;
+  background: #fff;
+  min-width: 0;
+}
+.money-wrapper input:focus { outline: none; }
+.field.error .money-wrapper {
+  border-color: var(--color-error);
+  background: #fff8f8;
+}
+
+/* ── Texto de ayuda campo auto-calculado ─────────────────────────────────── */
+.campo-auto-hint {
+  font-size: 0.72rem;
+  color: #78909c;
+  font-style: italic;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* ── Sub-título de sección PEP ────────────────────────────────────────────── */
+.sub-seccion-titulo {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #c8e6c9;
+}
+
+/* ── Lista de checkboxes (actividades virtuales) ──────────────────────────── */
+.checkbox-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.checkbox-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.875rem;
+  color: #212121;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.checkbox-opcion input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+/* ── Checkbox de certificación ────────────────────────────────────────────── */
+.cert-wrapper {
+  background: #fffde7;
+  border: 1.5px solid #f9a825;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.cert-wrapper .checkbox-opcion {
+  font-weight: 600;
+  color: #5d4037;
+}
+.field.error .cert-wrapper {
+  border-color: var(--color-error);
+  background: #fff8f8;
+}
+
+/* ── Panel de errores de validación global ────────────────────────────────── */
+.error-panel {
+  background: #fff8f8;
+  border: 1.5px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: none;
+}
+.error-panel.visible { display: block; }
+.error-panel-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-error);
+  margin-bottom: 10px;
+}
+.error-panel-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.error-panel-list li {
+  font-size: 0.82rem;
+  color: #b71c1c;
+  padding-left: 14px;
+  position: relative;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.error-panel-list li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--color-error);
+}
+
+/* ── Botón de envío principal ─────────────────────────────────────────────── */
+.btn-submit-wrap {
+  padding: 8px 0 20px;
+  display: flex;
+  justify-content: center;
+}
+.btn-submit {
+  width: 100%;
+  max-width: 480px;
+  height: 50px;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .03em;
+  transition: background .15s, box-shadow .15s, opacity .15s;
+  box-shadow: 0 2px 8px rgba(46, 125, 50, .35);
+}
+.btn-submit:hover:not([disabled]) {
+  background: #1b5e20;
+  box-shadow: 0 4px 14px rgba(46, 125, 50, .45);
+}
+.btn-submit[disabled] {
+  opacity: .55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ── Modales (progreso, confirmación, error) ──────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  padding: 20px;
+}
+.modal-overlay.visible { display: flex; }
+
+.modal-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 32px 28px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .22);
+  text-align: center;
+}
+
+/* Progress modal */
+.progress-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 6px;
+}
+.progress-step-txt {
+  font-size: 0.82rem;
+  color: #616161;
+  min-height: 20px;
+  margin-bottom: 14px;
+}
+.progress-bar-wrap {
+  height: 8px;
+  background: #e8f5e9;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 99px;
+  width: 0%;
+  transition: width .4s ease;
+}
+
+/* Confirmation modal */
+.confirm-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.confirm-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #2e7d32;
+  margin-bottom: 8px;
+}
+.confirm-body {
+  font-size: 0.875rem;
+  color: #424242;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.confirm-id {
+  display: inline-block;
+  background: #e8f5e9;
+  color: var(--color-primary);
+  font-size: 1.1rem;
+  font-weight: 700;
+  padding: 6px 20px;
+  border-radius: var(--radius);
+  letter-spacing: .04em;
+  margin-bottom: 20px;
+}
+.confirm-actions { display: flex; justify-content: center; gap: 12px; }
+
+/* Error save modal */
+.error-save-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+.error-save-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-error);
+  margin-bottom: 8px;
+}
+.error-save-msg {
+  font-size: 0.82rem;
+  color: #616161;
+  margin-bottom: 20px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SECCIÓN 13 — Documentos Requeridos y Firma
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Lista de documentos requeridos */
+.doc-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.doc-label {
+  flex: 1 1 260px;
+  font-size: 0.87rem;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.doc-label small {
+  display: block;
+  color: #888;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+/* Contenedor del botón de upload + nombre del archivo */
+.doc-upload-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Botón de selección de archivo — parece un botón secundario */
+.btn-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: #fff;
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.btn-upload:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-upload:focus-within {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+/* Nombre del archivo seleccionado */
+.doc-archivo-nombre {
+  font-size: 0.80rem;
+  color: #9e9e9e;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-archivo-nombre.doc-ok {
+  color: #2e7d32;
+  font-weight: 600;
+}

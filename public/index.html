@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Formulario SARLAFT — Persona Jurídica</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<!-- Spinner de carga global -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+</div>
+
+<!-- Toast de notificaciones -->
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Encabezado de página                                                  -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<header class="page-header">
+  <h1>Registro SARLAFT — Persona Jurídica</h1>
+  <p>Complete todos los campos obligatorios marcados con
+     <span style="color:#c62828">*</span>.
+     Los datos se guardarán al finalizar el formulario completo.</p>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Formulario                                                             -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<main class="form-wrapper">
+
+  <!-- ─── SECCIÓN 1: Información básica de la empresa ──────────────────── -->
+  <section class="accordion" id="accordion-basica">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-basica')">
+      <span class="accordion-title">
+        <span class="section-num">1</span>
+        Información básica de la empresa
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Fila 1 — Tipo persona | Vinculación | Tipo doc | Número -->
+      <div class="grid-4">
+
+        <div class="field">
+          <label>Tipo de persona</label>
+          <select id="tip_terc" disabled>
+            <option value="J" selected>Persona jurídica</option>
+          </select>
+        </div>
+
+        <div class="field" id="field-cod_vinc">
+          <label for="cod_vinc">Tipo de vinculación <span class="req">*</span></label>
+          <select id="cod_vinc"
+                  onchange="actualizarFormData('basica','COD_VINC',this.value); limpiarError('field-cod_vinc')">
+            <option value="">— Seleccione —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-cod_tpdoc">
+          <label for="cod_tpdoc">Tipo de documento <span class="req">*</span></label>
+          <select id="cod_tpdoc"
+                  onchange="actualizarFormData('basica','COD_TPDOC',this.value); limpiarError('field-cod_tpdoc')">
+            <option value="">— Seleccione —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-num_iden">
+          <label for="num_iden">
+            Número de documento
+            <span class="req">*</span>
+          </label>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="flex:1">
+              <input type="text" id="num_iden" maxlength="20"
+                     placeholder="Ej: 900123456"
+                     inputmode="numeric" pattern="[0-9]*"
+                     style="width:100%"
+                     oninput="this.value=this.value.replace(/\D/g,'');
+                              actualizarFormData('basica','NUM_IDEN',this.value);
+                              limpiarError('field-num_iden')" />
+            </div>
+            <div style="width:68px;flex-shrink:0">
+              <label for="dig_veri" style="font-size:.72rem;font-weight:600;color:#424242;text-transform:uppercase;letter-spacing:.02em;display:block;margin-bottom:5px">
+                Díg. verif.
+              </label>
+              <input type="text" id="dig_veri" maxlength="1"
+                     placeholder="0"
+                     inputmode="numeric" pattern="[0-9]"
+                     style="width:100%;height:38px;padding:0 10px;border:1px solid var(--color-border);border-radius:var(--radius);font-size:.875rem;text-align:center"
+                     oninput="this.value=this.value.replace(/\D/g,'').slice(0,1);
+                              actualizarFormData('basica','DIG_VERI',this.value)" />
+            </div>
+          </div>
+          <span class="error-msg">Campo requerido y solo numérico</span>
+        </div>
+      </div>
+
+      <!-- Fila 2 — Razón social -->
+      <div class="grid-4">
+        <div class="field col-full" id="field-nom_comp">
+          <label for="nom_comp">Razón social <span class="req">*</span></label>
+          <input type="text" id="nom_comp" maxlength="255"
+                 placeholder="Nombre completo o razón social de la empresa"
+                 oninput="actualizarFormData('basica','NOM_COMP',this.value); limpiarError('field-nom_comp')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <div class="section-divider">Lugar de constitución / expedición</div>
+
+      <!-- Fila 3 — Cascada geográfica -->
+      <div class="grid-4">
+
+        <div class="field" id="field-cod_pais_exp">
+          <label for="cod_pais_exp">País <span class="req">*</span></label>
+          <select id="cod_pais_exp"
+                  onchange="onPaisChange(this.value); limpiarError('field-cod_pais_exp')">
+            <option value="">— Seleccione —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-cod_dept_exp">
+          <label for="cod_dept_exp">Departamento <span class="req">*</span></label>
+          <select id="cod_dept_exp" disabled
+                  onchange="onDeptChange(this.value); limpiarError('field-cod_dept_exp')">
+            <option value="">— Seleccione país primero —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-cod_mpio_exp">
+          <label for="cod_mpio_exp">Ciudad <span class="req">*</span></label>
+          <select id="cod_mpio_exp" disabled
+                  onchange="actualizarFormData('basica','COD_MPIO_EXP',this.value); limpiarError('field-cod_mpio_exp')">
+            <option value="">— Seleccione departamento primero —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-dir_terc">
+          <label for="dir_terc">Dirección <span class="req">*</span></label>
+          <input type="text" id="dir_terc" maxlength="255"
+                 placeholder="Ej: Cra 7 # 45-12 Of. 301"
+                 oninput="actualizarFormData('basica','DIR_TERC',this.value); limpiarError('field-dir_terc')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <div class="section-divider">Datos de contacto</div>
+
+      <!-- Fila 4 — Teléfonos y correos -->
+      <div class="grid-4">
+
+        <div class="field">
+          <label for="tel_terc2">Teléfono fijo</label>
+          <input type="tel" id="tel_terc2" maxlength="20"
+                 placeholder="Ej: 6011234567"
+                 oninput="actualizarFormData('basica','TEL_TERC2',this.value)" />
+        </div>
+
+        <div class="field" id="field-tel_terc">
+          <label for="tel_terc">Teléfono celular <span class="req">*</span></label>
+          <input type="tel" id="tel_terc" maxlength="20"
+                 placeholder="Ej: 3001234567"
+                 oninput="actualizarFormData('basica','TEL_TERC',this.value); limpiarError('field-tel_terc')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-dir_mail">
+          <label for="dir_mail">Email corporativo <span class="req">*</span></label>
+          <input type="email" id="dir_mail" maxlength="100"
+                 placeholder="contacto@empresa.com"
+                 oninput="actualizarFormData('basica','DIR_MAIL',this.value); limpiarError('field-dir_mail')" />
+          <span class="error-msg">Email inválido o vacío</span>
+        </div>
+
+        <div class="field" id="field-mail_sarl">
+          <label for="mail_sarl">Email gestión SARLAFT <span class="req">*</span></label>
+          <input type="email" id="mail_sarl" maxlength="100"
+                 placeholder="sarlaft@empresa.com"
+                 oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
+          <span class="error-msg">Email inválido o vacío</span>
+        </div>
+      </div>
+
+      <!-- Fila 5 — CIIU y Página web -->
+      <div class="grid-2">
+
+        <div class="field" id="field-cod_ciiu">
+          <label for="cod_ciiu">Actividad principal CIIU <span class="req">*</span></label>
+          <input type="text" id="cod_ciiu" list="lista-ciiu"
+                 placeholder="Escriba código o nombre de actividad…"
+                 autocomplete="off"
+                 oninput="onCiiuInput(this.value); limpiarError('field-cod_ciiu')" />
+          <datalist id="lista-ciiu"></datalist>
+          <span class="error-msg">Seleccione una actividad válida</span>
+        </div>
+
+        <div class="field">
+          <label for="url_web">Página web</label>
+          <input type="url" id="url_web" maxlength="255"
+                 placeholder="https://www.empresa.com"
+                 oninput="actualizarFormData('basica','URL_WEB',this.value)" />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionBasica()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuar()">Continuar → Sección 2</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 2: Información del representante legal ───────────────── -->
+  <section class="accordion collapsed" id="accordion-rl">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-rl')">
+      <span class="accordion-title">
+        <span class="section-num">2</span>
+        Información del representante legal
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- ── Bloque Principal ────────────────────────────────────────────── -->
+      <div class="rl-bloque" id="rl-bloque-principal">
+
+        <div class="rl-block-header">
+          <span class="rl-badge principal">P</span>
+          Representante Legal Principal
+        </div>
+
+        <!-- Fila 1 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_p_nom">
+            <label for="rl_p_nom">Nombres <span class="req">*</span></label>
+            <input type="text" id="rl_p_nom" maxlength="100"
+                   placeholder="Nombres completos"
+                   oninput="actualizarRL(0,'NOM_REPR',this.value); limpiarError('field-rl_p_nom')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_ape">
+            <label for="rl_p_ape">Apellidos <span class="req">*</span></label>
+            <input type="text" id="rl_p_ape" maxlength="100"
+                   placeholder="Apellidos completos"
+                   oninput="actualizarRL(0,'APE_REPR',this.value); limpiarError('field-rl_p_ape')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_tipdoc">
+            <label for="rl_p_tipdoc">Tipo de documento <span class="req">*</span></label>
+            <select id="rl_p_tipdoc"
+                    onchange="actualizarRL(0,'TIP_DOCU',this.value); limpiarError('field-rl_p_tipdoc')">
+              <option value="">— Seleccione —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_numdoc">
+            <label for="rl_p_numdoc">Número de documento <span class="req">*</span></label>
+            <input type="text" id="rl_p_numdoc" maxlength="20"
+                   placeholder="Ej: 12345678"
+                   inputmode="numeric" pattern="[0-9]*"
+                   oninput="this.value=this.value.replace(/\D/g,'');
+                            actualizarRL(0,'NUM_DOCU',this.value);
+                            limpiarError('field-rl_p_numdoc')" />
+            <span class="error-msg">Campo requerido y solo numérico</span>
+          </div>
+        </div>
+
+        <!-- Fila 2 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_p_fec">
+            <label for="rl_p_fec">Fecha de expedición <span class="req">*</span></label>
+            <input type="date" id="rl_p_fec"
+                   onchange="actualizarRL(0,'FEC_EXPE',this.value); limpiarError('field-rl_p_fec')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_pais">
+            <label for="rl_p_pais">País <span class="req">*</span></label>
+            <select id="rl_p_pais"
+                    onchange="onRLPaisChange(this.value,'rl_p',0); limpiarError('field-rl_p_pais')">
+              <option value="">— Seleccione —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_dept">
+            <label for="rl_p_dept">Departamento <span class="req">*</span></label>
+            <select id="rl_p_dept" disabled
+                    onchange="onRLDeptChange(this.value,'rl_p',0); limpiarError('field-rl_p_dept')">
+              <option value="">— Seleccione país primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_mpio">
+            <label for="rl_p_mpio">Ciudad <span class="req">*</span></label>
+            <select id="rl_p_mpio" disabled
+                    onchange="actualizarRL(0,'COD_MPIO',this.value); limpiarError('field-rl_p_mpio')">
+              <option value="">— Seleccione departamento primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+
+        <!-- Fila 3 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_p_dir">
+            <label for="rl_p_dir">Dirección <span class="req">*</span></label>
+            <input type="text" id="rl_p_dir" maxlength="255"
+                   placeholder="Ej: Cra 7 # 45-12"
+                   oninput="actualizarRL(0,'DIR_REPR',this.value); limpiarError('field-rl_p_dir')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_p_cel">
+            <label for="rl_p_cel">Celular <span class="req">*</span></label>
+            <input type="tel" id="rl_p_cel" maxlength="20"
+                   placeholder="Ej: 3001234567"
+                   oninput="actualizarRL(0,'CEL_REPR',this.value); limpiarError('field-rl_p_cel')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field">
+            <label for="rl_p_tel">Teléfono fijo</label>
+            <input type="tel" id="rl_p_tel" maxlength="20"
+                   placeholder="Ej: 6011234567"
+                   oninput="actualizarRL(0,'TEL_REPR',this.value)" />
+          </div>
+
+          <div class="field" id="field-rl_p_mail">
+            <label for="rl_p_mail">Correo electrónico <span class="req">*</span></label>
+            <input type="email" id="rl_p_mail" maxlength="100"
+                   placeholder="correo@dominio.com"
+                   oninput="actualizarRL(0,'MAIL_REPR',this.value); limpiarError('field-rl_p_mail')" />
+            <span class="error-msg">Email inválido o vacío</span>
+          </div>
+        </div>
+
+      </div><!-- /rl-bloque-principal -->
+
+      <hr class="rl-divider" />
+
+      <!-- ── Bloque Suplente ─────────────────────────────────────────────── -->
+      <div class="rl-bloque" id="rl-bloque-suplente">
+
+        <div class="rl-block-header">
+          <span class="rl-badge suplente">S</span>
+          Representante Legal Suplente
+          <span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">
+            (opcional — si diligencia algún campo, complete el bloque)
+          </span>
+        </div>
+
+        <!-- Fila 1 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_s_nom">
+            <label for="rl_s_nom">Nombres <span class="req">*</span></label>
+            <input type="text" id="rl_s_nom" maxlength="100"
+                   placeholder="Nombres completos"
+                   oninput="actualizarRL(1,'NOM_REPR',this.value); limpiarError('field-rl_s_nom')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_ape">
+            <label for="rl_s_ape">Apellidos <span class="req">*</span></label>
+            <input type="text" id="rl_s_ape" maxlength="100"
+                   placeholder="Apellidos completos"
+                   oninput="actualizarRL(1,'APE_REPR',this.value); limpiarError('field-rl_s_ape')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_tipdoc">
+            <label for="rl_s_tipdoc">Tipo de documento <span class="req">*</span></label>
+            <select id="rl_s_tipdoc"
+                    onchange="actualizarRL(1,'TIP_DOCU',this.value); limpiarError('field-rl_s_tipdoc')">
+              <option value="">— Seleccione —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_numdoc">
+            <label for="rl_s_numdoc">Número de documento <span class="req">*</span></label>
+            <input type="text" id="rl_s_numdoc" maxlength="20"
+                   placeholder="Ej: 12345678"
+                   inputmode="numeric" pattern="[0-9]*"
+                   oninput="this.value=this.value.replace(/\D/g,'');
+                            actualizarRL(1,'NUM_DOCU',this.value);
+                            limpiarError('field-rl_s_numdoc')" />
+            <span class="error-msg">Campo requerido y solo numérico</span>
+          </div>
+        </div>
+
+        <!-- Fila 2 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_s_fec">
+            <label for="rl_s_fec">Fecha de expedición <span class="req">*</span></label>
+            <input type="date" id="rl_s_fec"
+                   onchange="actualizarRL(1,'FEC_EXPE',this.value); limpiarError('field-rl_s_fec')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_pais">
+            <label for="rl_s_pais">País <span class="req">*</span></label>
+            <select id="rl_s_pais"
+                    onchange="onRLPaisChange(this.value,'rl_s',1); limpiarError('field-rl_s_pais')">
+              <option value="">— Seleccione —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_dept">
+            <label for="rl_s_dept">Departamento <span class="req">*</span></label>
+            <select id="rl_s_dept" disabled
+                    onchange="onRLDeptChange(this.value,'rl_s',1); limpiarError('field-rl_s_dept')">
+              <option value="">— Seleccione país primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_mpio">
+            <label for="rl_s_mpio">Ciudad <span class="req">*</span></label>
+            <select id="rl_s_mpio" disabled
+                    onchange="actualizarRL(1,'COD_MPIO',this.value); limpiarError('field-rl_s_mpio')">
+              <option value="">— Seleccione departamento primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+
+        <!-- Fila 3 -->
+        <div class="grid-4">
+
+          <div class="field" id="field-rl_s_dir">
+            <label for="rl_s_dir">Dirección <span class="req">*</span></label>
+            <input type="text" id="rl_s_dir" maxlength="255"
+                   placeholder="Ej: Cra 7 # 45-12"
+                   oninput="actualizarRL(1,'DIR_REPR',this.value); limpiarError('field-rl_s_dir')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field" id="field-rl_s_cel">
+            <label for="rl_s_cel">Celular <span class="req">*</span></label>
+            <input type="tel" id="rl_s_cel" maxlength="20"
+                   placeholder="Ej: 3001234567"
+                   oninput="actualizarRL(1,'CEL_REPR',this.value); limpiarError('field-rl_s_cel')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+          <div class="field">
+            <label for="rl_s_tel">Teléfono fijo</label>
+            <input type="tel" id="rl_s_tel" maxlength="20"
+                   placeholder="Ej: 6011234567"
+                   oninput="actualizarRL(1,'TEL_REPR',this.value)" />
+          </div>
+
+          <div class="field" id="field-rl_s_mail">
+            <label for="rl_s_mail">Correo electrónico <span class="req">*</span></label>
+            <input type="email" id="rl_s_mail" maxlength="100"
+                   placeholder="correo@dominio.com"
+                   oninput="actualizarRL(1,'MAIL_REPR',this.value); limpiarError('field-rl_s_mail')" />
+            <span class="error-msg">Email inválido o vacío</span>
+          </div>
+        </div>
+
+      </div><!-- /rl-bloque-suplente -->
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarBloqueRL(0); limpiarBloqueRL(1)">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarRL()">Continuar → Sección 3</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 3: Información de la sociedad ───────────────────────── -->
+  <section class="accordion collapsed" id="accordion-sociedad">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-sociedad')">
+      <span class="accordion-title">
+        <span class="section-num">3</span>
+        Información de la sociedad
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Fila 1 — Ubicación | País (condicional) | Tipo empresa -->
+      <div class="grid-4">
+
+        <div class="field" id="field-soc_ubic">
+          <label for="soc_ubic">Ubicación de la sociedad <span class="req">*</span></label>
+          <select id="soc_ubic"
+                  onchange="onUbicacionChange(this.value); limpiarError('field-soc_ubic')">
+            <option value="N" selected>Nacional</option>
+            <option value="E">Extranjera</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <!-- Campo condicional: solo visible cuando Ubicación = Extranjera -->
+        <div class="field campo-condicional" id="campo-soc_pais"
+             style="display:none; opacity:0; max-height:0">
+          <label for="soc_pais">País <span class="req">*</span></label>
+          <select id="soc_pais"
+                  onchange="actualizarSociedad('COD_PAIS_SOC',this.value); limpiarError('campo-soc_pais')">
+            <option value="">— Seleccione país —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-soc_tip_empr">
+          <label for="soc_tip_empr">Tipo de empresa <span class="req">*</span></label>
+          <select id="soc_tip_empr"
+                  onchange="actualizarSociedad('TIP_EMPR',this.value); limpiarError('field-soc_tip_empr')">
+            <option value="">— Seleccione —</option>
+            <option value="PUBLICA">Pública</option>
+            <option value="PRIVADA">Privada</option>
+            <option value="MIXTA">Mixta</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+      </div>
+
+      <!-- Fila 2 — Grupo empresarial | Tipo de sociedad -->
+      <div class="grid-2">
+
+        <div class="field" id="field-soc_grup_empr">
+          <label for="soc_grup_empr">¿Pertenece a grupo empresarial? <span class="req">*</span></label>
+          <select id="soc_grup_empr"
+                  onchange="actualizarSociedad('GRUP_EMPR',this.value); onGrupEmprChange(this.value); limpiarError('field-soc_grup_empr')">
+            <option value="">— Seleccione —</option>
+            <option value="S">Sí</option>
+            <option value="N">No</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-soc_tip_socie">
+          <label for="soc_tip_socie">Tipo de sociedad <span class="req">*</span></label>
+          <select id="soc_tip_socie"
+                  onchange="actualizarSociedad('TIP_SOCIE',this.value); limpiarError('field-soc_tip_socie')">
+            <option value="">— Seleccione —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+      </div>
+
+      <!-- REL_GRUPO: campo condicional (visible solo cuando GRUP_EMPR = 'S') -->
+      <div class="campo-condicional" id="soc_rel_grupo_wrap"
+           style="opacity:0;max-height:0;display:none">
+        <div class="field" id="field-soc_rel_grupo">
+          <label for="soc_rel_grupo">
+            Rol en el grupo empresarial <span class="req">*</span>
+            <span style="font-size:.7rem;font-weight:400;text-transform:none">
+              (ej.: MATRIZ, FILIAL, SUCURSAL, SUBSIDIARIA)
+            </span>
+          </label>
+          <input type="text" id="soc_rel_grupo" maxlength="100"
+                 placeholder="Describa la relación, ej: COLMINA – MATRIZ"
+                 oninput="actualizarSociedad('REL_GRUPO',this.value); limpiarError('field-soc_rel_grupo')" />
+          <span class="error-msg">Campo requerido cuando pertenece a un grupo</span>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionSociedad()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarSociedad()">Continuar → Sección 4</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 4: Países de operación ───────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-paises">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-paises')">
+      <span class="accordion-title">
+        <span class="section-num">4</span>
+        Países de operación
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <p style="font-size:.82rem;color:#616161;margin-bottom:4px">
+        Indique todos los países en los que la empresa opera o tiene presencia comercial.
+        Cada entrada debe tener un país diferente.
+      </p>
+
+      <!-- Lista dinámica — renderizada y gestionada por seccion-paises.js -->
+      <div id="lista-paises-container" class="paises-lista"></div>
+
+      <div class="pais-actions">
+        <button class="btn-agregar-pais" type="button" onclick="agregarPais()">
+          ＋ Agregar país
+        </button>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionPaises()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarPaises()">Continuar → Sección 5</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 5: Información del Sistema de cumplimiento ─────────────── -->
+  <section class="accordion collapsed" id="accordion-cumplimiento">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-cumplimiento')">
+      <span class="accordion-title">
+        <span class="section-num">5</span>
+        Información del Sistema de cumplimiento
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- ── Bloque A: Normatividad (siempre visible) ──────────────────────── -->
+      <div class="field col-full" id="field-cump_desc_norm">
+        <label for="cump_desc_norm">
+          ¿La sociedad está sujeta a alguna normatividad que la obligue a implementar algún
+          control para la prevención o gestión de riesgos de LA/FT, Fraude, Corrupción y/o
+          Soborno? ¿Cuál es o son estas regulaciones o normas?
+          <span class="req">*</span>
+        </label>
+        <textarea id="cump_desc_norm" rows="3"
+                  placeholder="Describa la normatividad aplicable…"
+                  oninput="actualizarCump('DESC_NORM',this.value); limpiarError('field-cump_desc_norm')"></textarea>
+        <span class="error-msg">Campo requerido</span>
+      </div>
+
+      <div class="field col-full" id="field-cump_norm_laft">
+        <label for="cump_norm_laft">
+          Referencia específica de normatividad LA/FT
+          <span style="font-size:.7rem;font-weight:400;text-transform:none">
+            (ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)
+          </span>
+        </label>
+        <input type="text" id="cump_norm_laft" maxlength="255"
+               placeholder="Nombre o número de la norma LA/FT aplicable"
+               oninput="actualizarCump('NORM_LAFT',this.value)" />
+      </div>
+
+      <!-- ── Bloque B: ¿Tiene sistema implementado? ────────────────────────── -->
+      <div class="field field-radio">
+        <label>¿Tiene sistema de prevención de riesgos implementado? <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="cump_tie_sist" value="S"
+                   onchange="onTieneSistemaChange('S')"> Sí
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="cump_tie_sist" value="N" checked
+                   onchange="onTieneSistemaChange('N')"> No
+          </label>
+        </div>
+      </div>
+
+      <!-- ── Sub-bloque B1: Tipo de sistema + Oficial (condicional) ──────────── -->
+      <div id="bloque-cump-sistema" class="bloque-condicional"
+           style="display:none; opacity:0; max-height:0">
+
+        <!-- Tipo de sistema implementado -->
+        <div class="grid-2">
+          <div class="field" id="field-cump_sis_preve">
+            <label for="cump_sis_preve">Tipo de sistema implementado <span class="req">*</span></label>
+            <select id="cump_sis_preve"
+                    onchange="actualizarCump('SIS_PREVE',this.value); limpiarError('field-cump_sis_preve')">
+              <option value="">— Seleccione —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+
+        <!-- Nota informativa -->
+        <p class="cump-note">
+          Esta información solo es requerida para las personas jurídicas obligadas a tener un
+          sistema de prevención de riesgos de lavado de activos y financiación de terrorismo
+          o similar.
+        </p>
+
+        <!-- Sub-título -->
+        <p class="cump-subtitle">Información del oficial de cumplimiento</p>
+
+        <!-- ── Sub-bloque B2: Oficial Principal ────────────────────────────── -->
+        <div class="rl-bloque" id="cump-bloque-principal">
+
+          <div class="rl-block-header">
+            <span class="rl-badge principal">P</span>
+            Oficial de cumplimiento Principal
+          </div>
+
+          <!-- Fila 1 — Tipo doc | Número | Fecha -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_p_tipdoc">
+              <label for="cump_p_tipdoc">Tipo de documento <span class="req">*</span></label>
+              <select id="cump_p_tipdoc"
+                      onchange="actualizarOficial(0,'TIP_DOCU',this.value); limpiarError('field-cump_p_tipdoc')">
+                <option value="">— Seleccione —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_numdoc">
+              <label for="cump_p_numdoc">Número de documento <span class="req">*</span></label>
+              <input type="text" id="cump_p_numdoc" maxlength="20"
+                     placeholder="Ej: 12345678"
+                     inputmode="numeric" pattern="[0-9]*"
+                     oninput="this.value=this.value.replace(/\D/g,'');
+                              actualizarOficial(0,'NUM_DOCU',this.value);
+                              limpiarError('field-cump_p_numdoc')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_fec">
+              <label for="cump_p_fec">Fecha de expedición <span class="req">*</span></label>
+              <input type="date" id="cump_p_fec"
+                     onchange="actualizarOficial(0,'FEC_EXPE',this.value); limpiarError('field-cump_p_fec')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+          </div>
+
+          <!-- Fila 2 — Nombres | Apellidos | Razón social -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_p_nom">
+              <label for="cump_p_nom">Nombres <span class="req">*</span></label>
+              <input type="text" id="cump_p_nom" maxlength="100"
+                     placeholder="Nombres completos"
+                     oninput="actualizarOficial(0,'NOM_RESP',this.value); limpiarError('field-cump_p_nom')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_ape">
+              <label for="cump_p_ape">Apellidos <span class="req">*</span></label>
+              <input type="text" id="cump_p_ape" maxlength="100"
+                     placeholder="Apellidos completos"
+                     oninput="actualizarOficial(0,'APE_RESP',this.value); limpiarError('field-cump_p_ape')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field">
+              <label for="cump_p_raz">Razón social</label>
+              <input type="text" id="cump_p_raz" maxlength="255"
+                     placeholder="Si aplica — persona jurídica"
+                     oninput="actualizarOficial(0,'RAZ_RESP',this.value)" />
+            </div>
+          </div>
+
+          <!-- Fila 3 — Cascada geográfica + Dirección -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_p_pais">
+              <label for="cump_p_pais">País <span class="req">*</span></label>
+              <select id="cump_p_pais"
+                      onchange="onCumpPaisChange(this.value,'cump_p',0); limpiarError('field-cump_p_pais')">
+                <option value="">— Seleccione —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_dept">
+              <label for="cump_p_dept">Departamento <span class="req">*</span></label>
+              <select id="cump_p_dept" disabled
+                      onchange="onCumpDeptChange(this.value,'cump_p',0); limpiarError('field-cump_p_dept')">
+                <option value="">— Seleccione país primero —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_mpio">
+              <label for="cump_p_mpio">Ciudad <span class="req">*</span></label>
+              <select id="cump_p_mpio" disabled
+                      onchange="actualizarOficial(0,'COD_MPIO',this.value); limpiarError('field-cump_p_mpio')">
+                <option value="">— Seleccione departamento primero —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field">
+              <label for="cump_p_dir">Dirección</label>
+              <input type="text" id="cump_p_dir" maxlength="255"
+                     placeholder="Ej: Cra 7 # 45-12"
+                     oninput="actualizarOficial(0,'DIR_RESP',this.value)" />
+            </div>
+          </div>
+
+          <!-- Fila 4 — Teléfono | Correo -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_p_tel">
+              <label for="cump_p_tel">Teléfono <span class="req">*</span></label>
+              <input type="tel" id="cump_p_tel" maxlength="20"
+                     placeholder="Ej: 3001234567"
+                     oninput="actualizarOficial(0,'TEL_RESP',this.value); limpiarError('field-cump_p_tel')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_p_mail">
+              <label for="cump_p_mail">Correo electrónico <span class="req">*</span></label>
+              <input type="email" id="cump_p_mail" maxlength="100"
+                     placeholder="correo@dominio.com"
+                     oninput="actualizarOficial(0,'MAIL_RESP',this.value); limpiarError('field-cump_p_mail')" />
+              <span class="error-msg">Email inválido o vacío</span>
+            </div>
+          </div>
+
+        </div><!-- /cump-bloque-principal -->
+
+        <hr class="rl-divider" />
+
+        <!-- ── Sub-bloque B2: Oficial Suplente ─────────────────────────────── -->
+        <div class="rl-bloque" id="cump-bloque-suplente">
+
+          <div class="rl-block-header">
+            <span class="rl-badge suplente">S</span>
+            Oficial de cumplimiento Suplente
+            <span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">
+              (opcional — si diligencia algún campo, complete el bloque)
+            </span>
+          </div>
+
+          <!-- Fila 1 -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_s_tipdoc">
+              <label for="cump_s_tipdoc">Tipo de documento <span class="req">*</span></label>
+              <select id="cump_s_tipdoc"
+                      onchange="actualizarOficial(1,'TIP_DOCU',this.value); limpiarError('field-cump_s_tipdoc')">
+                <option value="">— Seleccione —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_numdoc">
+              <label for="cump_s_numdoc">Número de documento <span class="req">*</span></label>
+              <input type="text" id="cump_s_numdoc" maxlength="20"
+                     placeholder="Ej: 12345678"
+                     inputmode="numeric" pattern="[0-9]*"
+                     oninput="this.value=this.value.replace(/\D/g,'');
+                              actualizarOficial(1,'NUM_DOCU',this.value);
+                              limpiarError('field-cump_s_numdoc')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_fec">
+              <label for="cump_s_fec">Fecha de expedición <span class="req">*</span></label>
+              <input type="date" id="cump_s_fec"
+                     onchange="actualizarOficial(1,'FEC_EXPE',this.value); limpiarError('field-cump_s_fec')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+          </div>
+
+          <!-- Fila 2 -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_s_nom">
+              <label for="cump_s_nom">Nombres <span class="req">*</span></label>
+              <input type="text" id="cump_s_nom" maxlength="100"
+                     placeholder="Nombres completos"
+                     oninput="actualizarOficial(1,'NOM_RESP',this.value); limpiarError('field-cump_s_nom')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_ape">
+              <label for="cump_s_ape">Apellidos <span class="req">*</span></label>
+              <input type="text" id="cump_s_ape" maxlength="100"
+                     placeholder="Apellidos completos"
+                     oninput="actualizarOficial(1,'APE_RESP',this.value); limpiarError('field-cump_s_ape')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field">
+              <label for="cump_s_raz">Razón social</label>
+              <input type="text" id="cump_s_raz" maxlength="255"
+                     placeholder="Si aplica — persona jurídica"
+                     oninput="actualizarOficial(1,'RAZ_RESP',this.value)" />
+            </div>
+          </div>
+
+          <!-- Fila 3 -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_s_pais">
+              <label for="cump_s_pais">País <span class="req">*</span></label>
+              <select id="cump_s_pais"
+                      onchange="onCumpPaisChange(this.value,'cump_s',1); limpiarError('field-cump_s_pais')">
+                <option value="">— Seleccione —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_dept">
+              <label for="cump_s_dept">Departamento <span class="req">*</span></label>
+              <select id="cump_s_dept" disabled
+                      onchange="onCumpDeptChange(this.value,'cump_s',1); limpiarError('field-cump_s_dept')">
+                <option value="">— Seleccione país primero —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_mpio">
+              <label for="cump_s_mpio">Ciudad <span class="req">*</span></label>
+              <select id="cump_s_mpio" disabled
+                      onchange="actualizarOficial(1,'COD_MPIO',this.value); limpiarError('field-cump_s_mpio')">
+                <option value="">— Seleccione departamento primero —</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field">
+              <label for="cump_s_dir">Dirección</label>
+              <input type="text" id="cump_s_dir" maxlength="255"
+                     placeholder="Ej: Cra 7 # 45-12"
+                     oninput="actualizarOficial(1,'DIR_RESP',this.value)" />
+            </div>
+          </div>
+
+          <!-- Fila 4 -->
+          <div class="grid-4">
+            <div class="field" id="field-cump_s_tel">
+              <label for="cump_s_tel">Teléfono <span class="req">*</span></label>
+              <input type="tel" id="cump_s_tel" maxlength="20"
+                     placeholder="Ej: 3001234567"
+                     oninput="actualizarOficial(1,'TEL_RESP',this.value); limpiarError('field-cump_s_tel')" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+            <div class="field" id="field-cump_s_mail">
+              <label for="cump_s_mail">Correo electrónico <span class="req">*</span></label>
+              <input type="email" id="cump_s_mail" maxlength="100"
+                     placeholder="correo@dominio.com"
+                     oninput="actualizarOficial(1,'MAIL_RESP',this.value); limpiarError('field-cump_s_mail')" />
+              <span class="error-msg">Email inválido o vacío</span>
+            </div>
+          </div>
+
+        </div><!-- /cump-bloque-suplente -->
+
+      </div><!-- /bloque-cump-sistema -->
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionCumplimiento()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarCumplimiento()">Continuar → Sección 6</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 6: Junta directiva / Consejo de administración ──────── -->
+  <section class="accordion collapsed" id="accordion-jd">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-jd')">
+      <span class="accordion-title">
+        <span class="section-num">6</span>
+        Junta directiva / Consejo de administración
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Booleano de cabecera -->
+      <div class="field field-radio">
+        <label>¿La empresa tiene junta directiva o consejo de administración? <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="jd_tie_junta" value="S"
+                   onchange="onTieneJuntaChange('S')"> Sí
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="jd_tie_junta" value="N" checked
+                   onchange="onTieneJuntaChange('N')"> No
+          </label>
+        </div>
+      </div>
+
+      <!-- Lista condicional de miembros -->
+      <div id="jd-lista-wrap" class="lista-grupos-wrap"
+           style="display:none; opacity:0; max-height:0">
+
+        <div id="jd-grupos-list" class="grupo-lista"></div>
+
+        <div class="pais-actions">
+          <button class="btn-agregar-pais" type="button" onclick="agregarJD()">
+            ＋ Agregar miembro
+          </button>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionJD()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarJD()">Continuar → Sección 7</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 7: Revisores fiscales ────────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-rf">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-rf')">
+      <span class="accordion-title">
+        <span class="section-num">7</span>
+        Revisores fiscales
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Booleano de cabecera -->
+      <div class="field field-radio">
+        <label>¿La empresa tiene revisor fiscal? <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="rf_tie_revis" value="S"
+                   onchange="onTieneRevisorChange('S')"> Sí
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="rf_tie_revis" value="N" checked
+                   onchange="onTieneRevisorChange('N')"> No
+          </label>
+        </div>
+      </div>
+
+      <!-- Lista condicional de revisores -->
+      <div id="rf-lista-wrap" class="lista-grupos-wrap"
+           style="display:none; opacity:0; max-height:0">
+
+        <div id="rf-grupos-list" class="grupo-lista"></div>
+
+        <div class="pais-actions">
+          <button class="btn-agregar-pais" type="button" onclick="agregarRF()">
+            ＋ Agregar revisor
+          </button>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionRF()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarRF()">Continuar → Sección 8</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 8: Composición accionaria ────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-ac">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-ac')">
+      <span class="accordion-title">
+        <span class="section-num">8</span>
+        Composición accionaria
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <p style="font-size:.82rem;color:#616161;margin-bottom:4px">
+        Registre todos los accionistas o socios. La suma de los porcentajes de
+        participación debe ser exactamente 100%.
+      </p>
+
+      <!-- Indicador de suma de porcentajes -->
+      <div id="ac-pct-indicador" class="pct-indicador pct-neutro">
+        Sin accionistas registrados.
+      </div>
+
+      <!-- Lista de accionistas — renderizada por seccion-ac.js -->
+      <div id="ac-grupos-list" class="grupo-lista"></div>
+
+      <div class="pais-actions">
+        <button class="btn-agregar-pais" type="button" onclick="agregarAC()">
+          ＋ Agregar accionista
+        </button>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionAC()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarAC()">Finalizar sección 8</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 9: Información financiera ───────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-financiera">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-financiera')">
+      <span class="accordion-title">
+        <span class="section-num">9</span>
+        Información financiera
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Fila 1 — Activos / Ingresos mensuales / Pasivos -->
+      <div class="grid-3">
+
+        <div class="field" id="field-act_total">
+          <label for="act_total">Total activos (COP) <span class="req">*</span></label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="act_total" inputmode="decimal" placeholder="0,00"
+                   oninput="onMonedaInput('ACT_TOTAL', this)"
+                   onblur="onMonedaBlur('ACT_TOTAL', this)" />
+          </div>
+        </div>
+
+        <div class="field" id="field-ing_mens">
+          <label for="ing_mens">Ingresos mensuales (COP) <span class="req">*</span></label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="ing_mens" inputmode="decimal" placeholder="0,00"
+                   oninput="onMonedaInput('ING_MENS', this)"
+                   onblur="onMonedaBlur('ING_MENS', this)" />
+          </div>
+        </div>
+
+        <div class="field" id="field-pas_total">
+          <label for="pas_total">Total pasivos (COP) <span class="req">*</span></label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="pas_total" inputmode="decimal" placeholder="0,00"
+                   oninput="onMonedaInput('PAS_TOTAL', this)"
+                   onblur="onMonedaBlur('PAS_TOTAL', this)" />
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Fila 2 — Egresos mensuales / Patrimonio / Otros ingresos -->
+      <div class="grid-3">
+
+        <div class="field" id="field-egr_mens">
+          <label for="egr_mens">Egresos mensuales (COP) <span class="req">*</span></label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="egr_mens" inputmode="decimal" placeholder="0,00"
+                   oninput="onMonedaInput('EGR_MENS', this)"
+                   onblur="onMonedaBlur('EGR_MENS', this)" />
+          </div>
+        </div>
+
+        <div class="field" id="field-patrimonio">
+          <label for="patrimonio">Patrimonio (COP) <span class="req">*</span></label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="patrimonio" inputmode="decimal" placeholder="0,00"
+                   oninput="onPatrimonioInput(this)"
+                   onblur="onMonedaBlur('PATRIMONIO', this)" />
+          </div>
+          <span class="campo-auto-hint" id="patrimonio-hint">
+            Calculado automáticamente: Activos &minus; Pasivos
+          </span>
+        </div>
+
+        <div class="field" id="field-otr_ing">
+          <label for="otr_ing">Otros ingresos (COP)</label>
+          <div class="money-wrapper">
+            <span class="money-prefix">$</span>
+            <input type="text" id="otr_ing" inputmode="decimal" placeholder="0,00"
+                   oninput="onMonedaInput('OTR_ING', this)"
+                   onblur="onMonedaBlur('OTR_ING', this)" />
+          </div>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionFinanciera()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarFinanciera()">Finalizar sección 9</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 10: Información bancaria ─────────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-bancaria">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-bancaria')">
+      <span class="accordion-title">
+        <span class="section-num">10</span>
+        Información bancaria
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- Lista dinámica de cuentas bancarias -->
+      <div class="grupo-lista" id="banco-grupos-list"></div>
+
+      <!-- Botón agregar cuenta -->
+      <div class="pais-actions">
+        <button class="btn-agregar-pais" type="button" onclick="agregarBanco()">
+          &#65291; Agregar cuenta bancaria
+        </button>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="renderListaBancaria()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarBancaria()">Finalizar sección 10</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 11: PEP y Actividades con activos virtuales ──────────────── -->
+  <section class="accordion collapsed" id="accordion-pep">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-pep')">
+      <span class="accordion-title">
+        <span class="section-num">11</span>
+        PEP y Actividades con activos virtuales
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- ── 11A: Exposición política ──────────────────────────────────────── -->
+      <div class="sub-seccion-titulo">A. Exposición política (PEP)</div>
+
+      <!-- MAN_RPUB -->
+      <div class="field field-radio" id="field-pep_man_rpub">
+        <label>&#191;Ha manejado o maneja recursos públicos? <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="pep_man_rpub" value="S"
+                   onchange="actualizarPEP('MAN_RPUB', this.value)" />
+            Sí
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="pep_man_rpub" value="N"
+                   onchange="actualizarPEP('MAN_RPUB', this.value)" />
+            No
+          </label>
+        </div>
+      </div>
+
+      <!-- CAR_PUBL -->
+      <div class="field field-radio" id="field-pep_car_publ">
+        <label>&#191;Ejerce o ha ejercido cargo público? <span class="req">*</span></label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="pep_car_publ" value="S"
+                   onchange="actualizarPEP('CAR_PUBL', this.value)" />
+            Sí
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="pep_car_publ" value="N"
+                   onchange="actualizarPEP('CAR_PUBL', this.value)" />
+            No
+          </label>
+        </div>
+      </div>
+
+      <!-- ── 11B: Actividades con activos virtuales ─────────────────────────── -->
+      <div class="sub-seccion-titulo">B. Actividades con activos virtuales</div>
+
+      <div class="checkbox-lista">
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_va_fiat"
+                 onchange="actualizarActividad('ACT_VA_FIAT', this.checked ? 'S' : 'N')" />
+          Intercambio entre activos virtuales y monedas fiduciarias (fiat)
+        </label>
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_va_va"
+                 onchange="actualizarActividad('ACT_VA_VA', this.checked ? 'S' : 'N')" />
+          Intercambio entre una o más formas de activos virtuales
+        </label>
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_trans"
+                 onchange="actualizarActividad('ACT_TRANS', this.checked ? 'S' : 'N')" />
+          Transferencia de activos virtuales
+        </label>
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_custo"
+                 onchange="actualizarActividad('ACT_CUSTO', this.checked ? 'S' : 'N')" />
+          Custodia y/o administración de activos virtuales o instrumentos que permitan su control
+        </label>
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_serv_fin"
+                 onchange="actualizarActividad('ACT_SERV_FIN', this.checked ? 'S' : 'N')" />
+          Participación y prestación de servicios financieros relacionados con la oferta de un emisor
+        </label>
+
+        <label class="checkbox-opcion">
+          <input type="checkbox" id="act_serv_vap"
+                 onchange="actualizarActividad('ACT_SERV_VAP', this.checked ? 'S' : 'N')" />
+          Servicios de proveedores de activos virtuales (VASP)
+        </label>
+
+      </div>
+
+      <!-- Certificación obligatoria -->
+      <div class="field" id="field-cert_info">
+        <div class="cert-wrapper">
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="cert_info"
+                   onchange="actualizarActividad('CERT_INFO', this.checked ? 'S' : 'N')" />
+            Certifico que la información suministrada en el presente formulario es veraz, completa
+            y corresponde a la realidad de la empresa. Me comprometo a notificar cualquier cambio
+            de manera oportuna.
+          </label>
+        </div>
+        <span class="error-msg">Debe certificar la veracidad de la información para enviar.</span>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionPEP()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarPEP()">Finalizar sección 11</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 12: Beneficiarios Finales ───────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-bf">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-bf')">
+      <span class="accordion-title">
+        <span class="section-num">12</span>
+        Beneficiarios Finales
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <p class="section-hint">
+        Identifique las personas naturales o jurídicas que poseen o controlan,
+        directa o indirectamente, más del 25&#xA0;% de la participación o votación
+        de la empresa, o que por otros medios ejercen control sobre ella.
+      </p>
+
+      <div id="bf-grupos-list"><!-- renderListaBF() popula esta lista --></div>
+
+      <div class="form-actions" style="margin-top:0.5rem">
+        <button class="btn btn-outline" type="button" onclick="agregarBF()">
+          &#43; Agregar beneficiario
+        </button>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionBF()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarBF()">Continuar &#x2192; Sección&#xA0;13</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 13: Documentos Requeridos y Firma ──────────────────────── -->
+  <section class="accordion collapsed" id="accordion-docs">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-docs')">
+      <span class="accordion-title">
+        <span class="section-num">13</span>
+        Documentos Requeridos y Firma
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <!-- ── 13A: Firma del Representante Legal (GN_JURID_FIRMA) ──────────── -->
+      <div class="sub-seccion-titulo">A. Firma del Representante Legal</div>
+
+      <div class="grid-4">
+        <div class="field" id="field-firma_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="firma_nom" maxlength="100"
+                 oninput="actualizarFirma('NOM_FIRM',this.value);limpiarError('field-firma_nom')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-firma_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="firma_ape" maxlength="100"
+                 oninput="actualizarFirma('APE_FIRM',this.value);limpiarError('field-firma_ape')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-firma_tipdoc">
+          <label>Tipo de documento <span class="req">*</span></label>
+          <select id="firma_tipdoc"
+                  onchange="actualizarFirma('TIP_DOCU',this.value);limpiarError('field-firma_tipdoc')">
+            <option value="">&#x2014; Seleccione &#x2014;</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-firma_numdoc">
+          <label>N&#xFA;mero de documento <span class="req">*</span></label>
+          <input type="text" id="firma_numdoc" maxlength="20" inputmode="numeric"
+                 oninput="this.value=this.value.replace(/\D/g,'');actualizarFirma('NUM_DOCU',this.value);limpiarError('field-firma_numdoc')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <div class="grid-4">
+        <div class="field" id="field-firma_fec">
+          <label>Fecha de firma <span class="req">*</span></label>
+          <input type="date" id="firma_fec"
+                 onchange="actualizarFirma('FEC_FIRMA',this.value);limpiarError('field-firma_fec')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field col-full">
+          <label>Archivo de firma <small>(imagen o PDF)</small></label>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept="image/*,.pdf" style="display:none"
+                     onchange="onArchivoSeleccionado('ARCH_FIRMA',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_arch_firma">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 13B: Documentos requeridos (GN_TERCE_DOC) ─────────────────────── -->
+      <div class="sub-seccion-titulo" style="margin-top:1.5rem">B. Documentos Requeridos</div>
+
+      <p class="section-hint">
+        Adjunte los documentos solicitados. Los archivos se enviarán al confirmar el formulario.
+        Formatos aceptados: PDF, JPG, PNG (máx. 10&#xA0;MB por archivo).
+      </p>
+
+      <div class="doc-lista">
+
+        <div class="doc-item">
+          <div class="doc-label">RUT &#x2014; Registro Único Tributario</div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('RUT',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_rut">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Certificación bancaria <small>(vigencia menor a 30 días)</small></div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('CERT_BANC',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_banc">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Certificado de existencia y representación <small>(máx. 30 días de expedición)</small></div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('CERT_EXIS',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_exis">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Copia del documento de identidad del Representante Legal</div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('DOC_ID_RL',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Estados financieros del último año fiscal</div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('EST_FIN',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Certificado de composición accionaria</div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('CERT_ACCI',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_acci">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+        <div class="doc-item">
+          <div class="doc-label">Carta de aceptación y autorización del Representante Legal</div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf,image/*" style="display:none"
+                     onchange="onArchivoSeleccionado('CART_ACEP',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_cart_acep">Ningún archivo seleccionado</span>
+          </div>
+        </div>
+
+      </div><!-- /doc-lista -->
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionDocs()">Limpiar sección</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarDocs()">Finalizar sección&#xA0;13</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+</main>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Panel de errores de validación global                                 -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="form-wrapper" style="margin-top:0">
+  <div class="error-panel" id="error-panel">
+    <div class="error-panel-title">&#9888; Por favor corrija los siguientes errores antes de enviar:</div>
+    <ul class="error-panel-list" id="error-panel-list"></ul>
+  </div>
+
+  <!-- ── Botón de envío ──────────────────────────────────────────────────── -->
+  <div class="btn-submit-wrap">
+    <button class="btn-submit" id="btn-submit" type="button"
+            onclick="onSubmitClick()">
+      Enviar formulario
+    </button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Progreso de guardado                                          -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="progreso-modal">
+  <div class="modal-card">
+    <p class="progress-title">Guardando información&#8230;</p>
+    <p class="progress-step-txt" id="progress-step-txt">Iniciando transacción</p>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progress-bar-fill"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Confirmación de guardado exitoso                              -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="confirmacion-modal">
+  <div class="modal-card">
+    <div class="confirm-icon">&#9989;</div>
+    <p class="confirm-title">&#161;Registro enviado con éxito!</p>
+    <p class="confirm-body">
+      Su información SARLAFT ha sido registrada correctamente.<br>
+      Guarde el siguiente número de identificación para sus registros:
+    </p>
+    <div class="confirm-id" id="confirm-num-iden">&#8212;</div>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary" type="button"
+              onclick="document.getElementById('confirmacion-modal').classList.remove('visible')">
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Error al guardar                                              -->
+<!-- ════════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Error al guardar                                              -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="error-guardado-modal">
+  <div class="modal-card">
+    <div class="confirm-icon" style="color:#e53935">&#x274C;</div>
+    <p class="confirm-title" style="color:#e53935">Error al guardar</p>
+    <p class="error-guardado-msg" id="error-guardado-msg">
+      Ocurrió un error al intentar guardar la información.
+    </p>
+    <div class="confirm-actions">
+      <button class="btn btn-secondary" type="button"
+              onclick="cerrarErrorGuardado()">Cerrar</button>
+      <button class="btn btn-primary" type="button"
+              onclick="reintentarGuardado()">Reintentar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Scripts JS — orden estricto de carga                                  -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script src="js/state.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/seccion-basica.js"></script>
+<script src="js/seccion-rl.js"></script>
+<script src="js/seccion-sociedad.js"></script>
+<script src="js/seccion-paises.js"></script>
+<script src="js/seccion-cumplimiento.js"></script>
+<script src="js/seccion-jd.js"></script>
+<script src="js/seccion-rf.js"></script>
+<script src="js/seccion-ac.js"></script>
+<script src="js/seccion-financiera.js"></script>
+<script src="js/seccion-bancaria.js"></script>
+<script src="js/seccion-pep.js"></script>
+<script src="js/seccion-bf.js"></script>
+<script src="js/seccion-docs.js"></script>
+<script src="js/guardar.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
