@@ -240,12 +240,24 @@ function _cerrarProgresoModal() {
 
 /**
  * Muestra la pantalla de confirmación con el NUM_IDEN asignado.
- * @param {string} numIden
+ * @param {string}      numIden
+ * @param {number|null} codTerc  COD_TERC devuelto por el servidor (para Excel)
  */
-function _mostrarConfirmacion(numIden) {
+function _mostrarConfirmacion(numIden, codTerc) {
   const modal = document.getElementById('confirmacion-modal');
   const idEl  = document.getElementById('confirm-num-iden');
   if (idEl) idEl.textContent = numIden;
+
+  const btnExcel = document.getElementById('btn-descargar-excel');
+  if (btnExcel) {
+    if (codTerc) {
+      btnExcel.dataset.codTerc = codTerc;
+      btnExcel.style.display = '';
+    } else {
+      btnExcel.style.display = 'none';
+    }
+  }
+
   modal.classList.add('show');
 }
 
@@ -354,7 +366,7 @@ async function guardarFormulario() {
     }
 
     borrarBorrador();
-    _mostrarConfirmacion(numIden);
+    _mostrarConfirmacion(numIden, data.COD_TERC || null);
 
   } catch (err) {
     clearInterval(_progresoTimer);

@@ -14,12 +14,14 @@
  *   /api/juridica  → inserta en GN_TERCE + GN_JURID
  */
 
+require('dotenv').config();
 const express = require('express');
 const sql     = require('mssql');
 const cors    = require('cors');
 const path    = require('path');
 const multer  = require('multer');
 const fs      = require('fs');
+const ExcelJS = require('exceljs');
 
 // ─── Configuración de multer para subida de documentos ──────────────────────
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -45,6 +47,10 @@ const upload = multer({
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+// TIP_TERC para personas jurídicas — configurable en .env si la BD lo requiere.
+// Visitar GET /api/debug/tip-terc para ver qué valores acepta la constraint GNC03TERCE.
+const TIP_TERC_JURID = process.env.TIP_TERC_JURID || 'J';
 
 // ─── Configuración SQL Server ────────────────────────────────────────────────
 // Ajusta estos valores según tu entorno Windows / IIS
@@ -90,6 +96,47 @@ async function query(queryStr, params = {}) {
   const result = await req.query(queryStr);
   return result.recordset;
 }
+
+// ─── Constantes y helpers globales (accesibles en todos los endpoints) ────────
+const COD_EMPR  = Number(process.env.COD_EMPR || 1);
+const ACT_USUA_GLOBAL = (process.env.APP_USER || 'SARLAFT').padEnd(8, ' ').slice(0, 8);
+
+/** Convierte cualquier valor a entero o null. */
+const intOrNull = v => (v != null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+
+/**
+ * Convierte cualquier valor a string o null.
+ * Evita "Validation failed … Invalid string" cuando el frontend envía un número
+ * JS en un campo que en la BD es varchar/char.
+ */
+const strOrNull = v => (v != null && v !== '') ? String(v) : null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DEBUG — Endpoint temporal para diagnosticar la constraint GNC03TERCE
+//  Llamar: GET /api/debug/tip-terc   (eliminar en producción)
+// ═══════════════════════════════════════════════════════════════════════════════
+app.get('/api/debug/tip-terc', async (req, res) => {
+  try {
+    const rows = await query(`
+      -- Definición de la constraint
+      SELECT cc.name        AS constraint_name,
+             cc.definition  AS constraint_definition
+      FROM   sys.check_constraints cc
+      JOIN   sys.tables            t  ON cc.parent_object_id = t.object_id
+      JOIN   sys.columns           c  ON cc.parent_object_id = c.object_id
+                                      AND cc.parent_column_id = c.column_id
+      WHERE  t.name = 'GN_TERCE'
+        AND  c.name = 'TIP_TERC';`);
+
+    const existentes = await query(`
+      -- Valores distintos de TIP_TERC en registros ya guardados
+      SELECT DISTINCT TIP_TERC FROM GN_TERCE WHERE TIP_TERC IS NOT NULL;`);
+
+    res.json({ constraint: rows, valoresExistentes: existentes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  CATÁLOGOS — Solo lectura
@@ -810,191 +857,422 @@ app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  CONSULTA — Verificar si un número de identificación ya existe en GN_TERCE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/verificar-identidad/:numIden
+ *
+ * Responde { existe: true, NUM_IDEN, NOM_COMP, TIP_TPDOC, COD_TERC }
+ *       o  { existe: false }
+ */
+app.get('/api/verificar-identidad/:numIden', async (req, res) => {
+  const { numIden } = req.params;
+  try {
+    const pool = await sql.connect(dbConfig);
+    const r    = pool.request();
+    r.input('NUM_IDEN', sql.VarChar(20), numIden);
+    r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+
+    const result = await r.query(`
+      SELECT TOP 1
+        t.COD_TERC,
+        t.NUM_IDEN,
+        t.NOM_COMP,
+        td.NOM_TDOC AS TIP_TPDOC
+      FROM GN_TERCE t
+      LEFT JOIN MAE_TIP_DOC td
+        ON td.COD_TDOC = t.COD_TPDOC
+      WHERE t.COD_EMPR = @COD_EMPR
+        AND t.NUM_IDEN  = @NUM_IDEN
+    `);
+
+    if (result.recordset.length > 0) {
+      res.json({ existe: true, ...result.recordset[0] });
+    } else {
+      res.json({ existe: false });
+    }
+  } catch (err) {
+    console.error('GET /api/verificar-identidad:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXPORTACIÓN — Generar Excel con los datos de un tercero
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/exportar-excel/:codTerc
+ *
+ * Genera y descarga un archivo Excel con todos los datos registrados
+ * del tercero identificado por COD_TERC.
+ *
+ * Si no se tiene COD_TERC, también acepta ?numIden=XXX para buscarlo.
+ */
+app.get('/api/exportar-excel/:codTerc', async (req, res) => {
+  const codTerc = parseInt(req.params.codTerc, 10);
+  if (!codTerc) return res.status(400).json({ error: 'codTerc inválido' });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    // ── Consultar todas las tablas relevantes ────────────────────────────────
+    const q = async (query, params = {}) => {
+      const r = pool.request();
+      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+      r.input('COD_TERC', sql.BigInt,   codTerc);
+      Object.entries(params).forEach(([k, v]) => r.input(k, v[0], v[1]));
+      return (await r.query(query)).recordset;
+    };
+
+    const [terce, jurid, rl, paises, cump, jd, rf, ac, fin, banco, pep, bf] = await Promise.all([
+      q('SELECT * FROM GN_TERCE       WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID       WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_RL    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_PAIS  WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_CUMP  WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_JD    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_RF    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_AC    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_FIN   WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_TERCE_BANCO WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_PEP   WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+      q('SELECT * FROM GN_JURID_BF    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+    ]);
+
+    // ── Construir libro Excel ─────────────────────────────────────────────────
+    const wb = new ExcelJS.Workbook();
+    wb.creator  = 'SARLAFT Sistema';
+    wb.created  = new Date();
+
+    const PRIMARY   = '1B5E20';
+    const HEADER_BG = 'E8F5E9';
+    const ACCENT    = '2E7D32';
+
+    /**
+     * Agrega una hoja con datos de una tabla.
+     * @param {string}   name   Nombre de la hoja
+     * @param {Array}    rows   Registros de la BD
+     */
+    function addSheet(name, rows) {
+      const ws = wb.addWorksheet(name);
+
+      if (!rows || rows.length === 0) {
+        ws.addRow(['Sin datos registrados']);
+        return;
+      }
+
+      const cols = Object.keys(rows[0]);
+
+      // Fila de título
+      ws.mergeCells(1, 1, 1, cols.length);
+      const titleCell = ws.getCell(1, 1);
+      titleCell.value = name;
+      titleCell.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+      titleCell.alignment = { horizontal: 'center' };
+
+      // Cabecera
+      const headerRow = ws.addRow(cols);
+      headerRow.eachCell(cell => {
+        cell.font    = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+        cell.border  = { bottom: { style: 'thin', color: { argb: 'FF' + PRIMARY } } };
+        cell.alignment = { horizontal: 'center' };
+      });
+
+      // Datos
+      rows.forEach((row, i) => {
+        const dataRow = ws.addRow(cols.map(c => row[c] instanceof Date
+          ? row[c].toLocaleDateString('es-CO')
+          : (row[c] ?? '')));
+        if (i % 2 === 0) {
+          dataRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F8E9' } };
+          });
+        }
+      });
+
+      // Auto-ancho aproximado
+      cols.forEach((col, idx) => {
+        const maxLen = Math.max(col.length,
+          ...rows.map(r => String(r[col] ?? '').length));
+        ws.getColumn(idx + 1).width = Math.min(Math.max(maxLen + 2, 10), 40);
+      });
+    }
+
+    addSheet('Datos Generales (GN_TERCE)',          terce);
+    addSheet('Datos Jurídicos (GN_JURID)',           jurid);
+    addSheet('Representantes Legales (GN_JURID_RL)', rl);
+    addSheet('Países de Operación (GN_JURID_PAIS)',  paises);
+    addSheet('Cumplimiento (GN_JURID_CUMP)',         cump);
+    addSheet('Junta Directiva (GN_JURID_JD)',        jd);
+    addSheet('Revisores Fiscales (GN_JURID_RF)',     rf);
+    addSheet('Accionistas (GN_JURID_AC)',            ac);
+    addSheet('Información Financiera (GN_JURID_FIN)',fin);
+    addSheet('Cuentas Bancarias (GN_TERCE_BANCO)',   banco);
+    addSheet('PEP (GN_JURID_PEP)',                   pep);
+    addSheet('Beneficiarios Finales (GN_JURID_BF)',  bf);
+
+    // ── Enviar como descarga ──────────────────────────────────────────────────
+    const nomComp = (terce[0]?.NOM_COMP || `TERC_${codTerc}`)
+      .replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
+    const filename = `SARLAFT_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+    res.setHeader('Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',
+      `attachment; filename="${filename}"`);
+
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('GET /api/exportar-excel:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  ESCRITURA — Guardar completo (todas las secciones en una transacción)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * POST /api/guardar-completo
- * Persiste el formulario completo de persona jurídica en una sola transacción SQL.
  *
- * Tablas que se insertan (en orden de dependencia):
- *   1.  GN_TERCE          — Tercero base
- *   2.  GN_JURID          — Datos jurídicos (sección 1 + 3)
- *   3.  GN_JURID_RL       — Representantes legales (sección 2)
- *   4.  GN_JURID_CUMP     — Sistema de cumplimiento (sección 5)
- *   5.  GN_JURID_PAIS     — Países de operación (sección 4)
- *   6.  GN_JURID_JD       — Junta directiva (sección 6)
- *   7.  GN_JURID_RF       — Revisores fiscales (sección 7)
- *   8.  GN_JURID_AC       — Composición accionaria (sección 8)
- *   9.  GN_JURID_FIN      — Información financiera (sección 9)
- *   10. GN_TERCE_BANCO    — Información bancaria (sección 10)
- *   11. GN_JURID_PEP      — Exposición política (sección 11a)
- *   12. GN_JURID_ACT      — Actividades activos virtuales (sección 11b)
+ * Esquema real de MineDax:
+ *  - Todas las tablas usan COD_EMPR (smallint) + COD_TERC (bigint) como PK/FK.
+ *  - COD_PAIS_EXP está en GN_JURID, NO en GN_TERCE.
+ *  - El campo de vinculación en GN_JURID se llama TIP_VINC (no COD_VINC).
+ *  - COD_PAIS, COD_DEPT, COD_MPIO son INT en todas las tablas.
+ *  - COD_BANCO y TIP_CUEN son INT en GN_TERCE_BANCO.
+ *  - Todas las tablas requieren ACT_USUA (char 8), ACT_HORA (datetime), ACT_ESTA (char 1).
+ *  - GN_JURID_JD NO tiene columna TIE_JUNTA.
+ *  - GN_TERCE_DOC usa patrón fila-por-documento (TIP_DOC, NOM_DOC, RUT_DOC…).
  */
 app.post('/api/guardar-completo', async (req, res) => {
-  const d = req.body;
+  const d        = req.body;
+  const ACT_USUA = ACT_USUA_GLOBAL;
+  const ACT_HORA = new Date();
+  const ACT_ESTA = 'A';
 
-  // Validación mínima server-side
-  if (!d.NUM_IDEN || !d.NOM_COMP || !d.COD_PAIS_EXP || !d.DIR_TERC || !d.TEL_TERC || !d.DIR_MAIL) {
+  if (!d.NUM_IDEN || !d.NOM_COMP || !d.DIR_TERC || !d.TEL_TERC || !d.DIR_MAIL) {
     return res.status(400).json({ error: 'Faltan campos obligatorios del tercero (sección 1).' });
   }
 
   let transaction;
+  let COD_TERC;
+
   try {
     const p = await getPool();
     transaction = new sql.Transaction(p);
     await transaction.begin();
 
     // ── 1. GN_TERCE ────────────────────────────────────────────────────────────
+    // TIP_TERC  = tipo de tercero (constraint GNC03TERCE — ver .env TIP_TERC_JURID)
+    // TIP_VINCU = código de vinculación (MAE_VINC.COD_VINC, int → guardamos como int)
+    // NUM_IDEN  = bigint; DIG_VERI = smallint
+    // COD_PAIS_EXP / COD_DEPT_EXP / COD_MPIO_EXP van en GN_JURID, NO aquí.
     {
       const r = new sql.Request(transaction);
-      r.input('TIP_TERC',    sql.Char(1),       'J');
-      r.input('COD_TPDOC',   sql.Int,            d.COD_TPDOC   || 8);
-      r.input('NUM_IDEN',    sql.VarChar(20),    d.NUM_IDEN);
-      r.input('DIG_VERI',    sql.Char(1),        d.DIG_VERI    || null);
-      r.input('NOM_COMP',    sql.VarChar(255),   d.NOM_COMP);
-      r.input('COD_PAIS_EXP',sql.VarChar(10),    d.COD_PAIS_EXP);
-      r.input('DIR_TERC',    sql.VarChar(255),   d.DIR_TERC);
-      r.input('TEL_TERC',    sql.VarChar(30),    d.TEL_TERC);
-      r.input('TEL_TERC2',   sql.VarChar(30),    d.TEL_TERC2   || null);
-      r.input('DIR_MAIL',    sql.VarChar(100),   d.DIR_MAIL);
-      await r.query(`
+      r.input('COD_EMPR',  sql.SmallInt,     COD_EMPR);
+      r.input('TIP_TERC',  sql.Char(1),       TIP_TERC_JURID);
+      r.input('COD_TPDOC', sql.Int,            intOrNull(d.COD_TPDOC) || 8);
+      r.input('NUM_IDEN',  sql.BigInt,         Number(d.NUM_IDEN));
+      r.input('DIG_VERI',  sql.SmallInt,       intOrNull(d.DIG_VERI));
+      r.input('NOM_COMP',  sql.VarChar(240),  d.NOM_COMP);
+      r.input('DIR_TERC',  sql.Char(120),      d.DIR_TERC);
+      r.input('TEL_TERC',  sql.Char(30),       d.TEL_TERC);
+      r.input('TEL_TERC2', sql.Char(40),       d.TEL_TERC2 || null);
+      r.input('DIR_MAIL',  sql.VarChar(150),  d.DIR_MAIL);
+      r.input('ACT_USUA',  sql.Char(8),        ACT_USUA);
+      r.input('ACT_HORA',  sql.DateTime,       ACT_HORA);
+      r.input('ACT_ESTA',  sql.Char(1),        ACT_ESTA);
+      const result = await r.query(`
         INSERT INTO GN_TERCE
-          (TIP_TERC,COD_TPDOC,NUM_IDEN,DIG_VERI,NOM_COMP,COD_PAIS_EXP,DIR_TERC,TEL_TERC,TEL_TERC2,DIR_MAIL)
+          (COD_EMPR,TIP_TERC,COD_TPDOC,NUM_IDEN,DIG_VERI,NOM_COMP,
+           DIR_TERC,TEL_TERC,TEL_TERC2,DIR_MAIL,ACT_USUA,ACT_HORA,ACT_ESTA)
+        OUTPUT INSERTED.COD_TERC
         VALUES
-          (@TIP_TERC,@COD_TPDOC,@NUM_IDEN,@DIG_VERI,@NOM_COMP,@COD_PAIS_EXP,@DIR_TERC,@TEL_TERC,@TEL_TERC2,@DIR_MAIL)`);
+          (@COD_EMPR,@TIP_TERC,@COD_TPDOC,@NUM_IDEN,@DIG_VERI,@NOM_COMP,
+           @DIR_TERC,@TEL_TERC,@TEL_TERC2,@DIR_MAIL,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+      COD_TERC = result.recordset[0].COD_TERC;
     }
 
     // ── 2. GN_JURID ────────────────────────────────────────────────────────────
+    // COD_PAIS_EXP SÍ existe aquí (int).
+    // El campo de vinculación es TIP_VINC (no COD_VINC).
+    // COD_DEPT_EXP, COD_MPIO_EXP, COD_PAIS_SOC son int.
     {
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',     sql.VarChar(20),   d.NUM_IDEN);
-      r.input('COD_VINC',     sql.VarChar(10),   d.COD_VINC     || null);
-      r.input('COD_DEPT_EXP', sql.VarChar(10),   d.COD_DEPT_EXP || null);
-      r.input('COD_MPIO_EXP', sql.VarChar(10),   d.COD_MPIO_EXP || null);
-      r.input('MAIL_SARL',    sql.VarChar(100),  d.MAIL_SARL    || null);
-      r.input('COD_CIIU',     sql.VarChar(10),   d.COD_CIIU     || null);
-      r.input('URL_WEB',      sql.VarChar(255),  d.URL_WEB      || null);
-      r.input('UBIC_SOC',     sql.Char(1),        d.UBIC_SOC     || null);
-      r.input('COD_PAIS_SOC', sql.VarChar(10),   d.COD_PAIS_SOC || null);
-      r.input('TIP_EMPR',     sql.VarChar(10),   d.TIP_EMPR     || null);
-      r.input('GRUP_EMPR',    sql.Char(1),        d.GRUP_EMPR    || null);
-      r.input('TIP_SOCIE',    sql.VarChar(10),   d.TIP_SOCIE    || null);
+      r.input('COD_EMPR',    sql.SmallInt,    COD_EMPR);
+      r.input('COD_TERC',    sql.BigInt,       COD_TERC);
+      // TIP_VINC / TIP_SOCIE / TIP_EMPR son varchar en GN_JURID pero reciben
+      // el COD_* (int) del catálogo → strOrNull garantiza que lleguen como string.
+      r.input('TIP_VINC',    sql.VarChar(40), strOrNull(d.COD_VINC));
+      r.input('COD_PAIS_EXP',sql.Int,          intOrNull(d.COD_PAIS_EXP));
+      r.input('COD_DEPT_EXP',sql.Int,          intOrNull(d.COD_DEPT_EXP));
+      r.input('COD_MPIO_EXP',sql.Int,          intOrNull(d.COD_MPIO_EXP));
+      r.input('MAIL_SARL',   sql.VarChar(150), strOrNull(d.MAIL_SARL));
+      r.input('COD_CIIU',    sql.VarChar(10),  strOrNull(d.COD_CIIU));
+      r.input('URL_WEB',     sql.VarChar(200), strOrNull(d.URL_WEB));
+      r.input('UBIC_SOC',    sql.Char(1),       strOrNull(d.UBIC_SOC));
+      r.input('COD_PAIS_SOC',sql.Int,           intOrNull(d.COD_PAIS_SOC));
+      r.input('TIP_EMPR',    sql.VarChar(10),  strOrNull(d.TIP_EMPR));
+      r.input('GRUP_EMPR',   sql.Char(1),       strOrNull(d.GRUP_EMPR));
+      r.input('TIP_SOCIE',   sql.VarChar(60),  strOrNull(d.TIP_SOCIE));
+      r.input('ACT_USUA',    sql.Char(8),      ACT_USUA);
+      r.input('ACT_HORA',    sql.DateTime,     ACT_HORA);
+      r.input('ACT_ESTA',    sql.Char(1),      ACT_ESTA);
       await r.query(`
         INSERT INTO GN_JURID
-          (NUM_IDEN,COD_VINC,COD_DEPT_EXP,COD_MPIO_EXP,MAIL_SARL,COD_CIIU,URL_WEB,
-           UBIC_SOC,COD_PAIS_SOC,TIP_EMPR,GRUP_EMPR,TIP_SOCIE)
+          (COD_EMPR,COD_TERC,TIP_VINC,COD_PAIS_EXP,COD_DEPT_EXP,COD_MPIO_EXP,
+           MAIL_SARL,COD_CIIU,URL_WEB,UBIC_SOC,COD_PAIS_SOC,TIP_EMPR,GRUP_EMPR,TIP_SOCIE,
+           ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@COD_VINC,@COD_DEPT_EXP,@COD_MPIO_EXP,@MAIL_SARL,@COD_CIIU,@URL_WEB,
-           @UBIC_SOC,@COD_PAIS_SOC,@TIP_EMPR,@GRUP_EMPR,@TIP_SOCIE)`);
+          (@COD_EMPR,@COD_TERC,@TIP_VINC,@COD_PAIS_EXP,@COD_DEPT_EXP,@COD_MPIO_EXP,
+           @MAIL_SARL,@COD_CIIU,@URL_WEB,@UBIC_SOC,@COD_PAIS_SOC,@TIP_EMPR,@GRUP_EMPR,@TIP_SOCIE,
+           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 3. GN_JURID_RL — Representantes legales ────────────────────────────────
     for (const rl of (d.representantes || [])) {
       if (rl.TIP_REPR === 'S' && (!rl.NOM_REPR || !String(rl.NOM_REPR).trim())) continue;
-      const dept = (!rl.COD_DEPT || rl.COD_DEPT === 'NA') ? null : rl.COD_DEPT;
+      const dept = (!rl.COD_DEPT || rl.COD_DEPT === 'NA') ? null : intOrNull(rl.COD_DEPT);
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',  sql.VarChar(20),   d.NUM_IDEN);
-      r.input('TIP_REPR',  sql.Char(1),        rl.TIP_REPR);
-      r.input('NOM_REPR',  sql.VarChar(100),   rl.NOM_REPR  || null);
-      r.input('APE_REPR',  sql.VarChar(100),   rl.APE_REPR  || null);
-      r.input('TIP_DOCU',  sql.Int,             rl.TIP_DOCU  ? Number(rl.TIP_DOCU) : null);
-      r.input('NUM_DOCU',  sql.VarChar(20),    rl.NUM_DOCU  || null);
-      r.input('FEC_EXPE',  sql.Date,            rl.FEC_EXPE  ? new Date(rl.FEC_EXPE) : null);
-      r.input('COD_PAIS',  sql.VarChar(10),    rl.COD_PAIS  || null);
-      r.input('COD_DEPT',  sql.VarChar(10),    dept);
-      r.input('COD_MPIO',  sql.VarChar(10),    rl.COD_MPIO  || null);
-      r.input('DIR_REPR',  sql.VarChar(255),   rl.DIR_REPR  || null);
-      r.input('CEL_REPR',  sql.VarChar(30),    rl.CEL_REPR  || null);
-      r.input('TEL_REPR',  sql.VarChar(30),    rl.TEL_REPR  || null);
-      r.input('MAIL_REPR', sql.VarChar(100),   rl.MAIL_REPR || null);
+      r.input('COD_EMPR', sql.SmallInt,    COD_EMPR);
+      r.input('COD_TERC', sql.BigInt,       COD_TERC);
+      r.input('TIP_REPR', sql.Char(1),      rl.TIP_REPR);
+      r.input('NOM_REPR', sql.VarChar(80), rl.NOM_REPR  || null);
+      r.input('APE_REPR', sql.VarChar(80), rl.APE_REPR  || null);
+      r.input('TIP_DOCU', sql.Int,           intOrNull(rl.TIP_DOCU));
+      r.input('NUM_DOCU', sql.VarChar(20), rl.NUM_DOCU  || null);
+      r.input('FEC_EXPE', sql.Date,          rl.FEC_EXPE ? new Date(rl.FEC_EXPE) : null);
+      r.input('COD_PAIS', sql.Int,           intOrNull(rl.COD_PAIS));
+      r.input('COD_DEPT', sql.Int,           dept);
+      r.input('COD_MPIO', sql.Int,           intOrNull(rl.COD_MPIO));
+      r.input('DIR_REPR', sql.VarChar(120),rl.DIR_REPR  || null);
+      r.input('CEL_REPR', sql.VarChar(30), rl.CEL_REPR  || null);
+      r.input('TEL_REPR', sql.VarChar(30), rl.TEL_REPR  || null);
+      r.input('MAIL_REPR',sql.VarChar(150),rl.MAIL_REPR || null);
+      r.input('ACT_USUA', sql.Char(8),      ACT_USUA);
+      r.input('ACT_HORA', sql.DateTime,     ACT_HORA);
+      r.input('ACT_ESTA', sql.Char(1),      ACT_ESTA);
       await r.query(`
         INSERT INTO GN_JURID_RL
-          (NUM_IDEN,TIP_REPR,NOM_REPR,APE_REPR,TIP_DOCU,NUM_DOCU,
-           FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REPR,CEL_REPR,TEL_REPR,MAIL_REPR)
+          (COD_EMPR,COD_TERC,TIP_REPR,NOM_REPR,APE_REPR,TIP_DOCU,NUM_DOCU,
+           FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REPR,CEL_REPR,TEL_REPR,MAIL_REPR,
+           ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@TIP_REPR,@NOM_REPR,@APE_REPR,@TIP_DOCU,@NUM_DOCU,
-           @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REPR,@CEL_REPR,@TEL_REPR,@MAIL_REPR)`);
+          (@COD_EMPR,@COD_TERC,@TIP_REPR,@NOM_REPR,@APE_REPR,@TIP_DOCU,@NUM_DOCU,
+           @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REPR,@CEL_REPR,@TEL_REPR,@MAIL_REPR,
+           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 4. GN_JURID_CUMP — Cumplimiento (cabecera + oficiales) ────────────────
     {
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',  sql.VarChar(20),      d.NUM_IDEN);
-      r.input('DESC_NORM', sql.VarChar(sql.MAX),  d.DESC_NORM  || null);
-      r.input('NORM_LAFT', sql.VarChar(255),      d.NORM_LAFT  || null);
-      r.input('TIE_JUNTA', sql.Char(1),           d.cump_TIE_JUNTA || 'N');
-      r.input('SIS_PREVE', sql.VarChar(10),       d.cump_TIE_JUNTA === 'S' ? (d.SIS_PREVE || null) : null);
-      r.input('REL_GRUPO', sql.VarChar(100),      d.REL_GRUPO  || null);
+      r.input('COD_EMPR',  sql.SmallInt,      COD_EMPR);
+      r.input('COD_TERC',  sql.BigInt,          COD_TERC);
+      r.input('DESC_NORM', sql.VarChar(500),   strOrNull(d.DESC_NORM));
+      r.input('NORM_LAFT', sql.VarChar(200),   strOrNull(d.NORM_LAFT));
+      r.input('TIE_JUNTA', sql.Char(1),         d.cump_TIE_JUNTA || 'N');
+      // SIS_PREVE viene de MAE_SIST_PREV (COD_SIST puede ser int) → strOrNull
+      r.input('SIS_PREVE', sql.VarChar(60),    d.cump_TIE_JUNTA === 'S' ? strOrNull(d.SIS_PREVE) : null);
+      r.input('REL_GRUPO', sql.VarChar(120),   strOrNull(d.REL_GRUPO));
+      r.input('ACT_USUA',  sql.Char(8),         ACT_USUA);
+      r.input('ACT_HORA',  sql.DateTime,        ACT_HORA);
+      r.input('ACT_ESTA',  sql.Char(1),         ACT_ESTA);
       await r.query(`
-        INSERT INTO GN_JURID_CUMP (NUM_IDEN,DESC_NORM,NORM_LAFT,TIE_JUNTA,SIS_PREVE,REL_GRUPO)
-        VALUES (@NUM_IDEN,@DESC_NORM,@NORM_LAFT,@TIE_JUNTA,@SIS_PREVE,@REL_GRUPO)`);
+        INSERT INTO GN_JURID_CUMP
+          (COD_EMPR,COD_TERC,DESC_NORM,NORM_LAFT,TIE_JUNTA,SIS_PREVE,REL_GRUPO,ACT_USUA,ACT_HORA,ACT_ESTA)
+        VALUES
+          (@COD_EMPR,@COD_TERC,@DESC_NORM,@NORM_LAFT,@TIE_JUNTA,@SIS_PREVE,@REL_GRUPO,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
     if (d.cump_TIE_JUNTA === 'S') {
       for (const of_ of (d.oficiales || [])) {
         if (of_.TIP_REPR === 'S' && (!of_.NOM_RESP || !String(of_.NOM_RESP).trim())) continue;
-        const dept = (!of_.COD_DEPT || of_.COD_DEPT === 'NA') ? null : of_.COD_DEPT;
+        const dept = (!of_.COD_DEPT || of_.COD_DEPT === 'NA') ? null : intOrNull(of_.COD_DEPT);
         const r = new sql.Request(transaction);
-        r.input('NUM_IDEN',  sql.VarChar(20),   d.NUM_IDEN);
-        r.input('TIP_REPR',  sql.Char(1),        of_.TIP_REPR);
-        r.input('TIP_DOCU',  sql.Int,             of_.TIP_DOCU  ? Number(of_.TIP_DOCU)  : null);
-        r.input('NUM_DOCU',  sql.VarChar(20),    of_.NUM_DOCU  || null);
-        r.input('FEC_EXPE',  sql.Date,            of_.FEC_EXPE  ? new Date(of_.FEC_EXPE) : null);
-        r.input('NOM_RESP',  sql.VarChar(100),   of_.NOM_RESP  || null);
-        r.input('APE_RESP',  sql.VarChar(100),   of_.APE_RESP  || null);
-        r.input('RAZ_RESP',  sql.VarChar(255),   of_.RAZ_RESP  || null);
-        r.input('COD_PAIS',  sql.VarChar(10),    of_.COD_PAIS  || null);
-        r.input('COD_DEPT',  sql.VarChar(10),    dept);
-        r.input('COD_MPIO',  sql.VarChar(10),    of_.COD_MPIO  || null);
-        r.input('DIR_RESP',  sql.VarChar(255),   of_.DIR_RESP  || null);
-        r.input('TEL_RESP',  sql.VarChar(30),    of_.TEL_RESP  || null);
-        r.input('MAIL_RESP', sql.VarChar(100),   of_.MAIL_RESP || null);
+        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
+        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
+        r.input('TIP_REPR',  sql.Char(1),      of_.TIP_REPR);
+        r.input('TIP_DOCU',  sql.Int,           intOrNull(of_.TIP_DOCU));
+        r.input('NUM_DOCU',  sql.VarChar(20), of_.NUM_DOCU  || null);
+        r.input('FEC_EXPE',  sql.Date,          of_.FEC_EXPE ? new Date(of_.FEC_EXPE) : null);
+        r.input('NOM_RESP',  sql.VarChar(80), of_.NOM_RESP  || null);
+        r.input('APE_RESP',  sql.VarChar(80), of_.APE_RESP  || null);
+        r.input('RAZ_RESP',  sql.VarChar(200),of_.RAZ_RESP  || null);
+        r.input('COD_PAIS',  sql.Int,           intOrNull(of_.COD_PAIS));
+        r.input('COD_DEPT',  sql.Int,           dept);
+        r.input('COD_MPIO',  sql.Int,           intOrNull(of_.COD_MPIO));
+        r.input('DIR_RESP',  sql.VarChar(120),of_.DIR_RESP  || null);
+        r.input('TEL_RESP',  sql.VarChar(40), of_.TEL_RESP  || null);
+        r.input('MAIL_RESP', sql.VarChar(150),of_.MAIL_RESP || null);
+        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
+        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
+        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
         await r.query(`
           INSERT INTO GN_JURID_CUMP
-            (NUM_IDEN,TIP_REPR,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-             NOM_RESP,APE_RESP,RAZ_RESP,COD_PAIS,COD_DEPT,COD_MPIO,DIR_RESP,TEL_RESP,MAIL_RESP)
+            (COD_EMPR,COD_TERC,TIP_REPR,TIP_DOCU,NUM_DOCU,FEC_EXPE,
+             NOM_RESP,APE_RESP,RAZ_RESP,COD_PAIS,COD_DEPT,COD_MPIO,DIR_RESP,TEL_RESP,MAIL_RESP,
+             ACT_USUA,ACT_HORA,ACT_ESTA)
           VALUES
-            (@NUM_IDEN,@TIP_REPR,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-             @NOM_RESP,@APE_RESP,@RAZ_RESP,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_RESP,@TEL_RESP,@MAIL_RESP)`);
+            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
+             @NOM_RESP,@APE_RESP,@RAZ_RESP,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_RESP,@TEL_RESP,@MAIL_RESP,
+             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
       }
     }
 
     // ── 5. GN_JURID_PAIS — Países de operación ─────────────────────────────────
+    // COD_PAIS es int (no varchar)
     for (const { COD_PAIS } of (d.paises || [])) {
       if (!COD_PAIS) continue;
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN', sql.VarChar(20), d.NUM_IDEN);
-      r.input('COD_PAIS', sql.VarChar(10), COD_PAIS);
-      await r.query(`INSERT INTO GN_JURID_PAIS (NUM_IDEN,COD_PAIS) VALUES (@NUM_IDEN,@COD_PAIS)`);
+      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+      r.input('COD_TERC', sql.BigInt,   COD_TERC);
+      r.input('COD_PAIS', sql.Int,       intOrNull(COD_PAIS));
+      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
+      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
+      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
+      await r.query(`
+        INSERT INTO GN_JURID_PAIS (COD_EMPR,COD_TERC,COD_PAIS,ACT_USUA,ACT_HORA,ACT_ESTA)
+        VALUES (@COD_EMPR,@COD_TERC,@COD_PAIS,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 6. GN_JURID_JD — Junta directiva ───────────────────────────────────────
+    // IMPORTANTE: GN_JURID_JD NO tiene columna TIE_JUNTA.
+    // Si no hay junta ('N'), simplemente no se insertan filas.
     if (d.jd_TIE_JUNTA === 'S') {
       const insertJD = async (txn, data, TIP_REPR) => {
-        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : data.COD_DEPT;
+        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : intOrNull(data.COD_DEPT);
         const r = new sql.Request(txn);
-        r.input('NUM_IDEN',  sql.VarChar(20),  d.NUM_IDEN);
-        r.input('TIP_REPR',  sql.Char(1),       TIP_REPR);
-        r.input('TIP_MIEM',  sql.VarChar(100),  data.TIP_MIEM  || null);
-        r.input('NOM_MIEM',  sql.VarChar(100),  data.NOM_MIEM  || null);
-        r.input('APE_MIEM',  sql.VarChar(100),  data.APE_MIEM  || null);
-        r.input('RAZ_MIEM',  sql.VarChar(255),  data.RAZ_MIEM  || null);
-        r.input('TIP_DOCU',  sql.Int,            data.TIP_DOCU  ? Number(data.TIP_DOCU) : null);
-        r.input('NUM_DOCU',  sql.VarChar(20),   data.NUM_DOCU  || null);
-        r.input('FEC_EXPE',  sql.Date,           data.FEC_EXPE  ? new Date(data.FEC_EXPE) : null);
-        r.input('COD_PAIS',  sql.VarChar(10),   data.COD_PAIS  || null);
-        r.input('COD_DEPT',  sql.VarChar(10),   dept);
-        r.input('COD_MPIO',  sql.VarChar(10),   data.COD_MPIO  || null);
-        r.input('DIR_MIEM',  sql.VarChar(255),  data.DIR_MIEM  || null);
-        r.input('TEL_MIEM',  sql.VarChar(30),   data.TEL_MIEM  || null);
-        r.input('MAIL_MIEM', sql.VarChar(100),  data.MAIL_MIEM || null);
+        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
+        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
+        r.input('TIP_REPR',  sql.Char(1),      TIP_REPR);
+        r.input('TIP_MIEM',  sql.VarChar(100),data.TIP_MIEM  || null);
+        r.input('NOM_MIEM',  sql.VarChar(80), data.NOM_MIEM  || null);
+        r.input('APE_MIEM',  sql.VarChar(80), data.APE_MIEM  || null);
+        r.input('RAZ_MIEM',  sql.VarChar(200),data.RAZ_MIEM  || null);
+        r.input('TIP_DOCU',  sql.Int,           intOrNull(data.TIP_DOCU));
+        r.input('NUM_DOCU',  sql.VarChar(20), data.NUM_DOCU  || null);
+        r.input('FEC_EXPE',  sql.Date,          data.FEC_EXPE ? new Date(data.FEC_EXPE) : null);
+        r.input('COD_PAIS',  sql.Int,           intOrNull(data.COD_PAIS));
+        r.input('COD_DEPT',  sql.Int,           dept);
+        r.input('COD_MPIO',  sql.Int,           intOrNull(data.COD_MPIO));
+        r.input('DIR_MIEM',  sql.VarChar(120),data.DIR_MIEM  || null);
+        r.input('TEL_MIEM',  sql.VarChar(30), data.TEL_MIEM  || null);
+        r.input('MAIL_MIEM', sql.VarChar(150),data.MAIL_MIEM || null);
+        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
+        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
+        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
         await r.query(`
           INSERT INTO GN_JURID_JD
-            (NUM_IDEN,TIP_REPR,TIP_MIEM,NOM_MIEM,APE_MIEM,RAZ_MIEM,TIP_DOCU,NUM_DOCU,
-             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_MIEM,TEL_MIEM,MAIL_MIEM)
+            (COD_EMPR,COD_TERC,TIP_REPR,TIP_MIEM,NOM_MIEM,APE_MIEM,RAZ_MIEM,TIP_DOCU,NUM_DOCU,
+             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_MIEM,TEL_MIEM,MAIL_MIEM,ACT_USUA,ACT_HORA,ACT_ESTA)
           VALUES
-            (@NUM_IDEN,@TIP_REPR,@TIP_MIEM,@NOM_MIEM,@APE_MIEM,@RAZ_MIEM,@TIP_DOCU,@NUM_DOCU,
-             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_MIEM,@TEL_MIEM,@MAIL_MIEM)`);
+            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_MIEM,@NOM_MIEM,@APE_MIEM,@RAZ_MIEM,@TIP_DOCU,@NUM_DOCU,
+             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_MIEM,@TEL_MIEM,@MAIL_MIEM,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
       };
       for (const m of (d.juntaDirectiva || [])) {
         await insertJD(transaction, m.Principal, 'P');
@@ -1002,283 +1280,274 @@ app.post('/api/guardar-completo', async (req, res) => {
           await insertJD(transaction, m.Suplente, 'S');
         }
       }
-    } else {
-      const r0 = new sql.Request(transaction);
-      r0.input('NUM_IDEN',  sql.VarChar(20), d.NUM_IDEN);
-      r0.input('TIE_JUNTA', sql.Char(1),      'N');
-      await r0.query(`INSERT INTO GN_JURID_JD (NUM_IDEN,TIE_JUNTA) VALUES (@NUM_IDEN,@TIE_JUNTA)`);
     }
 
     // ── 7. GN_JURID_RF — Revisores fiscales ────────────────────────────────────
     if (d.rf_TIE_REVIS === 'S') {
       const insertRF = async (txn, data, TIP_REPR) => {
-        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : data.COD_DEPT;
+        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : intOrNull(data.COD_DEPT);
         const r = new sql.Request(txn);
-        r.input('NUM_IDEN',     sql.VarChar(20),      d.NUM_IDEN);
+        r.input('COD_EMPR',     sql.SmallInt,       COD_EMPR);
+        r.input('COD_TERC',     sql.BigInt,           COD_TERC);
         r.input('TIP_REPR',     sql.Char(1),           TIP_REPR);
         r.input('TIE_REVIS',    sql.Char(1),           'S');
-        r.input('NOM_REVI',     sql.VarChar(100),      data.NOM_REVI     || null);
-        r.input('APE_REVI',     sql.VarChar(100),      data.APE_REVI     || null);
-        r.input('RAZ_REVI',     sql.VarChar(255),      data.RAZ_REVI     || null);
-        r.input('TIP_DOCU',     sql.Int,                data.TIP_DOCU     ? Number(data.TIP_DOCU) : null);
-        r.input('NUM_DOCU',     sql.VarChar(20),       data.NUM_DOCU     || null);
-        r.input('FEC_EXPE',     sql.Date,               data.FEC_EXPE     ? new Date(data.FEC_EXPE) : null);
-        r.input('COD_PAIS',     sql.VarChar(10),       data.COD_PAIS     || null);
-        r.input('COD_DEPT',     sql.VarChar(10),       dept);
-        r.input('COD_MPIO',     sql.VarChar(10),       data.COD_MPIO     || null);
-        r.input('DIR_REVI',     sql.VarChar(255),      data.DIR_REVI     || null);
-        r.input('CEL_REVI',     sql.VarChar(30),       data.CEL_REVI     || null);
-        r.input('TEL_REVI',     sql.VarChar(30),       data.TEL_REVI     || null);
-        r.input('MAIL_REVI',    sql.VarChar(100),      data.MAIL_REVI    || null);
-        r.input('REVI_FIRMA',   sql.Char(1),            data.REVI_FIRMA   || 'N');
-        r.input('RAZ_FIRMA',    sql.VarChar(255),      data.RAZ_FIRMA    || null);
-        r.input('TIP_DOCU_FIR', sql.Int,                data.TIP_DOCU_FIR ? Number(data.TIP_DOCU_FIR) : null);
-        r.input('NUM_DOCU_FIR', sql.VarChar(20),       data.NUM_DOCU_FIR || null);
-        r.input('OBS_REVI',     sql.VarChar(sql.MAX),  data.OBS_REVI     || null);
+        r.input('NOM_REVI',     sql.VarChar(80),      data.NOM_REVI     || null);
+        r.input('APE_REVI',     sql.VarChar(80),      data.APE_REVI     || null);
+        r.input('RAZ_REVI',     sql.VarChar(200),     data.RAZ_REVI     || null);
+        r.input('TIP_DOCU',     sql.Int,               intOrNull(data.TIP_DOCU));
+        r.input('NUM_DOCU',     sql.VarChar(20),      data.NUM_DOCU     || null);
+        r.input('FEC_EXPE',     sql.Date,              data.FEC_EXPE     ? new Date(data.FEC_EXPE) : null);
+        r.input('COD_PAIS',     sql.Int,               intOrNull(data.COD_PAIS));
+        r.input('COD_DEPT',     sql.Int,               dept);
+        r.input('COD_MPIO',     sql.Int,               intOrNull(data.COD_MPIO));
+        r.input('DIR_REVI',     sql.VarChar(120),     data.DIR_REVI     || null);
+        r.input('CEL_REVI',     sql.VarChar(30),      data.CEL_REVI     || null);
+        r.input('TEL_REVI',     sql.VarChar(30),      data.TEL_REVI     || null);
+        r.input('MAIL_REVI',    sql.VarChar(150),     data.MAIL_REVI    || null);
+        r.input('REVI_FIRMA',   sql.Char(1),           data.REVI_FIRMA   || 'N');
+        r.input('RAZ_FIRMA',    sql.VarChar(200),     data.RAZ_FIRMA    || null);
+        r.input('TIP_DOCU_FIR', sql.Int,               intOrNull(data.TIP_DOCU_FIR));
+        r.input('NUM_DOCU_FIR', sql.VarChar(20),      data.NUM_DOCU_FIR || null);
+        r.input('OBS_REVI',     sql.VarChar(300),     data.OBS_REVI     || null);
+        r.input('ACT_USUA',     sql.Char(8),           ACT_USUA);
+        r.input('ACT_HORA',     sql.DateTime,          ACT_HORA);
+        r.input('ACT_ESTA',     sql.Char(1),           ACT_ESTA);
         await r.query(`
           INSERT INTO GN_JURID_RF
-            (NUM_IDEN,TIP_REPR,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,TIP_DOCU,NUM_DOCU,
+            (COD_EMPR,COD_TERC,TIP_REPR,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,TIP_DOCU,NUM_DOCU,
              FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
-             REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OBS_REVI)
+             REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OBS_REVI,ACT_USUA,ACT_HORA,ACT_ESTA)
           VALUES
-            (@NUM_IDEN,@TIP_REPR,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,@TIP_DOCU,@NUM_DOCU,
+            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,@TIP_DOCU,@NUM_DOCU,
              @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
-             @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OBS_REVI)`);
+             @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OBS_REVI,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
       };
       for (const rv of (d.revisores || [])) {
-        await insertRF(transaction, rv.Principal, 'P');
+        const firmaFields = {
+          REVI_FIRMA:   rv.REVI_FIRMA   || 'N',
+          RAZ_FIRMA:    rv.RAZ_FIRMA    || null,
+          TIP_DOCU_FIR: rv.TIP_DOCU_FIR || null,
+          NUM_DOCU_FIR: rv.NUM_DOCU_FIR || null,
+        };
+        await insertRF(transaction, { ...rv.Principal, ...firmaFields }, 'P');
         if (rv.Suplente && rv.Suplente.NOM_REVI && String(rv.Suplente.NOM_REVI).trim()) {
-          await insertRF(transaction, rv.Suplente, 'S');
+          await insertRF(transaction, { ...rv.Suplente, ...firmaFields }, 'S');
         }
       }
     } else {
       const r0 = new sql.Request(transaction);
-      r0.input('NUM_IDEN',  sql.VarChar(20), d.NUM_IDEN);
-      r0.input('TIE_REVIS', sql.Char(1),      'N');
-      await r0.query(`INSERT INTO GN_JURID_RF (NUM_IDEN,TIE_REVIS) VALUES (@NUM_IDEN,@TIE_REVIS)`);
+      r0.input('COD_EMPR',  sql.SmallInt, COD_EMPR);
+      r0.input('COD_TERC',  sql.BigInt,   COD_TERC);
+      r0.input('TIE_REVIS', sql.Char(1),  'N');
+      r0.input('ACT_USUA',  sql.Char(8),  ACT_USUA);
+      r0.input('ACT_HORA',  sql.DateTime, ACT_HORA);
+      r0.input('ACT_ESTA',  sql.Char(1),  ACT_ESTA);
+      await r0.query(`
+        INSERT INTO GN_JURID_RF (COD_EMPR,COD_TERC,TIE_REVIS,ACT_USUA,ACT_HORA,ACT_ESTA)
+        VALUES (@COD_EMPR,@COD_TERC,@TIE_REVIS,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 8. GN_JURID_AC — Composición accionaria ─────────────────────────────────
     for (const a of (d.accionistas || [])) {
-      const dept = (!a.COD_DEPT || a.COD_DEPT === 'NA') ? null : a.COD_DEPT;
+      const dept = (!a.COD_DEPT || a.COD_DEPT === 'NA') ? null : intOrNull(a.COD_DEPT);
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN', sql.VarChar(20),    d.NUM_IDEN);
-      r.input('NOM_ACCI', sql.VarChar(100),   a.NOM_ACCI || null);
-      r.input('APE_ACCI', sql.VarChar(100),   a.APE_ACCI || null);
-      r.input('RAZ_ACCI', sql.VarChar(255),   a.RAZ_ACCI || null);
-      r.input('TIP_DOCU', sql.Int,             a.TIP_DOCU ? Number(a.TIP_DOCU) : null);
-      r.input('NUM_DOCU', sql.VarChar(20),    a.NUM_DOCU || null);
-      r.input('FEC_EXPE', sql.Date,            a.FEC_EXPE ? new Date(a.FEC_EXPE) : null);
-      r.input('COD_PAIS', sql.VarChar(10),    a.COD_PAIS || null);
-      r.input('COD_DEPT', sql.VarChar(10),    dept);
-      r.input('COD_MPIO', sql.VarChar(10),    a.COD_MPIO || null);
-      r.input('DIR_ACCI', sql.VarChar(255),   a.DIR_ACCI || null);
-      r.input('CEL_ACCI', sql.VarChar(30),    a.CEL_ACCI || null);
-      r.input('TEL_ACCI', sql.VarChar(30),    a.TEL_ACCI || null);
-      r.input('MAIL_ACCI',sql.VarChar(100),   a.MAIL_ACCI|| null);
-      r.input('PCT_PART', sql.Decimal(6, 2),  a.PCT_PART != null ? Number(a.PCT_PART) : null);
+      r.input('COD_EMPR', sql.SmallInt,    COD_EMPR);
+      r.input('COD_TERC', sql.BigInt,       COD_TERC);
+      r.input('NOM_ACCI', sql.VarChar(80), a.NOM_ACCI || null);
+      r.input('APE_ACCI', sql.VarChar(80), a.APE_ACCI || null);
+      r.input('RAZ_ACCI', sql.VarChar(200),a.RAZ_ACCI || null);
+      r.input('TIP_DOCU', sql.Int,           intOrNull(a.TIP_DOCU));
+      r.input('NUM_DOCU', sql.VarChar(20), a.NUM_DOCU || null);
+      r.input('FEC_EXPE', sql.Date,          a.FEC_EXPE ? new Date(a.FEC_EXPE) : null);
+      r.input('COD_PAIS', sql.Int,           intOrNull(a.COD_PAIS));
+      r.input('COD_DEPT', sql.Int,           dept);
+      r.input('COD_MPIO', sql.Int,           intOrNull(a.COD_MPIO));
+      r.input('DIR_ACCI', sql.VarChar(120), a.DIR_ACCI || null);
+      r.input('CEL_ACCI', sql.VarChar(30), a.CEL_ACCI || null);
+      r.input('TEL_ACCI', sql.VarChar(30), a.TEL_ACCI || null);
+      r.input('MAIL_ACCI',sql.VarChar(150),a.MAIL_ACCI|| null);
+      r.input('PCT_PART', sql.Decimal(6,2), a.PCT_PART != null ? Number(a.PCT_PART) : null);
+      r.input('ACT_USUA', sql.Char(8),      ACT_USUA);
+      r.input('ACT_HORA', sql.DateTime,     ACT_HORA);
+      r.input('ACT_ESTA', sql.Char(1),      ACT_ESTA);
       await r.query(`
         INSERT INTO GN_JURID_AC
-          (NUM_IDEN,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-           COD_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART)
+          (COD_EMPR,COD_TERC,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,FEC_EXPE,
+           COD_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART,
+           ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-           @COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART)`);
+          (@COD_EMPR,@COD_TERC,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
+           @COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART,
+           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 9. GN_JURID_FIN — Información financiera ───────────────────────────────
     {
       const fin = d.financiera || {};
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',  sql.VarChar(20),     d.NUM_IDEN);
-      r.input('ACT_TOTAL', sql.Decimal(18, 2),  fin.ACT_TOTAL  != null ? Number(fin.ACT_TOTAL)  : null);
-      r.input('ING_MENS',  sql.Decimal(18, 2),  fin.ING_MENS   != null ? Number(fin.ING_MENS)   : null);
-      r.input('PAS_TOTAL', sql.Decimal(18, 2),  fin.PAS_TOTAL  != null ? Number(fin.PAS_TOTAL)  : null);
-      r.input('EGR_MENS',  sql.Decimal(18, 2),  fin.EGR_MENS   != null ? Number(fin.EGR_MENS)   : null);
-      r.input('PATRIMONIO',sql.Decimal(18, 2),  fin.PATRIMONIO != null ? Number(fin.PATRIMONIO) : null);
-      r.input('OTR_ING',   sql.Decimal(18, 2),  fin.OTR_ING    != null ? Number(fin.OTR_ING)    : null);
+      r.input('COD_EMPR',   sql.SmallInt,      COD_EMPR);
+      r.input('COD_TERC',   sql.BigInt,          COD_TERC);
+      r.input('ACT_TOTAL',  sql.Decimal(18,2),  fin.ACT_TOTAL  != null ? Number(fin.ACT_TOTAL)  : null);
+      r.input('ING_MENS',   sql.Decimal(18,2),  fin.ING_MENS   != null ? Number(fin.ING_MENS)   : null);
+      r.input('PAS_TOTAL',  sql.Decimal(18,2),  fin.PAS_TOTAL  != null ? Number(fin.PAS_TOTAL)  : null);
+      r.input('EGR_MENS',   sql.Decimal(18,2),  fin.EGR_MENS   != null ? Number(fin.EGR_MENS)   : null);
+      r.input('PATRIMONIO', sql.Decimal(18,2),  fin.PATRIMONIO != null ? Number(fin.PATRIMONIO) : null);
+      r.input('OTR_ING',    sql.Decimal(18,2),  fin.OTR_ING    != null ? Number(fin.OTR_ING)    : null);
+      r.input('ACT_USUA',   sql.Char(8),         ACT_USUA);
+      r.input('ACT_HORA',   sql.DateTime,        ACT_HORA);
+      r.input('ACT_ESTA',   sql.Char(1),         ACT_ESTA);
       await r.query(`
         INSERT INTO GN_JURID_FIN
-          (NUM_IDEN,ACT_TOTAL,ING_MENS,PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING)
+          (COD_EMPR,COD_TERC,ACT_TOTAL,ING_MENS,PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING,
+           ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@ACT_TOTAL,@ING_MENS,@PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING)`);
+          (@COD_EMPR,@COD_TERC,@ACT_TOTAL,@ING_MENS,@PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING,
+           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 10. GN_TERCE_BANCO — Información bancaria ───────────────────────────────
+    // COD_BANCO y TIP_CUEN son int (no varchar) en la BD
     for (const b of (d.bancaria || [])) {
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',   sql.VarChar(20),   d.NUM_IDEN);
-      r.input('COD_BANCO',  sql.VarChar(10),   b.COD_BANCO   || null);
-      r.input('TIP_CUEN',   sql.VarChar(10),   b.TIP_CUEN    || null);
-      r.input('NUM_CUEN',   sql.VarChar(30),   b.NUM_CUEN    || null);
-      r.input('CUEN_EXTR',  sql.Char(1),        b.CUEN_EXTR   || 'N');
-      r.input('NOM_ENT_EXT',sql.VarChar(255),  b.NOM_ENT_EXT || null);
-      r.input('TIP_CUE_EXT',sql.VarChar(10),   b.TIP_CUE_EXT || null);
+      r.input('COD_EMPR',    sql.SmallInt,    COD_EMPR);
+      r.input('COD_TERC',    sql.BigInt,       COD_TERC);
+      r.input('COD_BANCO',   sql.Int,           intOrNull(b.COD_BANCO));
+      r.input('TIP_CUEN',    sql.Int,           intOrNull(b.TIP_CUEN));
+      r.input('NUM_CUEN',    sql.VarChar(30), b.NUM_CUEN    || null);
+      r.input('CUEN_EXTR',   sql.Char(1),      b.CUEN_EXTR   || 'N');
+      r.input('NOM_ENT_EXT', sql.VarChar(120),b.NOM_ENT_EXT || null);
+      r.input('TIP_CUE_EXT', sql.VarChar(40), b.TIP_CUE_EXT || null);
+      r.input('ACT_USUA',    sql.Char(8),      ACT_USUA);
+      r.input('ACT_HORA',    sql.DateTime,     ACT_HORA);
+      r.input('ACT_ESTA',    sql.Char(1),      ACT_ESTA);
       await r.query(`
         INSERT INTO GN_TERCE_BANCO
-          (NUM_IDEN,COD_BANCO,TIP_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT)
+          (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT,
+           ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@COD_BANCO,@TIP_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT)`);
+          (@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT,
+           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 11. GN_JURID_PEP — Exposición política ─────────────────────────────────
     {
       const pep = d.pep || {};
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',  sql.VarChar(20), d.NUM_IDEN);
-      r.input('MAN_RPUB',  sql.Char(1),      pep.MAN_RPUB || null);
-      r.input('CAR_PUBL',  sql.Char(1),      pep.CAR_PUBL || null);
+      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+      r.input('COD_TERC', sql.BigInt,   COD_TERC);
+      r.input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || null);
+      r.input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || null);
+      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
+      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
+      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
       await r.query(`
-        INSERT INTO GN_JURID_PEP (NUM_IDEN,MAN_RPUB,CAR_PUBL)
-        VALUES (@NUM_IDEN,@MAN_RPUB,@CAR_PUBL)`);
+        INSERT INTO GN_JURID_PEP (COD_EMPR,COD_TERC,MAN_RPUB,CAR_PUBL,ACT_USUA,ACT_HORA,ACT_ESTA)
+        VALUES (@COD_EMPR,@COD_TERC,@MAN_RPUB,@CAR_PUBL,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 12. GN_JURID_ACT — Actividades con activos virtuales ───────────────────
     {
       const act = d.actividades || {};
       const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',    sql.VarChar(20), d.NUM_IDEN);
-      r.input('ACT_VA_FIAT', sql.Char(1),      act.ACT_VA_FIAT  || 'N');
-      r.input('ACT_VA_VA',   sql.Char(1),      act.ACT_VA_VA    || 'N');
-      r.input('ACT_TRANS',   sql.Char(1),      act.ACT_TRANS    || 'N');
-      r.input('ACT_CUSTO',   sql.Char(1),      act.ACT_CUSTO    || 'N');
-      r.input('ACT_SERV_FIN',sql.Char(1),      act.ACT_SERV_FIN || 'N');
-      r.input('ACT_SERV_VAP',sql.Char(1),      act.ACT_SERV_VAP || 'N');
-      r.input('CERT_INFO',   sql.Char(1),      act.CERT_INFO    || 'N');
+      r.input('COD_EMPR',     sql.SmallInt, COD_EMPR);
+      r.input('COD_TERC',     sql.BigInt,   COD_TERC);
+      r.input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N');
+      r.input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N');
+      r.input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N');
+      r.input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N');
+      r.input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N');
+      r.input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N');
+      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
+      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
+      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
       await r.query(`
         INSERT INTO GN_JURID_ACT
-          (NUM_IDEN,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
+          (COD_EMPR,COD_TERC,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,
+           ACT_SERV_FIN,ACT_SERV_VAP,ACT_USUA,ACT_HORA,ACT_ESTA)
         VALUES
-          (@NUM_IDEN,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
+          (@COD_EMPR,@COD_TERC,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,
+           @ACT_SERV_FIN,@ACT_SERV_VAP,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
     }
 
     // ── 13. GN_JURID_BF — Beneficiarios finales ────────────────────────────────
-    for (const bf of (d.beneficiarios || [])) {
-      const dept = (!bf.COD_DEPT || bf.COD_DEPT === 'NA') ? null : bf.COD_DEPT;
-      const r = new sql.Request(transaction);
-      r.input('NUM_IDEN',  sql.VarChar(20),   d.NUM_IDEN);
-      r.input('TIP_BENE',  sql.Char(1),        bf.TIP_BENE  || 'P');
-      r.input('NOM_BENE',  sql.VarChar(100),   bf.NOM_BENE  || null);
-      r.input('APE_BENE',  sql.VarChar(100),   bf.APE_BENE  || null);
-      r.input('RAZ_BENE',  sql.VarChar(255),   bf.RAZ_BENE  || null);
-      r.input('TIP_DOCU',  sql.Int,             bf.TIP_DOCU  ? Number(bf.TIP_DOCU) : null);
-      r.input('NUM_DOCU',  sql.VarChar(20),    bf.NUM_DOCU  || null);
-      r.input('FEC_EXPE',  sql.Date,            bf.FEC_EXPE  ? new Date(bf.FEC_EXPE) : null);
-      r.input('COD_PAIS',  sql.VarChar(10),    bf.COD_PAIS  || null);
-      r.input('COD_DEPT',  sql.VarChar(10),    dept);
-      r.input('COD_MPIO',  sql.VarChar(10),    bf.COD_MPIO  || null);
-      r.input('DIR_BENE',  sql.VarChar(255),   bf.DIR_BENE  || null);
-      r.input('TEL_BENE',  sql.VarChar(30),    bf.TEL_BENE  || null);
-      r.input('MAIL_BENE', sql.VarChar(100),   bf.MAIL_BENE || null);
-      await r.query(`
-        INSERT INTO GN_JURID_BF
-          (NUM_IDEN,TIP_BENE,NOM_BENE,APE_BENE,RAZ_BENE,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-           COD_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE)
-        VALUES
-          (@NUM_IDEN,@TIP_BENE,@NOM_BENE,@APE_BENE,@RAZ_BENE,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-           @COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE)`);
-    }
-
-    // ── 14. GN_JURID_FIRMA — Firma del Representante Legal ─────────────────────
     {
-      const fi = d.firma || {};
-      if (fi.NOM_FIRM || fi.APE_FIRM || fi.NUM_DOCU || fi.FEC_FIRMA) {
+      const bfs = Array.isArray(d.beneficiarios) ? d.beneficiarios : [];
+      for (const bf of bfs) {
+        if (!bf.NOM_BENE && !bf.RAZ_BENE) continue; // omitir filas vacías
         const r = new sql.Request(transaction);
-        r.input('NUM_IDEN',  sql.VarChar(20),  d.NUM_IDEN);
-        r.input('NOM_FIRM',  sql.VarChar(100), fi.NOM_FIRM  || null);
-        r.input('APE_FIRM',  sql.VarChar(100), fi.APE_FIRM  || null);
-        r.input('TIP_DOCU',  sql.Int,           fi.TIP_DOCU  ? Number(fi.TIP_DOCU) : null);
-        r.input('NUM_DOCU',  sql.VarChar(20),  fi.NUM_DOCU  || null);
-        r.input('FEC_FIRMA', sql.Date,          fi.FEC_FIRMA ? new Date(fi.FEC_FIRMA) : null);
+        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
+        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
+        r.input('TIP_BENE',  sql.Char(1),      bf.TIP_BENE   || 'P');
+        r.input('NOM_BENE',  sql.VarChar(100), strOrNull(bf.NOM_BENE));
+        r.input('APE_BENE',  sql.VarChar(100), strOrNull(bf.APE_BENE));
+        r.input('RAZ_BENE',  sql.VarChar(200), strOrNull(bf.RAZ_BENE));
+        r.input('TIP_DOCU',  sql.Int,           intOrNull(bf.TIP_DOCU));
+        r.input('NUM_DOCU',  sql.VarChar(20),  strOrNull(bf.NUM_DOCU));
+        r.input('FEC_EXPE',  sql.DateTime,     bf.FEC_EXPE ? new Date(bf.FEC_EXPE) : null);
+        r.input('COD_PAIS',  sql.Int,           intOrNull(bf.COD_PAIS));
+        r.input('COD_DEPT',  sql.Int,           intOrNull(bf.COD_DEPT));
+        r.input('COD_MPIO',  sql.Int,           intOrNull(bf.COD_MPIO));
+        r.input('DIR_BENE',  sql.VarChar(255), strOrNull(bf.DIR_BENE));
+        r.input('TEL_BENE',  sql.VarChar(40),  strOrNull(bf.TEL_BENE));
+        r.input('MAIL_BENE', sql.VarChar(150), strOrNull(bf.MAIL_BENE));
+        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
+        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
+        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
         await r.query(`
-          INSERT INTO GN_JURID_FIRMA
-            (NUM_IDEN,NOM_FIRM,APE_FIRM,TIP_DOCU,NUM_DOCU,FEC_FIRMA)
+          INSERT INTO GN_JURID_BF
+            (COD_EMPR,COD_TERC,TIP_BENE,NOM_BENE,APE_BENE,RAZ_BENE,TIP_DOCU,NUM_DOCU,
+             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE,
+             ACT_USUA,ACT_HORA,ACT_ESTA)
           VALUES
-            (@NUM_IDEN,@NOM_FIRM,@APE_FIRM,@TIP_DOCU,@NUM_DOCU,@FEC_FIRMA)`);
+            (@COD_EMPR,@COD_TERC,@TIP_BENE,@NOM_BENE,@APE_BENE,@RAZ_BENE,@TIP_DOCU,@NUM_DOCU,
+             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE,
+             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
       }
     }
 
+    // ── 14. GN_JURID_FIRMA — Firma del representante legal ─────────────────────
+    {
+      const fi = d.firma || {};
+      if (fi.NOM_FIRM && fi.APE_FIRM) {
+        const r = new sql.Request(transaction);
+        r.input('COD_EMPR',  sql.SmallInt,   COD_EMPR);
+        r.input('COD_TERC',  sql.BigInt,      COD_TERC);
+        r.input('NOM_FIRM',  sql.VarChar(100), strOrNull(fi.NOM_FIRM));
+        r.input('APE_FIRM',  sql.VarChar(100), strOrNull(fi.APE_FIRM));
+        r.input('TIP_DOCU',  sql.Int,          intOrNull(fi.TIP_DOCU));
+        r.input('NUM_DOCU',  sql.VarChar(20),  strOrNull(fi.NUM_DOCU));
+        r.input('FEC_FIRMA', sql.DateTime,     fi.FEC_FIRMA ? new Date(fi.FEC_FIRMA) : null);
+        r.input('ACT_USUA',  sql.Char(8),     ACT_USUA);
+        r.input('ACT_HORA',  sql.DateTime,    ACT_HORA);
+        r.input('ACT_ESTA',  sql.Char(1),     ACT_ESTA);
+        await r.query(`
+          INSERT INTO GN_JURID_FIRMA
+            (COD_EMPR,COD_TERC,NOM_FIRM,APE_FIRM,TIP_DOCU,NUM_DOCU,FEC_FIRMA,
+             ACT_USUA,ACT_HORA,ACT_ESTA)
+          VALUES
+            (@COD_EMPR,@COD_TERC,@NOM_FIRM,@APE_FIRM,@TIP_DOCU,@NUM_DOCU,@FEC_FIRMA,
+             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+      }
+    }
+
+    // ── Confirmar transacción ──────────────────────────────────────────────────
     await transaction.commit();
-    res.json({ success: true, NUM_IDEN: d.NUM_IDEN });
+
+    console.log(`✅ guardar-completo OK — COD_TERC=${COD_TERC}, NUM_IDEN=${d.NUM_IDEN}`);
+    res.json({
+      success:  true,
+      NUM_IDEN: d.NUM_IDEN,
+      COD_TERC: COD_TERC,
+    });
 
   } catch (err) {
-    if (transaction) await transaction.rollback().catch(() => {});
+    try { await transaction.rollback(); } catch (_) {}
     console.error('POST /api/guardar-completo:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Error interno del servidor' });
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  DOCUMENTOS — Subida de archivos adjuntos (GN_TERCE_DOC + ARCH_FIRMA)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * POST /api/documentos/:numIden
- * Recibe multipart/form-data con los archivos adjuntos del formulario.
- * Los archivos se guardan en uploads/<NUM_IDEN>/<CAMPO>.<ext>.
- * Se registran los nombres en GN_TERCE_DOC y, si viene ARCH_FIRMA,
- * también se actualiza la ruta en GN_JURID_FIRMA.
- *
- * Campos esperados (todos opcionales):
- *   RUT, CERT_BANC, CERT_EXIS, DOC_ID_RL, EST_FIN, CERT_ACCI, CART_ACEP,
- *   ARCH_FIRMA
- */
-const DOC_CAMPOS = ['RUT','CERT_BANC','CERT_EXIS','DOC_ID_RL','EST_FIN','CERT_ACCI','CART_ACEP','ARCH_FIRMA'];
-
-app.post('/api/documentos/:numIden',
-  upload.fields(DOC_CAMPOS.map(name => ({ name, maxCount: 1 }))),
-  async (req, res) => {
-    const numIden = req.params.numIden;
-    if (!numIden) return res.status(400).json({ error: 'Se requiere numIden en la URL' });
-
-    const files = req.files || {};
-    if (Object.keys(files).length === 0) {
-      return res.json({ success: true, insertados: 0, mensaje: 'Sin archivos enviados' });
-    }
-
-    let transaction;
-    try {
-      const p = await getPool();
-      transaction = new sql.Transaction(p);
-      await transaction.begin();
-
-      // ── GN_TERCE_DOC: campos de documento (excluye ARCH_FIRMA) ──────────────
-      const docCampos = DOC_CAMPOS.filter(c => c !== 'ARCH_FIRMA' && files[c]);
-      if (docCampos.length > 0) {
-        const cols   = docCampos.map(c => c).join(',');
-        const params = docCampos.map(c => `@${c}`).join(',');
-        const r = new sql.Request(transaction);
-        r.input('NUM_IDEN', sql.VarChar(20), numIden);
-        docCampos.forEach(c => {
-          r.input(c, sql.VarChar(500), files[c][0].path);
-        });
-        await r.query(`
-          INSERT INTO GN_TERCE_DOC (NUM_IDEN,${cols}) VALUES (@NUM_IDEN,${params})`);
-      }
-
-      // ── GN_JURID_FIRMA: ruta del archivo de firma (ARCH_FIRMA) ───────────────
-      if (files['ARCH_FIRMA']) {
-        const r = new sql.Request(transaction);
-        r.input('NUM_IDEN',   sql.VarChar(20),  numIden);
-        r.input('ARCH_FIRMA', sql.VarChar(500), files['ARCH_FIRMA'][0].path);
-        await r.query(`
-          UPDATE GN_JURID_FIRMA SET ARCH_FIRMA = @ARCH_FIRMA WHERE NUM_IDEN = @NUM_IDEN`);
-      }
-
-      await transaction.commit();
-      res.json({ success: true, insertados: Object.keys(files).length });
-
-    } catch (err) {
-      if (transaction) await transaction.rollback().catch(() => {});
-      console.error('POST /api/documentos:', err);
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
-// ─── Arranque ─────────────────────────────────────────────────────────────────
+/* ── Puerto ──────────────────────────────────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`🚀  Servidor SARLAFT escuchando en http://localhost:${PORT}`);
-  // Pre-calentar el pool al iniciar
-  getPool().catch(err => console.error('❌  Error de conexión inicial:', err.message));
+  console.log(`🚀 Servidor SARLAFT escuchando en http://localhost:${PORT}`);
 });
