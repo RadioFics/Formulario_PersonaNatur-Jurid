@@ -42,7 +42,7 @@
     .landing-card {
       flex: 1 1 260px;
       max-width: 300px;
-      border: 1px solid #c8e6c9;
+      border: 1px solid #C2E4EF;
       border-radius: 10px;
       padding: 32px 24px;
       background: #fff;
@@ -93,9 +93,9 @@
       width: 100%;
     }
     .btn-crear   { background: var(--color-accent); color: #fff; }
-    .btn-crear:hover   { background: #1b5e20; }
-    .btn-actualizar { background: #e8f5e9; color: var(--color-primary); border: 1px solid #a5d6a7; }
-    .btn-actualizar:hover { background: #c8e6c9; }
+    .btn-crear:hover   { background: var(--color-accent-dark); }
+    .btn-actualizar { background: #E5F5FA; color: var(--color-primary); border: 1px solid #89CDD9; }
+    .btn-actualizar:hover { background: #C2E4EF; }
 
     /* ── Modal Actualizar ───────────────────────────────────────────────────── */
     .modal-overlay {
@@ -153,18 +153,18 @@
       font-weight: 600;
       cursor: pointer;
     }
-    .search-row button:hover { background: #1b5e20; }
+    .search-row button:hover { background: var(--color-accent-dark); }
 
     #actualizar-resultado {
       min-height: 40px;
       font-size: 0.87rem;
     }
     .result-found {
-      border: 1px solid #a5d6a7;
-      background: #e8f5e9;
+      border: 1px solid #89CDD9;
+      background: #E5F5FA;
       border-radius: 6px;
       padding: 12px 14px;
-      color: #1b5e20;
+      color: #0C6B8C;
     }
     .result-found strong { display: block; font-size: 0.95rem; margin-bottom: 4px; }
     .result-not-found {
@@ -196,8 +196,8 @@
     .btn-sm-secondary { background: #e0e0e0; color: #424242; }
     .btn-sm-secondary:hover { background: #bdbdbd; }
     .btn-sm-primary { background: var(--color-accent); color: #fff; }
-    .btn-sm-primary:hover { background: #1b5e20; }
-    .btn-sm-primary:disabled { background: #a5d6a7; cursor: default; }
+    .btn-sm-primary:hover { background: var(--color-accent-dark); }
+    .btn-sm-primary:disabled { background: #89CDD9; cursor: default; }
 
     .landing-footer {
       font-size: 0.78rem;
@@ -319,7 +319,7 @@
           <div class="result-found">
             <strong>${data.NOM_COMP || '—'}</strong>
             Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo: ${data.TIP_TPDOC || '—'}<br>
-            <span style="font-size:.8rem;color:#388e3c">Registro encontrado ✔</span>
+            <span style="font-size:.8rem;color:#20A7C9">Registro encontrado ✔</span>
           </div>`;
         btnIr.disabled = false;
       } else {

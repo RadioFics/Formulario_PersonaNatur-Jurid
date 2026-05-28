@@ -135,6 +135,11 @@ async function inicializar() {
       preCargarCatalogo('/api/catalogo/bancos'),
       preCargarCatalogo('/api/catalogo/tipos-cuenta'),
 
+      // ── Persona Natural: catálogos exclusivos ────────────────────────────
+      // Nacionalidad (cod_nacio_n) y datalist CIIU para Natural.
+      // inicializarNaturBasica() está en seccion-natur-basica.js.
+      inicializarNaturBasica(),
+
     ]);
   } catch (err) {
     console.error('Error en inicializar():', err);

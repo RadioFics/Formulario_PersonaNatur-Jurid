@@ -48,9 +48,11 @@ const upload = multer({
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// TIP_TERC para personas jurídicas — configurable en .env si la BD lo requiere.
-// Visitar GET /api/debug/tip-terc para ver qué valores acepta la constraint GNC03TERCE.
-const TIP_TERC_JURID = process.env.TIP_TERC_JURID || 'J';
+// Valores permitidos por CHECK constraint GNC03TERCE en GN_TERCE.TIP_TERC:
+//   'A', 'E', 'T', 'C', 'N', 'U'  — 'J' NO está permitido.
+// 'E' = Empresa/Entidad Jurídica | 'N' = Persona Natural
+const TIP_TERC_JURID = 'E';
+const TIP_TERC_NATUR = 'N';
 
 // ─── Configuración SQL Server ────────────────────────────────────────────────
 // Ajusta estos valores según tu entorno Windows / IIS
@@ -352,7 +354,7 @@ app.post('/api/juridica', async (req, res) => {
     const req1 = new sql.Request(transaction);
 
     // ── GN_TERCE ──────────────────────────────────────────────────────────────
-    req1.input('TIP_TERC',    sql.Char(1),      'J');
+    req1.input('TIP_TERC',    sql.Char(1),      TIP_TERC_JURID);
     req1.input('COD_TPDOC',   sql.Int,           d.COD_TPDOC   || 8);
     req1.input('NUM_IDEN',    sql.VarChar(20),   d.NUM_IDEN);
     req1.input('DIG_VERI',    sql.Char(1),       d.DIG_VERI    || null);
@@ -879,10 +881,10 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
         t.COD_TERC,
         t.NUM_IDEN,
         t.NOM_COMP,
-        td.NOM_TDOC AS TIP_TPDOC
+        td.NOM_TPDOC AS TIP_TPDOC
       FROM GN_TERCE t
-      LEFT JOIN MAE_TIP_DOC td
-        ON td.COD_TDOC = t.COD_TPDOC
+      LEFT JOIN MAE_TPDOC td
+        ON td.COD_TPDOC = t.COD_TPDOC
       WHERE t.COD_EMPR = @COD_EMPR
         AND t.NUM_IDEN  = @NUM_IDEN
     `);
@@ -902,13 +904,13 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
 //  EXPORTACIÓN — Generar Excel con los datos de un tercero
 // ═══════════════════════════════════════════════════════════════════════════════
 
+
 /**
  * GET /api/exportar-excel/:codTerc
  *
- * Genera y descarga un archivo Excel con todos los datos registrados
- * del tercero identificado por COD_TERC.
- *
- * Si no se tiene COD_TERC, también acepta ?numIden=XXX para buscarlo.
+ * Genera un Excel organizado en hojas temáticas con solo los campos
+ * capturados en el formulario, etiquetas legibles en español y códigos
+ * resueltos a nombres mediante JOINs a los catálogos.
  */
 app.get('/api/exportar-excel/:codTerc', async (req, res) => {
   const codTerc = parseInt(req.params.codTerc, 10);
@@ -917,628 +919,850 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
   try {
     const pool = await sql.connect(dbConfig);
 
-    // ── Consultar todas las tablas relevantes ────────────────────────────────
-    const q = async (query, params = {}) => {
-      const r = pool.request();
-      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
-      r.input('COD_TERC', sql.BigInt,   codTerc);
-      Object.entries(params).forEach(([k, v]) => r.input(k, v[0], v[1]));
-      return (await r.query(query)).recordset;
+    const q = async (query) => {
+      const rq = pool.request();
+      rq.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+      rq.input('COD_TERC', sql.BigInt,   codTerc);
+      return (await rq.query(query)).recordset;
     };
 
-    const [terce, jurid, rl, paises, cump, jd, rf, ac, fin, banco, pep, bf] = await Promise.all([
-      q('SELECT * FROM GN_TERCE       WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID       WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_RL    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_PAIS  WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_CUMP  WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_JD    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_RF    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_AC    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_FIN   WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_TERCE_BANCO WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_PEP   WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
-      q('SELECT * FROM GN_JURID_BF    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC'),
+    const [empresa, financiera, bancaria, pep, rl, jd, rf, ac, bf, cump, paises, documentos] = await Promise.all([
+
+      // ── Datos de la empresa (GN_TERCE + GN_JURID) ────────────────────────
+      q(`SELECT
+          td.NOM_TPDOC                                  AS [Tipo de documento],
+          t.NUM_IDEN                                    AS [Número de identificación / NIT],
+          t.DIG_VERI                                    AS [Dígito de verificación],
+          LTRIM(RTRIM(ISNULL(t.NOM_COMP,'')))           AS [Razón social],
+          LTRIM(RTRIM(ISNULL(t.DIR_TERC,'')))           AS [Dirección],
+          LTRIM(RTRIM(ISNULL(t.TEL_TERC,'')))           AS [Teléfono],
+          LTRIM(RTRIM(ISNULL(t.TEL_TERC2,'')))          AS [Teléfono 2],
+          t.DIR_MAIL                                    AS [Email corporativo],
+          ISNULL(v.NOM_VINC, j.TIP_VINC)               AS [Tipo de vinculación],
+          j.MAIL_SARL                                   AS [Email SARLAFT],
+          j.URL_WEB                                     AS [Sitio web],
+          j.COD_CIIU + CASE WHEN ci.NOM_CIIU IS NOT NULL THEN ' — ' + ci.NOM_CIIU ELSE '' END
+                                                        AS [Actividad CIIU],
+          ISNULL(ts.NOM_SOCIE, j.TIP_SOCIE)            AS [Tipo de sociedad],
+          ISNULL(po.NOM_PAIS, '')                       AS [País de origen],
+          CASE j.UBIC_SOC WHEN 'N' THEN 'Nacional' WHEN 'E' THEN 'Extranjera' ELSE j.UBIC_SOC END
+                                                        AS [Ubicación de la sociedad],
+          ISNULL(ps.NOM_PAIS, '')                       AS [País de constitución],
+          j.TIP_EMPR                                    AS [Tipo de empresa],
+          CASE j.GRUP_EMPR WHEN 'S' THEN 'Sí' ELSE 'No' END AS [Pertenece a grupo empresarial],
+          ISNULL(pe.NOM_PAIS,'')                        AS [País de expedición],
+          ISNULL(dp.NOM_DEPT,'')                        AS [Departamento de expedición],
+          ISNULL(mn.NOM_MUNI,'')                        AS [Ciudad de expedición]
+        FROM GN_TERCE t
+          JOIN GN_JURID j   ON j.COD_EMPR = t.COD_EMPR AND j.COD_TERC = t.COD_TERC
+          LEFT JOIN MAE_TPDOC   td ON td.COD_TPDOC = t.COD_TPDOC
+          LEFT JOIN MAE_VINC     v ON CAST(v.COD_VINC AS VARCHAR) = j.TIP_VINC
+          LEFT JOIN MAE_CIIU    ci ON ci.COD_CIIU = j.COD_CIIU
+          LEFT JOIN MAE_TIP_SOCIE ts ON CAST(ts.COD_SOCIE AS VARCHAR) = j.TIP_SOCIE
+          LEFT JOIN MAE_PAIS    po ON po.COD_PAIS = j.COD_PAIS_ORI
+          LEFT JOIN MAE_PAIS    ps ON ps.COD_PAIS = j.COD_PAIS_SOC
+          LEFT JOIN MAE_PAIS    pe ON pe.COD_PAIS = j.COD_PAIS_EXP
+          LEFT JOIN MAE_DEPT    dp ON dp.COD_DEPT = j.COD_DEPT_EXP
+          LEFT JOIN MAE_MUNI    mn ON mn.COD_MUNI = j.COD_MPIO_EXP
+        WHERE t.COD_EMPR = @COD_EMPR AND t.COD_TERC = @COD_TERC`),
+
+      // ── Financiera ────────────────────────────────────────────────────────
+      q(`SELECT
+          ACT_TOTAL  AS [Activos totales ($)],
+          ING_MENS   AS [Ingresos mensuales ($)],
+          PAS_TOTAL  AS [Pasivos totales ($)],
+          EGR_MENS   AS [Egresos mensuales ($)],
+          PATRIMONIO AS [Patrimonio ($)],
+          OTR_ING    AS [Otros ingresos ($)]
+        FROM GN_JURID_FIN
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Cuentas bancarias ─────────────────────────────────────────────────
+      q(`SELECT
+          mb.NOM_BANCO                                  AS [Entidad bancaria],
+          ISNULL(tc.NOM_TPCTA,'')                       AS [Tipo de cuenta],
+          b.NUM_CUEN                                    AS [Número de cuenta],
+          CASE b.CUEN_EXTR WHEN 'S' THEN 'Sí' ELSE 'No' END AS [Cuenta extranjera],
+          ISNULL(b.NOM_ENT_EXT,'')                      AS [Nombre entidad extranjera],
+          ISNULL(b.TIP_CUE_EXT,'')                      AS [Tipo cuenta extranjera]
+        FROM GN_TERCE_BANCO b
+          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
+          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
+        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC`),
+
+      // ── PEP ───────────────────────────────────────────────────────────────
+      q(`SELECT
+          CASE MAN_RPUB WHEN 'S' THEN 'Sí' ELSE 'No' END AS [¿Maneja recursos públicos?],
+          CASE CAR_PUBL WHEN 'S' THEN 'Sí' ELSE 'No' END AS [¿Ejerció cargo público?]
+        FROM GN_JURID_PEP
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Representantes legales ────────────────────────────────────────────
+      q(`SELECT
+          CASE TIP_REPR WHEN 'P' THEN 'Principal' WHEN 'S' THEN 'Suplente' ELSE TIP_REPR END
+                                                        AS [Rol],
+          NOM_REPR                                      AS [Primer nombre],
+          APE_REPR                                      AS [Primer apellido],
+          td.NOM_TPDOC                                  AS [Tipo documento],
+          NUM_DOCU                                      AS [Número documento],
+          CONVERT(varchar, FEC_EXPE, 103)               AS [Fecha expedición],
+          ISNULL(p.NOM_PAIS,'')                         AS [País expedición],
+          ISNULL(d.NOM_DEPT,'')                         AS [Departamento expedición],
+          ISNULL(m.NOM_MUNI,'')                         AS [Ciudad expedición],
+          DIR_REPR                                      AS [Dirección],
+          CEL_REPR                                      AS [Celular],
+          TEL_REPR                                      AS [Teléfono],
+          MAIL_REPR                                     AS [Email]
+        FROM GN_JURID_RL r
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = r.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = r.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = r.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = r.COD_MPIO
+        WHERE r.COD_EMPR = @COD_EMPR AND r.COD_TERC = @COD_TERC`),
+
+      // ── Junta directiva ───────────────────────────────────────────────────
+      q(`SELECT
+          CASE TIP_REPR WHEN 'P' THEN 'Principal' WHEN 'S' THEN 'Suplente' ELSE TIP_REPR END
+                                                        AS [Rol],
+          TIP_MIEM                                      AS [Tipo miembro],
+          NOM_MIEM                                      AS [Nombre],
+          APE_MIEM                                      AS [Apellido],
+          RAZ_MIEM                                      AS [Razón social],
+          td.NOM_TPDOC                                  AS [Tipo documento],
+          NUM_DOCU                                      AS [Número documento],
+          CONVERT(varchar, FEC_EXPE, 103)               AS [Fecha expedición],
+          ISNULL(p.NOM_PAIS,'')                         AS [País],
+          DIR_MIEM                                      AS [Dirección],
+          TEL_MIEM                                      AS [Teléfono],
+          MAIL_MIEM                                     AS [Email]
+        FROM GN_JURID_JD jd
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = jd.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = jd.COD_PAIS
+        WHERE jd.COD_EMPR = @COD_EMPR AND jd.COD_TERC = @COD_TERC`),
+
+      // ── Revisores fiscales ────────────────────────────────────────────────
+      q(`SELECT
+          CASE TIP_REPR WHEN 'P' THEN 'Principal' WHEN 'S' THEN 'Suplente' ELSE TIP_REPR END
+                                                        AS [Rol],
+          CASE TIE_REVIS WHEN 'S' THEN 'Sí' ELSE 'No' END AS [Tiene revisor fiscal],
+          NOM_REVI                                      AS [Nombre],
+          APE_REVI                                      AS [Apellido],
+          RAZ_REVI                                      AS [Razón social],
+          td.NOM_TPDOC                                  AS [Tipo documento],
+          NUM_DOCU                                      AS [Número documento],
+          CONVERT(varchar, FEC_EXPE, 103)               AS [Fecha expedición],
+          DIR_REVI                                      AS [Dirección],
+          CEL_REVI                                      AS [Celular],
+          TEL_REVI                                      AS [Teléfono],
+          MAIL_REVI                                     AS [Email]
+        FROM GN_JURID_RF rf
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = rf.TIP_DOCU
+        WHERE rf.COD_EMPR = @COD_EMPR AND rf.COD_TERC = @COD_TERC`),
+
+      // ── Accionistas ───────────────────────────────────────────────────────
+      q(`SELECT
+          NOM_ACCI                                      AS [Nombre],
+          APE_ACCI                                      AS [Apellido],
+          RAZ_ACCI                                      AS [Razón social],
+          td.NOM_TPDOC                                  AS [Tipo documento],
+          NUM_DOCU                                      AS [Número documento],
+          CONVERT(varchar, FEC_EXPE, 103)               AS [Fecha expedición],
+          ISNULL(p.NOM_PAIS,'')                         AS [País],
+          ISNULL(d.NOM_DEPT,'')                         AS [Departamento],
+          ISNULL(m.NOM_MUNI,'')                         AS [Ciudad],
+          DIR_ACCI                                      AS [Dirección],
+          CEL_ACCI                                      AS [Celular],
+          TEL_ACCI                                      AS [Teléfono],
+          MAIL_ACCI                                     AS [Email],
+          PCT_PART                                      AS [Porcentaje de participación (%)]
+        FROM GN_JURID_AC ac
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = ac.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = ac.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = ac.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = ac.COD_MPIO
+        WHERE ac.COD_EMPR = @COD_EMPR AND ac.COD_TERC = @COD_TERC`),
+
+      // ── Beneficiarios finales ─────────────────────────────────────────────
+      q(`SELECT
+          CASE TIP_BENE WHEN 'N' THEN 'Natural' WHEN 'J' THEN 'Jurídica' ELSE TIP_BENE END
+                                                        AS [Tipo],
+          NOM_BENE                                      AS [Nombre],
+          APE_BENE                                      AS [Apellido],
+          RAZ_BENE                                      AS [Razón social],
+          td.NOM_TPDOC                                  AS [Tipo documento],
+          NUM_DOCU                                      AS [Número documento],
+          CONVERT(varchar, FEC_EXPE, 103)               AS [Fecha expedición],
+          ISNULL(p.NOM_PAIS,'')                         AS [País],
+          ISNULL(d.NOM_DEPT,'')                         AS [Departamento],
+          ISNULL(m.NOM_MUNI,'')                         AS [Ciudad],
+          DIR_BENE                                      AS [Dirección],
+          TEL_BENE                                      AS [Teléfono],
+          MAIL_BENE                                     AS [Email]
+        FROM GN_JURID_BF bf
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = bf.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = bf.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = bf.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = bf.COD_MPIO
+        WHERE bf.COD_EMPR = @COD_EMPR AND bf.COD_TERC = @COD_TERC`),
+
+      // ── Cumplimiento LAFT ─────────────────────────────────────────────────
+      q(`SELECT
+          REL_GRUPO                                     AS [Pertenencia a grupo empresarial],
+          NORM_LAFT                                     AS [Normativa LAFT aplicable],
+          SIS_PREVE                                     AS [Sistema de prevención],
+          DESC_NORM                                     AS [Descripción normativa],
+          CASE TIE_JUNTA WHEN 'S' THEN 'Sí' ELSE 'No' END AS [Tiene junta directiva],
+          TIP_SIST                                      AS [Tipo de sistema],
+          CASE TIP_REPR WHEN 'P' THEN 'Principal' WHEN 'S' THEN 'Suplente' ELSE '' END
+                                                        AS [Tipo representante oficial],
+          NOM_RESP                                      AS [Nombre responsable],
+          APE_RESP                                      AS [Apellido responsable],
+          td.NOM_TPDOC                                  AS [Tipo documento responsable],
+          NUM_DOCU                                      AS [Número documento],
+          ISNULL(p.NOM_PAIS,'')                         AS [País responsable],
+          DIR_RESP                                      AS [Dirección responsable],
+          TEL_RESP                                      AS [Teléfono responsable],
+          MAIL_RESP                                     AS [Email responsable]
+        FROM GN_JURID_CUMP c
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = c.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = c.COD_PAIS
+        WHERE c.COD_EMPR = @COD_EMPR AND c.COD_TERC = @COD_TERC`),
+
+      // ── Países de operación ───────────────────────────────────────────────
+      q(`SELECT
+          ISNULL(p.NOM_PAIS,'')                         AS [País]
+        FROM GN_JURID_PAIS gp
+          LEFT JOIN MAE_PAIS p ON p.COD_PAIS = gp.COD_PAIS
+        WHERE gp.COD_EMPR = @COD_EMPR AND gp.COD_TERC = @COD_TERC`),
+
+      // ── Documentos ───────────────────────────────────────────────────────
+      q(`SELECT
+          d.TIP_DOC                                     AS [Tipo de documento],
+          ISNULL(d.NOM_DOC,'')                          AS [Nombre del documento],
+          ISNULL(d.NOM_ARCH,'')                         AS [Nombre del archivo],
+          CONVERT(varchar, d.FEC_CARG, 103)             AS [Fecha de carga],
+          '/api/documentos/' + CAST(t.NUM_IDEN AS VARCHAR) + '/' + d.TIP_DOC
+                                                        AS [URL de descarga]
+        FROM GN_TERCE_DOC d
+          JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
+        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC`),
     ]);
 
     // ── Construir libro Excel ─────────────────────────────────────────────────
-    const wb = new ExcelJS.Workbook();
+    const wb    = new ExcelJS.Workbook();
     wb.creator  = 'SARLAFT Sistema';
     wb.created  = new Date();
 
-    const PRIMARY   = '1B5E20';
-    const HEADER_BG = 'E8F5E9';
-    const ACCENT    = '2E7D32';
+    const PRIMARY      = '0C6B8C';
+    const HEADER_BG    = 'E5F5FA';
+    const ACCENT       = '20A7C9';
+    const CURRENCY_FMT = '#,##0.00';
 
-    /**
-     * Agrega una hoja con datos de una tabla.
-     * @param {string}   name   Nombre de la hoja
-     * @param {Array}    rows   Registros de la BD
-     */
-    function addSheet(name, rows) {
+    function addSheetJ(name, rows, currencyColumns = []) {
       const ws = wb.addWorksheet(name);
-
       if (!rows || rows.length === 0) {
         ws.addRow(['Sin datos registrados']);
         return;
       }
-
       const cols = Object.keys(rows[0]);
 
-      // Fila de título
-      ws.mergeCells(1, 1, 1, cols.length);
-      const titleCell = ws.getCell(1, 1);
-      titleCell.value = name;
-      titleCell.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
-      titleCell.alignment = { horizontal: 'center' };
+      if (rows.length === 1) {
+        ws.getColumn(1).width = 38;
+        ws.getColumn(2).width = 42;
+        ws.mergeCells('A1:B1');
+        const tc = ws.getCell('A1');
+        tc.value = name;
+        tc.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+        tc.alignment = { horizontal: 'center' };
+        tc.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
 
-      // Cabecera
-      const headerRow = ws.addRow(cols);
-      headerRow.eachCell(cell => {
-        cell.font    = { bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
-        cell.border  = { bottom: { style: 'thin', color: { argb: 'FF' + PRIMARY } } };
+        const hRow = ws.addRow(['Campo', 'Valor']);
+        hRow.eachCell(cell => {
+          cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+          cell.alignment = { horizontal: 'center' };
+        });
+
+        cols.forEach((col, i) => {
+          const val = rows[0][col];
+          const row = ws.addRow([col, val ?? '']);
+          if (i % 2 === 0) {
+            row.eachCell(cell => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF6FA' } };
+            });
+          }
+          if (currencyColumns.includes(col) && typeof val === 'number') {
+            row.getCell(2).numFmt = CURRENCY_FMT;
+          }
+        });
+
+      } else {
+        ws.mergeCells(1, 1, 1, cols.length);
+        const tc = ws.getCell(1, 1);
+        tc.value = name;
+        tc.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+        tc.alignment = { horizontal: 'center' };
+
+        const hRow = ws.addRow(cols);
+        hRow.eachCell(cell => {
+          cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+          cell.border = { bottom: { style: 'thin', color: { argb: 'FF' + PRIMARY } } };
+          cell.alignment = { horizontal: 'center' };
+        });
+
+        rows.forEach((row, ri) => {
+          const dRow = ws.addRow(cols.map(c => row[c] ?? ''));
+          if (ri % 2 === 0) {
+            dRow.eachCell(cell => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
+            });
+          }
+          currencyColumns.forEach(cc => {
+            const ci = cols.indexOf(cc);
+            if (ci >= 0 && typeof row[cc] === 'number') {
+              dRow.getCell(ci + 1).numFmt = CURRENCY_FMT;
+            }
+          });
+        });
+
+        cols.forEach((col, colIdx) => {
+          const maxLen = Math.max(col.length, ...rows.map(rw => String(rw[col] ?? '').length));
+          ws.getColumn(colIdx + 1).width = Math.min(Math.max(maxLen + 2, 14), 45);
+        });
+      }
+    }
+
+    const CURRENCY_COLS = ['Activos totales ($)','Ingresos mensuales ($)','Pasivos totales ($)',
+                           'Egresos mensuales ($)','Patrimonio ($)','Otros ingresos ($)'];
+
+    addSheetJ('Datos de la Empresa',        empresa);
+    addSheetJ('Información Financiera',     financiera, CURRENCY_COLS);
+    addSheetJ('Cuentas Bancarias',          bancaria);
+    addSheetJ('PEP',                        pep);
+    addSheetJ('Representantes Legales',     rl);
+    addSheetJ('Junta Directiva',            jd);
+    addSheetJ('Revisores Fiscales',         rf);
+    addSheetJ('Accionistas',                ac);
+    addSheetJ('Beneficiarios Finales',      bf);
+    addSheetJ('Cumplimiento LAFT',          cump);
+    addSheetJ('Países de Operación',        paises);
+
+    // ── Hoja documentos con hipervínculo ─────────────────────────────────────
+    if (documentos.length > 0) {
+      const wsDoc  = wb.addWorksheet('Documentos Adjuntos');
+      const dCols  = Object.keys(documentos[0]).filter(c => c !== 'URL de descarga');
+      const allCols = [...dCols, 'Acceder al archivo'];
+
+      wsDoc.mergeCells(1, 1, 1, allCols.length);
+      const tCell = wsDoc.getCell(1, 1);
+      tCell.value = 'Documentos Adjuntos';
+      tCell.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+      tCell.alignment = { horizontal: 'center' };
+
+      const hRow = wsDoc.addRow(allCols);
+      hRow.eachCell(cell => {
+        cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
         cell.alignment = { horizontal: 'center' };
       });
 
-      // Datos
-      rows.forEach((row, i) => {
-        const dataRow = ws.addRow(cols.map(c => row[c] instanceof Date
-          ? row[c].toLocaleDateString('es-CO')
-          : (row[c] ?? '')));
-        if (i % 2 === 0) {
-          dataRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F8E9' } };
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      documentos.forEach((doc, ri) => {
+        const values = dCols.map(c => doc[c] ?? '');
+        values.push(doc['Nombre del archivo'] || '');
+        const dRow = wsDoc.addRow(values);
+        if (ri % 2 === 0) {
+          dRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
           });
+        }
+        const urlRel = doc['URL de descarga'] || '';
+        if (urlRel && doc['Nombre del archivo']) {
+          const linkCell = dRow.getCell(allCols.length);
+          linkCell.value = {
+            text:      doc['Nombre del archivo'],
+            hyperlink: baseUrl + urlRel,
+          };
+          linkCell.font = { color: { argb: 'FF0563C1' }, underline: true };
         }
       });
 
-      // Auto-ancho aproximado
-      cols.forEach((col, idx) => {
-        const maxLen = Math.max(col.length,
-          ...rows.map(r => String(r[col] ?? '').length));
-        ws.getColumn(idx + 1).width = Math.min(Math.max(maxLen + 2, 10), 40);
+      allCols.forEach((col, ci) => {
+        wsDoc.getColumn(ci + 1).width = Math.min(Math.max(col.length + 4, 16), 45);
       });
+    } else {
+      const wsDoc = wb.addWorksheet('Documentos Adjuntos');
+      wsDoc.addRow(['Sin documentos adjuntos registrados.']);
     }
 
-    addSheet('Datos Generales (GN_TERCE)',          terce);
-    addSheet('Datos Jurídicos (GN_JURID)',           jurid);
-    addSheet('Representantes Legales (GN_JURID_RL)', rl);
-    addSheet('Países de Operación (GN_JURID_PAIS)',  paises);
-    addSheet('Cumplimiento (GN_JURID_CUMP)',         cump);
-    addSheet('Junta Directiva (GN_JURID_JD)',        jd);
-    addSheet('Revisores Fiscales (GN_JURID_RF)',     rf);
-    addSheet('Accionistas (GN_JURID_AC)',            ac);
-    addSheet('Información Financiera (GN_JURID_FIN)',fin);
-    addSheet('Cuentas Bancarias (GN_TERCE_BANCO)',   banco);
-    addSheet('PEP (GN_JURID_PEP)',                   pep);
-    addSheet('Beneficiarios Finales (GN_JURID_BF)',  bf);
-
     // ── Enviar como descarga ──────────────────────────────────────────────────
-    const nomComp = (terce[0]?.NOM_COMP || `TERC_${codTerc}`)
+    const nomComp = (empresa[0]?.['Razón social'] || `TERC_${codTerc}`)
       .replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
-    const filename = `SARLAFT_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const filename = `SARLAFT_Juridica_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
 
     res.setHeader('Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${filename}"`);
-
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     await wb.xlsx.write(res);
     res.end();
 
   } catch (err) {
     console.error('GET /api/exportar-excel:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Error generando Excel' });
   }
 });
 
+
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
-//  ESCRITURA — Guardar completo (todas las secciones en una transacción)
+//  PERSONA JURÍDICA — Guardar registro completo
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * POST /api/guardar-completo
  *
- * Esquema real de MineDax:
- *  - Todas las tablas usan COD_EMPR (smallint) + COD_TERC (bigint) como PK/FK.
- *  - COD_PAIS_EXP está en GN_JURID, NO en GN_TERCE.
- *  - El campo de vinculación en GN_JURID se llama TIP_VINC (no COD_VINC).
- *  - COD_PAIS, COD_DEPT, COD_MPIO son INT en todas las tablas.
- *  - COD_BANCO y TIP_CUEN son INT en GN_TERCE_BANCO.
- *  - Todas las tablas requieren ACT_USUA (char 8), ACT_HORA (datetime), ACT_ESTA (char 1).
- *  - GN_JURID_JD NO tiene columna TIE_JUNTA.
- *  - GN_TERCE_DOC usa patrón fila-por-documento (TIP_DOC, NOM_DOC, RUT_DOC…).
+ * Inserta en una sola transacción todos los datos de Persona Jurídica:
+ *   1.  GN_TERCE          — cabecera (TIP_TERC='J')
+ *   2.  GN_JURID          — datos jurídicos principales
+ *   3.  GN_JURID_RL       — representantes legales
+ *   4.  GN_JURID_PAIS     — países de operación
+ *   5.  GN_JURID_CUMP     — cumplimiento LAFT + oficiales
+ *   6.  GN_JURID_JD       — junta directiva
+ *   7.  GN_JURID_RF       — revisores fiscales
+ *   8.  GN_JURID_AC       — composición accionaria
+ *   9.  GN_JURID_FIN      — información financiera
+ *   10. GN_TERCE_BANCO    — cuentas bancarias
+ *   11. GN_JURID_PEP      — preguntas PEP
+ *   12. GN_JURID_ACT      — actividades de riesgo SARLAFT
+ *   13. GN_JURID_BF       — beneficiarios finales
+ *   14. GN_JURID_FIRMA    — datos de la firma del representante
+ *
+ * Devuelve { success, NUM_IDEN, COD_TERC }.
  */
 app.post('/api/guardar-completo', async (req, res) => {
-  const d        = req.body;
-  const ACT_USUA = ACT_USUA_GLOBAL;
-  const ACT_HORA = new Date();
-  const ACT_ESTA = 'A';
+  const d = req.body;
 
-  if (!d.NUM_IDEN || !d.NOM_COMP || !d.DIR_TERC || !d.TEL_TERC || !d.DIR_MAIL) {
-    return res.status(400).json({ error: 'Faltan campos obligatorios del tercero (sección 1).' });
+  if (!d.NUM_IDEN || !d.NOM_COMP) {
+    return res.status(400).json({ error: 'Campos obligatorios faltantes: NUM_IDEN, NOM_COMP' });
   }
 
-  let transaction;
-  let COD_TERC;
+  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
+  const toDec  = v => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
+  const toDate = v => v ? new Date(v) : null;
+  const toChar = v => v || null;
 
+  let pool, transaction;
   try {
-    const p = await getPool();
-    transaction = new sql.Transaction(p);
+    pool        = await sql.connect(dbConfig);
+    transaction = new sql.Transaction(pool);
     await transaction.begin();
+    const r = () => new sql.Request(transaction);
 
-    // ── 1. GN_TERCE ────────────────────────────────────────────────────────────
-    // TIP_TERC  = tipo de tercero (constraint GNC03TERCE — ver .env TIP_TERC_JURID)
-    // TIP_VINCU = código de vinculación (MAE_VINC.COD_VINC, int → guardamos como int)
-    // NUM_IDEN  = bigint; DIG_VERI = smallint
-    // COD_PAIS_EXP / COD_DEPT_EXP / COD_MPIO_EXP van en GN_JURID, NO aquí.
-    {
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',  sql.SmallInt,     COD_EMPR);
-      r.input('TIP_TERC',  sql.Char(1),       TIP_TERC_JURID);
-      r.input('COD_TPDOC', sql.Int,            intOrNull(d.COD_TPDOC) || 8);
-      r.input('NUM_IDEN',  sql.BigInt,         Number(d.NUM_IDEN));
-      r.input('DIG_VERI',  sql.SmallInt,       intOrNull(d.DIG_VERI));
-      r.input('NOM_COMP',  sql.VarChar(240),  d.NOM_COMP);
-      r.input('DIR_TERC',  sql.Char(120),      d.DIR_TERC);
-      r.input('TEL_TERC',  sql.Char(30),       d.TEL_TERC);
-      r.input('TEL_TERC2', sql.Char(40),       d.TEL_TERC2 || null);
-      r.input('DIR_MAIL',  sql.VarChar(150),  d.DIR_MAIL);
-      r.input('ACT_USUA',  sql.Char(8),        ACT_USUA);
-      r.input('ACT_HORA',  sql.DateTime,       ACT_HORA);
-      r.input('ACT_ESTA',  sql.Char(1),        ACT_ESTA);
-      const result = await r.query(`
+    // ── 1. GN_TERCE ──────────────────────────────────────────────────────────
+    const resTerce = await r()
+      .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
+      .input('TIP_TERC',   sql.Char(1),     TIP_TERC_JURID)
+      .input('COD_TPDOC',  sql.Int,         toInt(d.COD_TPDOC) || 8)
+      .input('NUM_IDEN',   sql.VarChar(20), d.NUM_IDEN)
+      .input('DIG_VERI',   sql.SmallInt,    toInt(d.DIG_VERI))
+      .input('NOM_COMP',   sql.VarChar(240),String(d.NOM_COMP).substring(0, 240))
+      .input('DIR_TERC',   sql.Char(120),   toChar(d.DIR_TERC))
+      .input('TEL_TERC',   sql.Char(30),    toChar(d.TEL_TERC))
+      .input('TEL_TERC2',  sql.Char(40),    toChar(d.TEL_TERC2))
+      .input('DIR_MAIL',   sql.VarChar(150),toChar(d.DIR_MAIL))
+      .query(`
         INSERT INTO GN_TERCE
-          (COD_EMPR,TIP_TERC,COD_TPDOC,NUM_IDEN,DIG_VERI,NOM_COMP,
-           DIR_TERC,TEL_TERC,TEL_TERC2,DIR_MAIL,ACT_USUA,ACT_HORA,ACT_ESTA)
+          (COD_EMPR, TIP_TERC, COD_TPDOC, NUM_IDEN, DIG_VERI, NOM_COMP,
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL)
         OUTPUT INSERTED.COD_TERC
         VALUES
-          (@COD_EMPR,@TIP_TERC,@COD_TPDOC,@NUM_IDEN,@DIG_VERI,@NOM_COMP,
-           @DIR_TERC,@TEL_TERC,@TEL_TERC2,@DIR_MAIL,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-      COD_TERC = result.recordset[0].COD_TERC;
-    }
+          (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @NUM_IDEN, @DIG_VERI, @NOM_COMP,
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL)
+      `);
 
-    // ── 2. GN_JURID ────────────────────────────────────────────────────────────
-    // COD_PAIS_EXP SÍ existe aquí (int).
-    // El campo de vinculación es TIP_VINC (no COD_VINC).
-    // COD_DEPT_EXP, COD_MPIO_EXP, COD_PAIS_SOC son int.
-    {
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',    sql.SmallInt,    COD_EMPR);
-      r.input('COD_TERC',    sql.BigInt,       COD_TERC);
-      // TIP_VINC / TIP_SOCIE / TIP_EMPR son varchar en GN_JURID pero reciben
-      // el COD_* (int) del catálogo → strOrNull garantiza que lleguen como string.
-      r.input('TIP_VINC',    sql.VarChar(40), strOrNull(d.COD_VINC));
-      r.input('COD_PAIS_EXP',sql.Int,          intOrNull(d.COD_PAIS_EXP));
-      r.input('COD_DEPT_EXP',sql.Int,          intOrNull(d.COD_DEPT_EXP));
-      r.input('COD_MPIO_EXP',sql.Int,          intOrNull(d.COD_MPIO_EXP));
-      r.input('MAIL_SARL',   sql.VarChar(150), strOrNull(d.MAIL_SARL));
-      r.input('COD_CIIU',    sql.VarChar(10),  strOrNull(d.COD_CIIU));
-      r.input('URL_WEB',     sql.VarChar(200), strOrNull(d.URL_WEB));
-      r.input('UBIC_SOC',    sql.Char(1),       strOrNull(d.UBIC_SOC));
-      r.input('COD_PAIS_SOC',sql.Int,           intOrNull(d.COD_PAIS_SOC));
-      r.input('TIP_EMPR',    sql.VarChar(10),  strOrNull(d.TIP_EMPR));
-      r.input('GRUP_EMPR',   sql.Char(1),       strOrNull(d.GRUP_EMPR));
-      r.input('TIP_SOCIE',   sql.VarChar(60),  strOrNull(d.TIP_SOCIE));
-      r.input('ACT_USUA',    sql.Char(8),      ACT_USUA);
-      r.input('ACT_HORA',    sql.DateTime,     ACT_HORA);
-      r.input('ACT_ESTA',    sql.Char(1),      ACT_ESTA);
-      await r.query(`
+    const COD_TERC = resTerce.recordset[0].COD_TERC;
+
+    // ── 2. GN_JURID ──────────────────────────────────────────────────────────
+    await r()
+      .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
+      .input('COD_TERC',    sql.BigInt,      COD_TERC)
+      .input('TIP_VINC',    sql.VarChar(40), toChar(d.COD_VINC))
+      .input('MAIL_SARL',   sql.VarChar(150),toChar(d.MAIL_SARL))
+      .input('COD_CIIU',    sql.VarChar(10), toChar(d.COD_CIIU))
+      .input('URL_WEB',     sql.VarChar(200),toChar(d.URL_WEB))
+      .input('TIP_SOCIE',   sql.VarChar(10), toChar(d.TIP_SOCIE))
+      .input('COD_PAIS_ORI',sql.Int,         toInt(d.COD_PAIS_EXP))   // país de constitución
+      .input('UBIC_SOC',    sql.Char(1),     toChar(d.UBIC_SOC))
+      .input('COD_PAIS_SOC',sql.Int,         toInt(d.COD_PAIS_SOC))
+      .input('TIP_EMPR',    sql.VarChar(10), toChar(d.TIP_EMPR))
+      .input('GRUP_EMPR',   sql.Char(1),     toChar(d.GRUP_EMPR))
+      .input('COD_PAIS_EXP',sql.Int,         toInt(d.COD_PAIS_EXP))
+      .input('COD_DEPT_EXP',sql.Int,         toInt(d.COD_DEPT_EXP))
+      .input('COD_MPIO_EXP',sql.Int,         toInt(d.COD_MPIO_EXP))
+      .query(`
         INSERT INTO GN_JURID
-          (COD_EMPR,COD_TERC,TIP_VINC,COD_PAIS_EXP,COD_DEPT_EXP,COD_MPIO_EXP,
-           MAIL_SARL,COD_CIIU,URL_WEB,UBIC_SOC,COD_PAIS_SOC,TIP_EMPR,GRUP_EMPR,TIP_SOCIE,
-           ACT_USUA,ACT_HORA,ACT_ESTA)
+          (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_CIIU, URL_WEB,
+           TIP_SOCIE, COD_PAIS_ORI, UBIC_SOC, COD_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
+           COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
         VALUES
-          (@COD_EMPR,@COD_TERC,@TIP_VINC,@COD_PAIS_EXP,@COD_DEPT_EXP,@COD_MPIO_EXP,
-           @MAIL_SARL,@COD_CIIU,@URL_WEB,@UBIC_SOC,@COD_PAIS_SOC,@TIP_EMPR,@GRUP_EMPR,@TIP_SOCIE,
-           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
+          (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_CIIU, @URL_WEB,
+           @TIP_SOCIE, @COD_PAIS_ORI, @UBIC_SOC, @COD_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
+           @COD_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
+      `);
 
-    // ── 3. GN_JURID_RL — Representantes legales ────────────────────────────────
-    for (const rl of (d.representantes || [])) {
-      if (rl.TIP_REPR === 'S' && (!rl.NOM_REPR || !String(rl.NOM_REPR).trim())) continue;
-      const dept = (!rl.COD_DEPT || rl.COD_DEPT === 'NA') ? null : intOrNull(rl.COD_DEPT);
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR', sql.SmallInt,    COD_EMPR);
-      r.input('COD_TERC', sql.BigInt,       COD_TERC);
-      r.input('TIP_REPR', sql.Char(1),      rl.TIP_REPR);
-      r.input('NOM_REPR', sql.VarChar(80), rl.NOM_REPR  || null);
-      r.input('APE_REPR', sql.VarChar(80), rl.APE_REPR  || null);
-      r.input('TIP_DOCU', sql.Int,           intOrNull(rl.TIP_DOCU));
-      r.input('NUM_DOCU', sql.VarChar(20), rl.NUM_DOCU  || null);
-      r.input('FEC_EXPE', sql.Date,          rl.FEC_EXPE ? new Date(rl.FEC_EXPE) : null);
-      r.input('COD_PAIS', sql.Int,           intOrNull(rl.COD_PAIS));
-      r.input('COD_DEPT', sql.Int,           dept);
-      r.input('COD_MPIO', sql.Int,           intOrNull(rl.COD_MPIO));
-      r.input('DIR_REPR', sql.VarChar(120),rl.DIR_REPR  || null);
-      r.input('CEL_REPR', sql.VarChar(30), rl.CEL_REPR  || null);
-      r.input('TEL_REPR', sql.VarChar(30), rl.TEL_REPR  || null);
-      r.input('MAIL_REPR',sql.VarChar(150),rl.MAIL_REPR || null);
-      r.input('ACT_USUA', sql.Char(8),      ACT_USUA);
-      r.input('ACT_HORA', sql.DateTime,     ACT_HORA);
-      r.input('ACT_ESTA', sql.Char(1),      ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_JURID_RL
-          (COD_EMPR,COD_TERC,TIP_REPR,NOM_REPR,APE_REPR,TIP_DOCU,NUM_DOCU,
-           FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REPR,CEL_REPR,TEL_REPR,MAIL_REPR,
-           ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES
-          (@COD_EMPR,@COD_TERC,@TIP_REPR,@NOM_REPR,@APE_REPR,@TIP_DOCU,@NUM_DOCU,
-           @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REPR,@CEL_REPR,@TEL_REPR,@MAIL_REPR,
-           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
-
-    // ── 4. GN_JURID_CUMP — Cumplimiento (cabecera + oficiales) ────────────────
-    {
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',  sql.SmallInt,      COD_EMPR);
-      r.input('COD_TERC',  sql.BigInt,          COD_TERC);
-      r.input('DESC_NORM', sql.VarChar(500),   strOrNull(d.DESC_NORM));
-      r.input('NORM_LAFT', sql.VarChar(200),   strOrNull(d.NORM_LAFT));
-      r.input('TIE_JUNTA', sql.Char(1),         d.cump_TIE_JUNTA || 'N');
-      // SIS_PREVE viene de MAE_SIST_PREV (COD_SIST puede ser int) → strOrNull
-      r.input('SIS_PREVE', sql.VarChar(60),    d.cump_TIE_JUNTA === 'S' ? strOrNull(d.SIS_PREVE) : null);
-      r.input('REL_GRUPO', sql.VarChar(120),   strOrNull(d.REL_GRUPO));
-      r.input('ACT_USUA',  sql.Char(8),         ACT_USUA);
-      r.input('ACT_HORA',  sql.DateTime,        ACT_HORA);
-      r.input('ACT_ESTA',  sql.Char(1),         ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_JURID_CUMP
-          (COD_EMPR,COD_TERC,DESC_NORM,NORM_LAFT,TIE_JUNTA,SIS_PREVE,REL_GRUPO,ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES
-          (@COD_EMPR,@COD_TERC,@DESC_NORM,@NORM_LAFT,@TIE_JUNTA,@SIS_PREVE,@REL_GRUPO,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
-    if (d.cump_TIE_JUNTA === 'S') {
-      for (const of_ of (d.oficiales || [])) {
-        if (of_.TIP_REPR === 'S' && (!of_.NOM_RESP || !String(of_.NOM_RESP).trim())) continue;
-        const dept = (!of_.COD_DEPT || of_.COD_DEPT === 'NA') ? null : intOrNull(of_.COD_DEPT);
-        const r = new sql.Request(transaction);
-        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
-        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
-        r.input('TIP_REPR',  sql.Char(1),      of_.TIP_REPR);
-        r.input('TIP_DOCU',  sql.Int,           intOrNull(of_.TIP_DOCU));
-        r.input('NUM_DOCU',  sql.VarChar(20), of_.NUM_DOCU  || null);
-        r.input('FEC_EXPE',  sql.Date,          of_.FEC_EXPE ? new Date(of_.FEC_EXPE) : null);
-        r.input('NOM_RESP',  sql.VarChar(80), of_.NOM_RESP  || null);
-        r.input('APE_RESP',  sql.VarChar(80), of_.APE_RESP  || null);
-        r.input('RAZ_RESP',  sql.VarChar(200),of_.RAZ_RESP  || null);
-        r.input('COD_PAIS',  sql.Int,           intOrNull(of_.COD_PAIS));
-        r.input('COD_DEPT',  sql.Int,           dept);
-        r.input('COD_MPIO',  sql.Int,           intOrNull(of_.COD_MPIO));
-        r.input('DIR_RESP',  sql.VarChar(120),of_.DIR_RESP  || null);
-        r.input('TEL_RESP',  sql.VarChar(40), of_.TEL_RESP  || null);
-        r.input('MAIL_RESP', sql.VarChar(150),of_.MAIL_RESP || null);
-        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
-        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
-        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
-        await r.query(`
-          INSERT INTO GN_JURID_CUMP
-            (COD_EMPR,COD_TERC,TIP_REPR,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-             NOM_RESP,APE_RESP,RAZ_RESP,COD_PAIS,COD_DEPT,COD_MPIO,DIR_RESP,TEL_RESP,MAIL_RESP,
-             ACT_USUA,ACT_HORA,ACT_ESTA)
-          VALUES
-            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-             @NOM_RESP,@APE_RESP,@RAZ_RESP,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_RESP,@TEL_RESP,@MAIL_RESP,
-             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+    // ── 3. GN_JURID_RL — Representantes legales ───────────────────────────────
+    const representantes = Array.isArray(d.representantes) ? d.representantes : [];
+    for (const rl of representantes) {
+      // Iterar Principal y Suplente dentro de cada grupo
+      for (const rol of ['Principal', 'Suplente']) {
+        const p = rl[rol] || rl; // compatibilidad con objeto plano
+        if (!p.NOM_REPR && !p.APE_REPR) continue;
+        await r()
+          .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+          .input('COD_TERC',  sql.BigInt,      COD_TERC)
+          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('NOM_REPR',  sql.VarChar(60), toChar(p.NOM_REPR))
+          .input('APE_REPR',  sql.VarChar(60), toChar(p.APE_REPR))
+          .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
+          .input('NUM_DOCU',  sql.VarChar(20), toChar(p.NUM_DOCU))
+          .input('FEC_EXPE',  sql.Date,        toDate(p.FEC_EXPE))
+          .input('COD_PAIS',  sql.Int,         toInt(p.COD_PAIS))
+          .input('COD_DEPT',  sql.Int,         toInt(p.COD_DEPT))
+          .input('COD_MPIO',  sql.Int,         toInt(p.COD_MPIO))
+          .input('DIR_REPR',  sql.VarChar(120),toChar(p.DIR_REPR))
+          .input('CEL_REPR',  sql.VarChar(30), toChar(p.CEL_REPR))
+          .input('TEL_REPR',  sql.VarChar(30), toChar(p.TEL_REPR))
+          .input('MAIL_REPR', sql.VarChar(100),toChar(p.MAIL_REPR))
+          .query(`
+            INSERT INTO GN_JURID_RL
+              (COD_EMPR, COD_TERC, TIP_REPR, NOM_REPR, APE_REPR,
+               TIP_DOCU, NUM_DOCU, FEC_EXPE,
+               COD_PAIS, COD_DEPT, COD_MPIO,
+               DIR_REPR, CEL_REPR, TEL_REPR, MAIL_REPR)
+            VALUES
+              (@COD_EMPR, @COD_TERC, @TIP_REPR, @NOM_REPR, @APE_REPR,
+               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE,
+               @COD_PAIS, @COD_DEPT, @COD_MPIO,
+               @DIR_REPR, @CEL_REPR, @TEL_REPR, @MAIL_REPR)
+          `);
       }
     }
 
-    // ── 5. GN_JURID_PAIS — Países de operación ─────────────────────────────────
-    // COD_PAIS es int (no varchar)
-    for (const { COD_PAIS } of (d.paises || [])) {
-      if (!COD_PAIS) continue;
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
-      r.input('COD_TERC', sql.BigInt,   COD_TERC);
-      r.input('COD_PAIS', sql.Int,       intOrNull(COD_PAIS));
-      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
-      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
-      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_JURID_PAIS (COD_EMPR,COD_TERC,COD_PAIS,ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES (@COD_EMPR,@COD_TERC,@COD_PAIS,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+    // ── 4. GN_JURID_PAIS — Países de operación ────────────────────────────────
+    const paises = Array.isArray(d.paises) ? d.paises : [];
+    for (const p of paises) {
+      if (!p.COD_PAIS) continue;
+      await r()
+        .input('COD_EMPR', sql.SmallInt, COD_EMPR)
+        .input('COD_TERC', sql.BigInt,   COD_TERC)
+        .input('COD_PAIS', sql.Int,      toInt(p.COD_PAIS))
+        .query(`INSERT INTO GN_JURID_PAIS (COD_EMPR, COD_TERC, COD_PAIS)
+                VALUES (@COD_EMPR, @COD_TERC, @COD_PAIS)`);
     }
 
-    // ── 6. GN_JURID_JD — Junta directiva ───────────────────────────────────────
-    // IMPORTANTE: GN_JURID_JD NO tiene columna TIE_JUNTA.
-    // Si no hay junta ('N'), simplemente no se insertan filas.
-    if (d.jd_TIE_JUNTA === 'S') {
-      const insertJD = async (txn, data, TIP_REPR) => {
-        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : intOrNull(data.COD_DEPT);
-        const r = new sql.Request(txn);
-        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
-        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
-        r.input('TIP_REPR',  sql.Char(1),      TIP_REPR);
-        r.input('TIP_MIEM',  sql.VarChar(100),data.TIP_MIEM  || null);
-        r.input('NOM_MIEM',  sql.VarChar(80), data.NOM_MIEM  || null);
-        r.input('APE_MIEM',  sql.VarChar(80), data.APE_MIEM  || null);
-        r.input('RAZ_MIEM',  sql.VarChar(200),data.RAZ_MIEM  || null);
-        r.input('TIP_DOCU',  sql.Int,           intOrNull(data.TIP_DOCU));
-        r.input('NUM_DOCU',  sql.VarChar(20), data.NUM_DOCU  || null);
-        r.input('FEC_EXPE',  sql.Date,          data.FEC_EXPE ? new Date(data.FEC_EXPE) : null);
-        r.input('COD_PAIS',  sql.Int,           intOrNull(data.COD_PAIS));
-        r.input('COD_DEPT',  sql.Int,           dept);
-        r.input('COD_MPIO',  sql.Int,           intOrNull(data.COD_MPIO));
-        r.input('DIR_MIEM',  sql.VarChar(120),data.DIR_MIEM  || null);
-        r.input('TEL_MIEM',  sql.VarChar(30), data.TEL_MIEM  || null);
-        r.input('MAIL_MIEM', sql.VarChar(150),data.MAIL_MIEM || null);
-        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
-        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
-        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
-        await r.query(`
-          INSERT INTO GN_JURID_JD
-            (COD_EMPR,COD_TERC,TIP_REPR,TIP_MIEM,NOM_MIEM,APE_MIEM,RAZ_MIEM,TIP_DOCU,NUM_DOCU,
-             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_MIEM,TEL_MIEM,MAIL_MIEM,ACT_USUA,ACT_HORA,ACT_ESTA)
-          VALUES
-            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_MIEM,@NOM_MIEM,@APE_MIEM,@RAZ_MIEM,@TIP_DOCU,@NUM_DOCU,
-             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_MIEM,@TEL_MIEM,@MAIL_MIEM,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-      };
-      for (const m of (d.juntaDirectiva || [])) {
-        await insertJD(transaction, m.Principal, 'P');
-        if (m.Suplente && m.Suplente.NOM_MIEM && String(m.Suplente.NOM_MIEM).trim()) {
-          await insertJD(transaction, m.Suplente, 'S');
+    // ── 5. GN_JURID_CUMP — Cumplimiento LAFT ─────────────────────────────────
+    const tieCump = d.cump_TIE_JUNTA || 'N';
+    await r()
+      .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
+      .input('COD_TERC',   sql.BigInt,      COD_TERC)
+      .input('REL_GRUPO',  sql.VarChar(200),toChar(d.REL_GRUPO))
+      .input('NORM_LAFT',  sql.VarChar(200),toChar(d.NORM_LAFT))
+      .input('SIS_PREVE',  sql.VarChar(200),toChar(d.SIS_PREVE))
+      .input('DESC_NORM',  sql.VarChar(500),toChar(d.DESC_NORM))
+      .input('TIE_JUNTA',  sql.Char(1),     tieCump)
+      .query(`
+        INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, REL_GRUPO, NORM_LAFT, SIS_PREVE, DESC_NORM, TIE_JUNTA)
+        VALUES (@COD_EMPR, @COD_TERC, @REL_GRUPO, @NORM_LAFT, @SIS_PREVE, @DESC_NORM, @TIE_JUNTA)
+      `);
+
+    // Oficiales de cumplimiento
+    const oficiales = Array.isArray(d.oficiales) ? d.oficiales : [];
+    for (const of_ of oficiales) {
+      for (const rol of ['Principal', 'Suplente']) {
+        const p = of_[rol] || of_;
+        if (!p.NOM_RESP && !p.RAZ_RESP) continue;
+        await r()
+          .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+          .input('COD_TERC',  sql.BigInt,      COD_TERC)
+          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIP_SIST',  sql.VarChar(10), toChar(p.TIP_SIST))
+          .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
+          .input('NUM_DOCU',  sql.VarChar(20), toChar(p.NUM_DOCU))
+          .input('FEC_EXPE',  sql.Date,        toDate(p.FEC_EXPE))
+          .input('NOM_RESP',  sql.VarChar(60), toChar(p.NOM_RESP))
+          .input('APE_RESP',  sql.VarChar(60), toChar(p.APE_RESP))
+          .input('RAZ_RESP',  sql.VarChar(120),toChar(p.RAZ_RESP))
+          .input('COD_PAIS',  sql.Int,         toInt(p.COD_PAIS))
+          .input('COD_DEPT',  sql.Int,         toInt(p.COD_DEPT))
+          .input('COD_MPIO',  sql.Int,         toInt(p.COD_MPIO))
+          .input('DIR_RESP',  sql.VarChar(120),toChar(p.DIR_RESP))
+          .input('TEL_RESP',  sql.VarChar(30), toChar(p.TEL_RESP))
+          .input('MAIL_RESP', sql.VarChar(100),toChar(p.MAIL_RESP))
+          .query(`
+            INSERT INTO GN_JURID_CUMP
+              (COD_EMPR, COD_TERC, TIP_REPR, TIP_SIST, TIP_DOCU, NUM_DOCU, FEC_EXPE,
+               NOM_RESP, APE_RESP, RAZ_RESP, COD_PAIS, COD_DEPT, COD_MPIO,
+               DIR_RESP, TEL_RESP, MAIL_RESP)
+            VALUES
+              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_SIST, @TIP_DOCU, @NUM_DOCU, @FEC_EXPE,
+               @NOM_RESP, @APE_RESP, @RAZ_RESP, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+               @DIR_RESP, @TEL_RESP, @MAIL_RESP)
+          `);
+      }
+    }
+
+    // ── 6. GN_JURID_JD — Junta directiva ─────────────────────────────────────
+    const jdMiembros = Array.isArray(d.juntaDirectiva) ? d.juntaDirectiva : [];
+    for (const grupo of jdMiembros) {
+      for (const rol of ['Principal', 'Suplente']) {
+        const m = grupo[rol] || {};
+        if (!m.NOM_MIEM && !m.RAZ_MIEM) continue;
+        await r()
+          .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+          .input('COD_TERC',  sql.BigInt,      COD_TERC)
+          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIP_MIEM',  sql.VarChar(10), toChar(m.TIP_MIEM))
+          .input('NOM_MIEM',  sql.VarChar(60), toChar(m.NOM_MIEM))
+          .input('APE_MIEM',  sql.VarChar(60), toChar(m.APE_MIEM))
+          .input('RAZ_MIEM',  sql.VarChar(120),toChar(m.RAZ_MIEM))
+          .input('TIP_DOCU',  sql.Int,         toInt(m.TIP_DOCU))
+          .input('NUM_DOCU',  sql.VarChar(20), toChar(m.NUM_DOCU))
+          .input('FEC_EXPE',  sql.Date,        toDate(m.FEC_EXPE))
+          .input('COD_PAIS',  sql.Int,         toInt(m.COD_PAIS))
+          .input('COD_DEPT',  sql.Int,         toInt(m.COD_DEPT))
+          .input('COD_MPIO',  sql.Int,         toInt(m.COD_MPIO))
+          .input('DIR_MIEM',  sql.VarChar(120),toChar(m.DIR_MIEM))
+          .input('TEL_MIEM',  sql.VarChar(30), toChar(m.TEL_MIEM))
+          .input('MAIL_MIEM', sql.VarChar(100),toChar(m.MAIL_MIEM))
+          .query(`
+            INSERT INTO GN_JURID_JD
+              (COD_EMPR, COD_TERC, TIP_REPR, TIP_MIEM, NOM_MIEM, APE_MIEM, RAZ_MIEM,
+               TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
+               DIR_MIEM, TEL_MIEM, MAIL_MIEM)
+            VALUES
+              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_MIEM, @NOM_MIEM, @APE_MIEM, @RAZ_MIEM,
+               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+               @DIR_MIEM, @TEL_MIEM, @MAIL_MIEM)
+          `);
+      }
+    }
+
+    // ── 7. GN_JURID_RF — Revisores fiscales ──────────────────────────────────
+    const revisores = Array.isArray(d.revisores) ? d.revisores : [];
+    for (const rf of revisores) {
+      const tieRevis = rf.rf_TIE_REVIS || d.rf_TIE_REVIS || 'N';
+      for (const rol of ['Principal', 'Suplente']) {
+        const rv = rf[rol] || {};
+        if (!rv.NOM_REVI && !rv.RAZ_REVI) {
+          // Si solo se indica que no tiene, insertar fila mínima para Principal
+          if (rol === 'Principal') {
+            await r()
+              .input('COD_EMPR',  sql.SmallInt, COD_EMPR)
+              .input('COD_TERC',  sql.BigInt,   COD_TERC)
+              .input('TIP_REPR',  sql.Char(1),  'P')
+              .input('TIE_REVIS', sql.Char(1),  tieRevis)
+              .query(`INSERT INTO GN_JURID_RF (COD_EMPR, COD_TERC, TIP_REPR, TIE_REVIS)
+                      VALUES (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIE_REVIS)`);
+          }
+          continue;
         }
+        await r()
+          .input('COD_EMPR',      sql.SmallInt,    COD_EMPR)
+          .input('COD_TERC',      sql.BigInt,      COD_TERC)
+          .input('TIP_REPR',      sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIE_REVIS',     sql.Char(1),     tieRevis)
+          .input('NOM_REVI',      sql.VarChar(60), toChar(rv.NOM_REVI))
+          .input('APE_REVI',      sql.VarChar(60), toChar(rv.APE_REVI))
+          .input('RAZ_REVI',      sql.VarChar(120),toChar(rv.RAZ_REVI))
+          .input('TIP_DOCU',      sql.Int,         toInt(rv.TIP_DOCU))
+          .input('NUM_DOCU',      sql.VarChar(20), toChar(rv.NUM_DOCU))
+          .input('FEC_EXPE',      sql.Date,        toDate(rv.FEC_EXPE))
+          .input('COD_PAIS',      sql.Int,         toInt(rv.COD_PAIS))
+          .input('COD_DEPT',      sql.Int,         toInt(rv.COD_DEPT))
+          .input('COD_MPIO',      sql.Int,         toInt(rv.COD_MPIO))
+          .input('DIR_REVI',      sql.VarChar(120),toChar(rv.DIR_REVI))
+          .input('CEL_REVI',      sql.VarChar(30), toChar(rv.CEL_REVI))
+          .input('TEL_REVI',      sql.VarChar(30), toChar(rv.TEL_REVI))
+          .input('MAIL_REVI',     sql.VarChar(100),toChar(rv.MAIL_REVI))
+          .input('REVI_FIRMA',    sql.Char(1),     toChar(rf.REVI_FIRMA) || 'N')
+          .input('RAZ_FIRMA',     sql.VarChar(120),toChar(rf.RAZ_FIRMA))
+          .input('TIP_DOCU_FIR',  sql.Int,         toInt(rf.TIP_DOCU_FIR))
+          .input('NUM_DOCU_FIR',  sql.VarChar(20), toChar(rf.NUM_DOCU_FIR))
+          .query(`
+            INSERT INTO GN_JURID_RF
+              (COD_EMPR, COD_TERC, TIP_REPR, TIE_REVIS,
+               NOM_REVI, APE_REVI, RAZ_REVI,
+               TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
+               DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
+               REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR)
+            VALUES
+              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIE_REVIS,
+               @NOM_REVI, @APE_REVI, @RAZ_REVI,
+               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+               @DIR_REVI, @CEL_REVI, @TEL_REVI, @MAIL_REVI,
+               @REVI_FIRMA, @RAZ_FIRMA, @TIP_DOCU_FIR, @NUM_DOCU_FIR)
+          `);
       }
     }
 
-    // ── 7. GN_JURID_RF — Revisores fiscales ────────────────────────────────────
-    if (d.rf_TIE_REVIS === 'S') {
-      const insertRF = async (txn, data, TIP_REPR) => {
-        const dept = (!data.COD_DEPT || data.COD_DEPT === 'NA') ? null : intOrNull(data.COD_DEPT);
-        const r = new sql.Request(txn);
-        r.input('COD_EMPR',     sql.SmallInt,       COD_EMPR);
-        r.input('COD_TERC',     sql.BigInt,           COD_TERC);
-        r.input('TIP_REPR',     sql.Char(1),           TIP_REPR);
-        r.input('TIE_REVIS',    sql.Char(1),           'S');
-        r.input('NOM_REVI',     sql.VarChar(80),      data.NOM_REVI     || null);
-        r.input('APE_REVI',     sql.VarChar(80),      data.APE_REVI     || null);
-        r.input('RAZ_REVI',     sql.VarChar(200),     data.RAZ_REVI     || null);
-        r.input('TIP_DOCU',     sql.Int,               intOrNull(data.TIP_DOCU));
-        r.input('NUM_DOCU',     sql.VarChar(20),      data.NUM_DOCU     || null);
-        r.input('FEC_EXPE',     sql.Date,              data.FEC_EXPE     ? new Date(data.FEC_EXPE) : null);
-        r.input('COD_PAIS',     sql.Int,               intOrNull(data.COD_PAIS));
-        r.input('COD_DEPT',     sql.Int,               dept);
-        r.input('COD_MPIO',     sql.Int,               intOrNull(data.COD_MPIO));
-        r.input('DIR_REVI',     sql.VarChar(120),     data.DIR_REVI     || null);
-        r.input('CEL_REVI',     sql.VarChar(30),      data.CEL_REVI     || null);
-        r.input('TEL_REVI',     sql.VarChar(30),      data.TEL_REVI     || null);
-        r.input('MAIL_REVI',    sql.VarChar(150),     data.MAIL_REVI    || null);
-        r.input('REVI_FIRMA',   sql.Char(1),           data.REVI_FIRMA   || 'N');
-        r.input('RAZ_FIRMA',    sql.VarChar(200),     data.RAZ_FIRMA    || null);
-        r.input('TIP_DOCU_FIR', sql.Int,               intOrNull(data.TIP_DOCU_FIR));
-        r.input('NUM_DOCU_FIR', sql.VarChar(20),      data.NUM_DOCU_FIR || null);
-        r.input('OBS_REVI',     sql.VarChar(300),     data.OBS_REVI     || null);
-        r.input('ACT_USUA',     sql.Char(8),           ACT_USUA);
-        r.input('ACT_HORA',     sql.DateTime,          ACT_HORA);
-        r.input('ACT_ESTA',     sql.Char(1),           ACT_ESTA);
-        await r.query(`
-          INSERT INTO GN_JURID_RF
-            (COD_EMPR,COD_TERC,TIP_REPR,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,TIP_DOCU,NUM_DOCU,
-             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
-             REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OBS_REVI,ACT_USUA,ACT_HORA,ACT_ESTA)
+    // ── 8. GN_JURID_AC — Accionistas ──────────────────────────────────────────
+    const accionistas = Array.isArray(d.accionistas) ? d.accionistas : [];
+    for (const ac of accionistas) {
+      if (!ac.NOM_ACCI && !ac.RAZ_ACCI) continue;
+      await r()
+        .input('COD_EMPR',  sql.SmallInt,      COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,        COD_TERC)
+        .input('NOM_ACCI',  sql.VarChar(60),   toChar(ac.NOM_ACCI))
+        .input('APE_ACCI',  sql.VarChar(60),   toChar(ac.APE_ACCI))
+        .input('RAZ_ACCI',  sql.VarChar(120),  toChar(ac.RAZ_ACCI))
+        .input('TIP_DOCU',  sql.Int,           toInt(ac.TIP_DOCU))
+        .input('NUM_DOCU',  sql.VarChar(20),   toChar(ac.NUM_DOCU))
+        .input('FEC_EXPE',  sql.Date,          toDate(ac.FEC_EXPE))
+        .input('COD_PAIS',  sql.Int,           toInt(ac.COD_PAIS))
+        .input('COD_DEPT',  sql.Int,           toInt(ac.COD_DEPT))
+        .input('COD_MPIO',  sql.Int,           toInt(ac.COD_MPIO))
+        .input('DIR_ACCI',  sql.VarChar(120),  toChar(ac.DIR_ACCI))
+        .input('CEL_ACCI',  sql.VarChar(30),   toChar(ac.CEL_ACCI))
+        .input('TEL_ACCI',  sql.VarChar(30),   toChar(ac.TEL_ACCI))
+        .input('MAIL_ACCI', sql.VarChar(100),  toChar(ac.MAIL_ACCI))
+        .input('PCT_PART',  sql.Decimal(5,2),  toDec(ac.PCT_PART))
+        .query(`
+          INSERT INTO GN_JURID_AC
+            (COD_EMPR, COD_TERC, NOM_ACCI, APE_ACCI, RAZ_ACCI,
+             TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
+             DIR_ACCI, CEL_ACCI, TEL_ACCI, MAIL_ACCI, PCT_PART)
           VALUES
-            (@COD_EMPR,@COD_TERC,@TIP_REPR,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,@TIP_DOCU,@NUM_DOCU,
-             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
-             @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OBS_REVI,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-      };
-      for (const rv of (d.revisores || [])) {
-        const firmaFields = {
-          REVI_FIRMA:   rv.REVI_FIRMA   || 'N',
-          RAZ_FIRMA:    rv.RAZ_FIRMA    || null,
-          TIP_DOCU_FIR: rv.TIP_DOCU_FIR || null,
-          NUM_DOCU_FIR: rv.NUM_DOCU_FIR || null,
-        };
-        await insertRF(transaction, { ...rv.Principal, ...firmaFields }, 'P');
-        if (rv.Suplente && rv.Suplente.NOM_REVI && String(rv.Suplente.NOM_REVI).trim()) {
-          await insertRF(transaction, { ...rv.Suplente, ...firmaFields }, 'S');
-        }
-      }
-    } else {
-      const r0 = new sql.Request(transaction);
-      r0.input('COD_EMPR',  sql.SmallInt, COD_EMPR);
-      r0.input('COD_TERC',  sql.BigInt,   COD_TERC);
-      r0.input('TIE_REVIS', sql.Char(1),  'N');
-      r0.input('ACT_USUA',  sql.Char(8),  ACT_USUA);
-      r0.input('ACT_HORA',  sql.DateTime, ACT_HORA);
-      r0.input('ACT_ESTA',  sql.Char(1),  ACT_ESTA);
-      await r0.query(`
-        INSERT INTO GN_JURID_RF (COD_EMPR,COD_TERC,TIE_REVIS,ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES (@COD_EMPR,@COD_TERC,@TIE_REVIS,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+            (@COD_EMPR, @COD_TERC, @NOM_ACCI, @APE_ACCI, @RAZ_ACCI,
+             @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+             @DIR_ACCI, @CEL_ACCI, @TEL_ACCI, @MAIL_ACCI, @PCT_PART)
+        `);
     }
 
-    // ── 8. GN_JURID_AC — Composición accionaria ─────────────────────────────────
-    for (const a of (d.accionistas || [])) {
-      const dept = (!a.COD_DEPT || a.COD_DEPT === 'NA') ? null : intOrNull(a.COD_DEPT);
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR', sql.SmallInt,    COD_EMPR);
-      r.input('COD_TERC', sql.BigInt,       COD_TERC);
-      r.input('NOM_ACCI', sql.VarChar(80), a.NOM_ACCI || null);
-      r.input('APE_ACCI', sql.VarChar(80), a.APE_ACCI || null);
-      r.input('RAZ_ACCI', sql.VarChar(200),a.RAZ_ACCI || null);
-      r.input('TIP_DOCU', sql.Int,           intOrNull(a.TIP_DOCU));
-      r.input('NUM_DOCU', sql.VarChar(20), a.NUM_DOCU || null);
-      r.input('FEC_EXPE', sql.Date,          a.FEC_EXPE ? new Date(a.FEC_EXPE) : null);
-      r.input('COD_PAIS', sql.Int,           intOrNull(a.COD_PAIS));
-      r.input('COD_DEPT', sql.Int,           dept);
-      r.input('COD_MPIO', sql.Int,           intOrNull(a.COD_MPIO));
-      r.input('DIR_ACCI', sql.VarChar(120), a.DIR_ACCI || null);
-      r.input('CEL_ACCI', sql.VarChar(30), a.CEL_ACCI || null);
-      r.input('TEL_ACCI', sql.VarChar(30), a.TEL_ACCI || null);
-      r.input('MAIL_ACCI',sql.VarChar(150),a.MAIL_ACCI|| null);
-      r.input('PCT_PART', sql.Decimal(6,2), a.PCT_PART != null ? Number(a.PCT_PART) : null);
-      r.input('ACT_USUA', sql.Char(8),      ACT_USUA);
-      r.input('ACT_HORA', sql.DateTime,     ACT_HORA);
-      r.input('ACT_ESTA', sql.Char(1),      ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_JURID_AC
-          (COD_EMPR,COD_TERC,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-           COD_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART,
-           ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES
-          (@COD_EMPR,@COD_TERC,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-           @COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART,
-           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
-
-    // ── 9. GN_JURID_FIN — Información financiera ───────────────────────────────
-    {
-      const fin = d.financiera || {};
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',   sql.SmallInt,      COD_EMPR);
-      r.input('COD_TERC',   sql.BigInt,          COD_TERC);
-      r.input('ACT_TOTAL',  sql.Decimal(18,2),  fin.ACT_TOTAL  != null ? Number(fin.ACT_TOTAL)  : null);
-      r.input('ING_MENS',   sql.Decimal(18,2),  fin.ING_MENS   != null ? Number(fin.ING_MENS)   : null);
-      r.input('PAS_TOTAL',  sql.Decimal(18,2),  fin.PAS_TOTAL  != null ? Number(fin.PAS_TOTAL)  : null);
-      r.input('EGR_MENS',   sql.Decimal(18,2),  fin.EGR_MENS   != null ? Number(fin.EGR_MENS)   : null);
-      r.input('PATRIMONIO', sql.Decimal(18,2),  fin.PATRIMONIO != null ? Number(fin.PATRIMONIO) : null);
-      r.input('OTR_ING',    sql.Decimal(18,2),  fin.OTR_ING    != null ? Number(fin.OTR_ING)    : null);
-      r.input('ACT_USUA',   sql.Char(8),         ACT_USUA);
-      r.input('ACT_HORA',   sql.DateTime,        ACT_HORA);
-      r.input('ACT_ESTA',   sql.Char(1),         ACT_ESTA);
-      await r.query(`
+    // ── 9. GN_JURID_FIN — Financiera ─────────────────────────────────────────
+    const fin = d.financiera || {};
+    await r()
+      .input('COD_EMPR',   sql.SmallInt,      COD_EMPR)
+      .input('COD_TERC',   sql.BigInt,        COD_TERC)
+      .input('ACT_TOTAL',  sql.Decimal(18,2), toDec(fin.ACT_TOTAL))
+      .input('ING_MENS',   sql.Decimal(18,2), toDec(fin.ING_MENS))
+      .input('PAS_TOTAL',  sql.Decimal(18,2), toDec(fin.PAS_TOTAL))
+      .input('EGR_MENS',   sql.Decimal(18,2), toDec(fin.EGR_MENS))
+      .input('PATRIMONIO', sql.Decimal(18,2), toDec(fin.PATRIMONIO))
+      .input('OTR_ING',    sql.Decimal(18,2), toDec(fin.OTR_ING))
+      .query(`
         INSERT INTO GN_JURID_FIN
-          (COD_EMPR,COD_TERC,ACT_TOTAL,ING_MENS,PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING,
-           ACT_USUA,ACT_HORA,ACT_ESTA)
+          (COD_EMPR, COD_TERC, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING)
         VALUES
-          (@COD_EMPR,@COD_TERC,@ACT_TOTAL,@ING_MENS,@PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING,
-           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
+          (@COD_EMPR, @COD_TERC, @ACT_TOTAL, @ING_MENS, @PAS_TOTAL, @EGR_MENS, @PATRIMONIO, @OTR_ING)
+      `);
+
+    // ── 10. GN_TERCE_BANCO — Cuentas bancarias ────────────────────────────────
+    const bancos = Array.isArray(d.bancaria) ? d.bancaria : [];
+    for (const b of bancos) {
+      if (!b.COD_BANCO) continue;
+      await r()
+        .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',    sql.BigInt,      COD_TERC)
+        .input('COD_BANCO',   sql.Int,         toInt(b.COD_BANCO))
+        .input('TIP_CUEN',    sql.Int,         toInt(b.TIP_CUEN))
+        .input('NUM_CUEN',    sql.VarChar(30), toChar(b.NUM_CUEN))
+        .input('CUEN_EXTR',   sql.Char(1),     toChar(b.CUEN_EXTR) || 'N')
+        .input('NOM_ENT_EXT', sql.VarChar(120),toChar(b.NOM_ENT_EXT))
+        .input('TIP_CUE_EXT', sql.VarChar(40), toChar(b.TIP_CUE_EXT))
+        .query(`
+          INSERT INTO GN_TERCE_BANCO
+            (COD_EMPR, COD_TERC, COD_BANCO, TIP_CUEN, NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT)
+          VALUES
+            (@COD_EMPR, @COD_TERC, @COD_BANCO, @TIP_CUEN, @NUM_CUEN, @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT)
+        `);
     }
 
-    // ── 10. GN_TERCE_BANCO — Información bancaria ───────────────────────────────
-    // COD_BANCO y TIP_CUEN son int (no varchar) en la BD
-    for (const b of (d.bancaria || [])) {
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',    sql.SmallInt,    COD_EMPR);
-      r.input('COD_TERC',    sql.BigInt,       COD_TERC);
-      r.input('COD_BANCO',   sql.Int,           intOrNull(b.COD_BANCO));
-      r.input('TIP_CUEN',    sql.Int,           intOrNull(b.TIP_CUEN));
-      r.input('NUM_CUEN',    sql.VarChar(30), b.NUM_CUEN    || null);
-      r.input('CUEN_EXTR',   sql.Char(1),      b.CUEN_EXTR   || 'N');
-      r.input('NOM_ENT_EXT', sql.VarChar(120),b.NOM_ENT_EXT || null);
-      r.input('TIP_CUE_EXT', sql.VarChar(40), b.TIP_CUE_EXT || null);
-      r.input('ACT_USUA',    sql.Char(8),      ACT_USUA);
-      r.input('ACT_HORA',    sql.DateTime,     ACT_HORA);
-      r.input('ACT_ESTA',    sql.Char(1),      ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_TERCE_BANCO
-          (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT,
-           ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES
-          (@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT,
-           @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
+    // ── 11. GN_JURID_PEP ─────────────────────────────────────────────────────
+    const pep = d.pep || {};
+    await r()
+      .input('COD_EMPR', sql.SmallInt, COD_EMPR)
+      .input('COD_TERC', sql.BigInt,   COD_TERC)
+      .input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || 'N')
+      .input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || 'N')
+      .query(`INSERT INTO GN_JURID_PEP (COD_EMPR, COD_TERC, MAN_RPUB, CAR_PUBL)
+              VALUES (@COD_EMPR, @COD_TERC, @MAN_RPUB, @CAR_PUBL)`);
 
-    // ── 11. GN_JURID_PEP — Exposición política ─────────────────────────────────
-    {
-      const pep = d.pep || {};
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
-      r.input('COD_TERC', sql.BigInt,   COD_TERC);
-      r.input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || null);
-      r.input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || null);
-      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
-      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
-      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
-      await r.query(`
-        INSERT INTO GN_JURID_PEP (COD_EMPR,COD_TERC,MAN_RPUB,CAR_PUBL,ACT_USUA,ACT_HORA,ACT_ESTA)
-        VALUES (@COD_EMPR,@COD_TERC,@MAN_RPUB,@CAR_PUBL,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
-
-    // ── 12. GN_JURID_ACT — Actividades con activos virtuales ───────────────────
-    {
-      const act = d.actividades || {};
-      const r = new sql.Request(transaction);
-      r.input('COD_EMPR',     sql.SmallInt, COD_EMPR);
-      r.input('COD_TERC',     sql.BigInt,   COD_TERC);
-      r.input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N');
-      r.input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N');
-      r.input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N');
-      r.input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N');
-      r.input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N');
-      r.input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N');
-      r.input('ACT_USUA', sql.Char(8),  ACT_USUA);
-      r.input('ACT_HORA', sql.DateTime, ACT_HORA);
-      r.input('ACT_ESTA', sql.Char(1),  ACT_ESTA);
-      await r.query(`
+    // ── 12. GN_JURID_ACT — Actividades virtuales ──────────────────────────────
+    const act = d.actividades || {};
+    await r()
+      .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
+      .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .query(`
         INSERT INTO GN_JURID_ACT
-          (COD_EMPR,COD_TERC,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,
-           ACT_SERV_FIN,ACT_SERV_VAP,ACT_USUA,ACT_HORA,ACT_ESTA)
+          (COD_EMPR, COD_TERC, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
+           ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO)
         VALUES
-          (@COD_EMPR,@COD_TERC,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,
-           @ACT_SERV_FIN,@ACT_SERV_VAP,@ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-    }
+          (@COD_EMPR, @COD_TERC, @ACT_VA_FIAT, @ACT_VA_VA, @ACT_TRANS, @ACT_CUSTO,
+           @ACT_SERV_FIN, @ACT_SERV_VAP, @CERT_INFO)
+      `);
 
-    // ── 13. GN_JURID_BF — Beneficiarios finales ────────────────────────────────
-    {
-      const bfs = Array.isArray(d.beneficiarios) ? d.beneficiarios : [];
-      for (const bf of bfs) {
-        if (!bf.NOM_BENE && !bf.RAZ_BENE) continue; // omitir filas vacías
-        const r = new sql.Request(transaction);
-        r.input('COD_EMPR',  sql.SmallInt,    COD_EMPR);
-        r.input('COD_TERC',  sql.BigInt,       COD_TERC);
-        r.input('TIP_BENE',  sql.Char(1),      bf.TIP_BENE   || 'P');
-        r.input('NOM_BENE',  sql.VarChar(100), strOrNull(bf.NOM_BENE));
-        r.input('APE_BENE',  sql.VarChar(100), strOrNull(bf.APE_BENE));
-        r.input('RAZ_BENE',  sql.VarChar(200), strOrNull(bf.RAZ_BENE));
-        r.input('TIP_DOCU',  sql.Int,           intOrNull(bf.TIP_DOCU));
-        r.input('NUM_DOCU',  sql.VarChar(20),  strOrNull(bf.NUM_DOCU));
-        r.input('FEC_EXPE',  sql.DateTime,     bf.FEC_EXPE ? new Date(bf.FEC_EXPE) : null);
-        r.input('COD_PAIS',  sql.Int,           intOrNull(bf.COD_PAIS));
-        r.input('COD_DEPT',  sql.Int,           intOrNull(bf.COD_DEPT));
-        r.input('COD_MPIO',  sql.Int,           intOrNull(bf.COD_MPIO));
-        r.input('DIR_BENE',  sql.VarChar(255), strOrNull(bf.DIR_BENE));
-        r.input('TEL_BENE',  sql.VarChar(40),  strOrNull(bf.TEL_BENE));
-        r.input('MAIL_BENE', sql.VarChar(150), strOrNull(bf.MAIL_BENE));
-        r.input('ACT_USUA',  sql.Char(8),      ACT_USUA);
-        r.input('ACT_HORA',  sql.DateTime,     ACT_HORA);
-        r.input('ACT_ESTA',  sql.Char(1),      ACT_ESTA);
-        await r.query(`
+    // ── 13. GN_JURID_BF — Beneficiarios finales ───────────────────────────────
+    const beneficiarios = Array.isArray(d.beneficiarios) ? d.beneficiarios : [];
+    for (const bf of beneficiarios) {
+      if (!bf.NOM_BENE && !bf.RAZ_BENE) continue;
+      await r()
+        .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,      COD_TERC)
+        .input('TIP_BENE',  sql.Char(1),     toChar(bf.TIP_BENE) || 'N')
+        .input('NOM_BENE',  sql.VarChar(60), toChar(bf.NOM_BENE))
+        .input('APE_BENE',  sql.VarChar(60), toChar(bf.APE_BENE))
+        .input('RAZ_BENE',  sql.VarChar(120),toChar(bf.RAZ_BENE))
+        .input('TIP_DOCU',  sql.Int,         toInt(bf.TIP_DOCU))
+        .input('NUM_DOCU',  sql.VarChar(20), toChar(bf.NUM_DOCU))
+        .input('FEC_EXPE',  sql.Date,        toDate(bf.FEC_EXPE))
+        .input('COD_PAIS',  sql.Int,         toInt(bf.COD_PAIS))
+        .input('COD_DEPT',  sql.Int,         toInt(bf.COD_DEPT))
+        .input('COD_MPIO',  sql.Int,         toInt(bf.COD_MPIO))
+        .input('DIR_BENE',  sql.VarChar(120),toChar(bf.DIR_BENE))
+        .input('TEL_BENE',  sql.VarChar(30), toChar(bf.TEL_BENE))
+        .input('MAIL_BENE', sql.VarChar(100),toChar(bf.MAIL_BENE))
+        .query(`
           INSERT INTO GN_JURID_BF
-            (COD_EMPR,COD_TERC,TIP_BENE,NOM_BENE,APE_BENE,RAZ_BENE,TIP_DOCU,NUM_DOCU,
-             FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE,
-             ACT_USUA,ACT_HORA,ACT_ESTA)
+            (COD_EMPR, COD_TERC, TIP_BENE, NOM_BENE, APE_BENE, RAZ_BENE,
+             TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
+             DIR_BENE, TEL_BENE, MAIL_BENE)
           VALUES
-            (@COD_EMPR,@COD_TERC,@TIP_BENE,@NOM_BENE,@APE_BENE,@RAZ_BENE,@TIP_DOCU,@NUM_DOCU,
-             @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE,
-             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-      }
+            (@COD_EMPR, @COD_TERC, @TIP_BENE, @NOM_BENE, @APE_BENE, @RAZ_BENE,
+             @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+             @DIR_BENE, @TEL_BENE, @MAIL_BENE)
+        `);
     }
 
-    // ── 14. GN_JURID_FIRMA — Firma del representante legal ─────────────────────
-    {
-      const fi = d.firma || {};
-      if (fi.NOM_FIRM && fi.APE_FIRM) {
-        const r = new sql.Request(transaction);
-        r.input('COD_EMPR',  sql.SmallInt,   COD_EMPR);
-        r.input('COD_TERC',  sql.BigInt,      COD_TERC);
-        r.input('NOM_FIRM',  sql.VarChar(100), strOrNull(fi.NOM_FIRM));
-        r.input('APE_FIRM',  sql.VarChar(100), strOrNull(fi.APE_FIRM));
-        r.input('TIP_DOCU',  sql.Int,          intOrNull(fi.TIP_DOCU));
-        r.input('NUM_DOCU',  sql.VarChar(20),  strOrNull(fi.NUM_DOCU));
-        r.input('FEC_FIRMA', sql.DateTime,     fi.FEC_FIRMA ? new Date(fi.FEC_FIRMA) : null);
-        r.input('ACT_USUA',  sql.Char(8),     ACT_USUA);
-        r.input('ACT_HORA',  sql.DateTime,    ACT_HORA);
-        r.input('ACT_ESTA',  sql.Char(1),     ACT_ESTA);
-        await r.query(`
-          INSERT INTO GN_JURID_FIRMA
-            (COD_EMPR,COD_TERC,NOM_FIRM,APE_FIRM,TIP_DOCU,NUM_DOCU,FEC_FIRMA,
-             ACT_USUA,ACT_HORA,ACT_ESTA)
-          VALUES
-            (@COD_EMPR,@COD_TERC,@NOM_FIRM,@APE_FIRM,@TIP_DOCU,@NUM_DOCU,@FEC_FIRMA,
-             @ACT_USUA,@ACT_HORA,@ACT_ESTA)`);
-      }
+    // ── 14. GN_JURID_FIRMA — Firma del representante ──────────────────────────
+    const firma = d.firma || {};
+    if (firma.NOM_FIRM || firma.APE_FIRM) {
+      await r()
+        .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,      COD_TERC)
+        .input('NOM_FIRM',  sql.VarChar(60), toChar(firma.NOM_FIRM))
+        .input('APE_FIRM',  sql.VarChar(60), toChar(firma.APE_FIRM))
+        .input('TIP_DOCU',  sql.Int,         toInt(firma.TIP_DOCU))
+        .input('NUM_DOCU',  sql.VarChar(20), toChar(firma.NUM_DOCU))
+        .input('FEC_FIRMA', sql.Date,        toDate(firma.FEC_FIRMA))
+        .query(`
+          INSERT INTO GN_JURID_FIRMA (COD_EMPR, COD_TERC, NOM_FIRM, APE_FIRM, TIP_DOCU, NUM_DOCU, FEC_FIRMA)
+          VALUES (@COD_EMPR, @COD_TERC, @NOM_FIRM, @APE_FIRM, @TIP_DOCU, @NUM_DOCU, @FEC_FIRMA)
+        `);
     }
 
-    // ── Confirmar transacción ──────────────────────────────────────────────────
     await transaction.commit();
 
-    console.log(`✅ guardar-completo OK — COD_TERC=${COD_TERC}, NUM_IDEN=${d.NUM_IDEN}`);
-    res.json({
-      success:  true,
-      NUM_IDEN: d.NUM_IDEN,
-      COD_TERC: COD_TERC,
-    });
+    console.log(`✅ Jurídica guardada. COD_TERC=${COD_TERC}, NUM_IDEN=${d.NUM_IDEN}`);
+    res.json({ success: true, NUM_IDEN: d.NUM_IDEN, COD_TERC });
 
   } catch (err) {
     try { await transaction.rollback(); } catch (_) {}
@@ -1547,7 +1771,655 @@ app.post('/api/guardar-completo', async (req, res) => {
   }
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PERSONA NATURAL — Guardar registro completo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/guardar-completo-natural
+ *
+ * Inserta en una sola transacción:
+ *   1. GN_TERCE       — cabecera (TIP_TERC='N'), incluyendo nombres propios
+ *   2. GN_NATUR       — datos exclusivos de persona natural
+ *   3. GN_NATUR_FIN   — información financiera
+ *   4. GN_TERCE_BANCO — cuentas bancarias (1..n)
+ *   5. GN_NATUR_PEP   — preguntas PEP
+ *   6. GN_NATUR_ACT   — actividades de riesgo SARLAFT
+ *   7. GN_TERCE_DOC   — documentos adjuntos (0..n)
+ *
+ * Devuelve { success, NUM_IDEN, COD_TERC }.
+ */
+app.post('/api/guardar-completo-natural', async (req, res) => {
+  const b = req.body;
+
+  if (!b.NUM_IDEN || !b.NOM_TERC || !b.APE_TERC) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios (NUM_IDEN, NOM_TERC, APE_TERC).' });
+  }
+
+  // Helpers de conversión
+  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10)   : null;
+  const toChar = v => v || null;
+
+  let pool, transaction;
+  try {
+    pool        = await sql.connect(dbConfig);
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const r = () => new sql.Request(transaction);
+
+    // ── 1. GN_TERCE ──────────────────────────────────────────────────────────
+    // Para persona natural guardamos también NOM_TERC / APE_TERC como campos
+    // separados (además de NOM_COMP para búsquedas).
+    const nomComp = [b.NOM_TERC, b.SEG_NOMB, b.APE_TERC, b.SEG_APEL]
+      .filter(Boolean).join(' ');
+
+    const resTerce = await r()
+      .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+      .input('TIP_TERC',  sql.Char(1),     TIP_TERC_NATUR)
+      .input('COD_TPDOC', sql.Int,         toInt(b.COD_TPDOC) || 8)
+      .input('NUM_IDEN',  sql.VarChar(20), b.NUM_IDEN)
+      .input('NOM_TERC',  sql.Char(40),    (b.NOM_TERC || '').substring(0,40))
+      .input('SEG_NOMB',  sql.VarChar(40), b.SEG_NOMB || null)
+      .input('APE_TERC',  sql.Char(40),    (b.APE_TERC || '').substring(0,40))
+      .input('SEG_APEL',  sql.VarChar(40), b.SEG_APEL || null)
+      .input('NOM_COMP',  sql.VarChar(240),nomComp.substring(0,240))
+      .input('DIR_TERC',  sql.Char(120),   b.DIR_TERC  || null)
+      .input('TEL_TERC',  sql.Char(30),    b.TEL_TERC  || null)
+      .input('TEL_TERC2', sql.Char(40),    b.TEL_TERC2 || null)
+      .input('DIR_MAIL',  sql.VarChar(150),b.DIR_MAIL  || null)
+      .query(`
+        INSERT INTO GN_TERCE
+          (COD_EMPR, TIP_TERC, COD_TPDOC, NUM_IDEN,
+           NOM_TERC, SEG_NOMB, APE_TERC, SEG_APEL, NOM_COMP,
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL)
+        OUTPUT INSERTED.COD_TERC
+        VALUES
+          (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @NUM_IDEN,
+           @NOM_TERC, @SEG_NOMB, @APE_TERC, @SEG_APEL, @NOM_COMP,
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL)
+      `);
+
+    const COD_TERC = resTerce.recordset[0].COD_TERC;
+
+    // ── 2. GN_NATUR ──────────────────────────────────────────────────────────
+    // COD_NACIO, COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP son int en la BD.
+    // COD_DEPT_EXP puede llegar como 'NA' (pais extranjero) → null.
+    await r()
+      .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
+      .input('COD_TERC',    sql.BigInt,      COD_TERC)
+      .input('TIP_VINC',    sql.VarChar(40), toChar(b.COD_VINC))
+      .input('MAIL_SARL',   sql.VarChar(150),b.MAIL_SARL   || null)
+      .input('COD_NACIO',   sql.Int,         toInt(b.COD_NACIO))
+      .input('ACT_PRINC',   sql.VarChar(100),b.ACT_PRINC   || null)
+      .input('COD_CIIU',    sql.VarChar(10), b.COD_CIIU    || null)
+      .input('FEC_EXPE',    sql.Date,        b.FEC_EXPE ? new Date(b.FEC_EXPE) : null)
+      .input('COD_PAIS_EXP',sql.Int,         toInt(b.COD_PAIS_EXP))
+      .input('COD_DEPT_EXP',sql.Int,         toInt(b.COD_DEPT_EXP))
+      .input('COD_MPIO_EXP',sql.Int,         toInt(b.COD_MPIO_EXP))
+      .query(`
+        INSERT INTO GN_NATUR
+          (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO,
+           ACT_PRINC, COD_CIIU, FEC_EXPE,
+           COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
+        VALUES
+          (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO,
+           @ACT_PRINC, @COD_CIIU, @FEC_EXPE,
+           @COD_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
+      `);
+
+    // ── 3. GN_NATUR_FIN ──────────────────────────────────────────────────────
+    const fin = b.financiera || {};
+    await r()
+      .input('COD_EMPR',   sql.SmallInt,       COD_EMPR)
+      .input('COD_TERC',   sql.BigInt,          COD_TERC)
+      .input('ACT_TOTAL',  sql.Decimal(18,2),   fin.ACT_TOTAL  ?? null)
+      .input('ING_MENS',   sql.Decimal(18,2),   fin.ING_MENS   ?? null)
+      .input('PAS_TOTAL',  sql.Decimal(18,2),   fin.PAS_TOTAL  ?? null)
+      .input('EGR_MENS',   sql.Decimal(18,2),   fin.EGR_MENS   ?? null)
+      .input('PATRIMONIO', sql.Decimal(18,2),   fin.PATRIMONIO ?? null)
+      .input('OTR_ING',    sql.Decimal(18,2),   fin.OTR_ING    ?? null)
+      .query(`
+        INSERT INTO GN_NATUR_FIN
+          (COD_EMPR, COD_TERC,
+           ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING)
+        VALUES
+          (@COD_EMPR, @COD_TERC,
+           @ACT_TOTAL, @ING_MENS, @PAS_TOTAL, @EGR_MENS, @PATRIMONIO, @OTR_ING)
+      `);
+
+    // ── 4. GN_TERCE_BANCO ────────────────────────────────────────────────────
+    // Columnas reales: COD_BANCO(int), TIP_CUEN(int), NUM_CUEN, CUEN_EXTR,
+    //                  NOM_ENT_EXT, TIP_CUE_EXT
+    const bancos = Array.isArray(b.bancaria) ? b.bancaria : [];
+    for (const cuenta of bancos) {
+      if (!cuenta.COD_BANCO) continue;
+      await r()
+        .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',    sql.BigInt,      COD_TERC)
+        .input('COD_BANCO',   sql.Int,         toInt(cuenta.COD_BANCO))
+        .input('TIP_CUEN',    sql.Int,         toInt(cuenta.TIP_CUEN))
+        .input('NUM_CUEN',    sql.VarChar(30), cuenta.NUM_CUEN   || null)
+        .input('CUEN_EXTR',   sql.Char(1),     cuenta.CUEN_EXTR  || 'N')
+        .input('NOM_ENT_EXT', sql.VarChar(120),cuenta.NOM_ENT_EXT|| null)
+        .input('TIP_CUE_EXT', sql.VarChar(40), cuenta.TIP_CUE_EXT|| null)
+        .query(`
+          INSERT INTO GN_TERCE_BANCO
+            (COD_EMPR, COD_TERC, COD_BANCO, TIP_CUEN, NUM_CUEN,
+             CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT)
+          VALUES
+            (@COD_EMPR, @COD_TERC, @COD_BANCO, @TIP_CUEN, @NUM_CUEN,
+             @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT)
+        `);
+    }
+
+    // ── 5. GN_NATUR_PEP ──────────────────────────────────────────────────────
+    const pep = b.pep || {};
+    await r()
+      .input('COD_EMPR', sql.SmallInt, COD_EMPR)
+      .input('COD_TERC', sql.BigInt,   COD_TERC)
+      .input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || 'N')
+      .input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || 'N')
+      .query(`
+        INSERT INTO GN_NATUR_PEP (COD_EMPR, COD_TERC, MAN_RPUB, CAR_PUBL)
+        VALUES (@COD_EMPR, @COD_TERC, @MAN_RPUB, @CAR_PUBL)
+      `);
+
+    // ── 6. GN_NATUR_ACT ──────────────────────────────────────────────────────
+    const act = b.actividades || {};
+    await r()
+      .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
+      .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .query(`
+        INSERT INTO GN_NATUR_ACT
+          (COD_EMPR, COD_TERC,
+           ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
+           ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO)
+        VALUES
+          (@COD_EMPR, @COD_TERC,
+           @ACT_VA_FIAT, @ACT_VA_VA, @ACT_TRANS, @ACT_CUSTO,
+           @ACT_SERV_FIN, @ACT_SERV_VAP, @CERT_INFO)
+      `);
+
+    // ── 7. GN_TERCE_DOC ──────────────────────────────────────────────────────
+    // Columnas reales: TIP_DOC, NOM_DOC, RUT_DOC, FEC_CARG, NOM_ARCH, EXT_ARCH
+    const docs = Array.isArray(b.documentos) ? b.documentos : [];
+    for (const doc of docs) {
+      if (!doc.TIP_DOC && !doc.TIP_DOCU) continue;
+      const tipDoc  = doc.TIP_DOC  || doc.TIP_DOCU || null;
+      const nomDoc  = doc.NOM_DOC  || doc.NOM_ARCH || null;
+      const rutDoc  = doc.RUT_DOC  || doc.RUT_ARCH || null;
+      await r()
+        .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC', sql.BigInt,      COD_TERC)
+        .input('TIP_DOC',  sql.VarChar(20), tipDoc)
+        .input('NOM_DOC',  sql.VarChar(120),nomDoc)
+        .input('RUT_DOC',  sql.VarChar(500),rutDoc)
+        .input('FEC_CARG', sql.Date,        doc.FEC_CARG ? new Date(doc.FEC_CARG) : new Date())
+        .input('NOM_ARCH', sql.VarChar(260),doc.NOM_ARCH || null)
+        .input('EXT_ARCH', sql.VarChar(10), doc.EXT_ARCH || null)
+        .query(`
+          INSERT INTO GN_TERCE_DOC
+            (COD_EMPR, COD_TERC, TIP_DOC, NOM_DOC, RUT_DOC, FEC_CARG, NOM_ARCH, EXT_ARCH)
+          VALUES
+            (@COD_EMPR, @COD_TERC, @TIP_DOC, @NOM_DOC, @RUT_DOC, @FEC_CARG, @NOM_ARCH, @EXT_ARCH)
+        `);
+    }
+
+    await transaction.commit();
+
+    console.log(`✅ Natural guardado. COD_TERC=${COD_TERC}, NUM_IDEN=${b.NUM_IDEN}`);
+    res.json({ success: true, NUM_IDEN: b.NUM_IDEN, COD_TERC });
+
+  } catch (err) {
+    try { await transaction.rollback(); } catch (_) {}
+    console.error('POST /api/guardar-completo-natural:', err);
+    res.status(500).json({ error: err.message || 'Error interno del servidor' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PERSONA NATURAL — Exportar Excel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/exportar-excel-natural/:codTerc
+ *
+ * Genera un Excel con 4 hojas temáticas. Solo muestra los campos que el
+ * formulario recopila, con etiquetas legibles y códigos resueltos a nombres
+ * mediante JOINs a los catálogos correspondientes.
+ */
+app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
+  const codTerc = parseInt(req.params.codTerc, 10);
+  if (!codTerc) return res.status(400).json({ error: 'codTerc inválido' });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    const q = async (query) => {
+      const rq = pool.request();
+      rq.input('COD_EMPR', sql.SmallInt, COD_EMPR);
+      rq.input('COD_TERC', sql.BigInt,   codTerc);
+      return (await rq.query(query)).recordset;
+    };
+
+    // ── 1. Datos personales (GN_TERCE + GN_NATUR + catálogos) ────────────────
+    const [personales, financiera, bancaria, pepAct, documentos] = await Promise.all([
+
+      q(`SELECT
+          td.NOM_TPDOC                                  AS [Tipo de documento],
+          t.NUM_IDEN                                    AS [Número de identificación],
+          LTRIM(RTRIM(ISNULL(t.NOM_TERC,'')))           AS [Primer nombre],
+          LTRIM(RTRIM(ISNULL(t.SEG_NOMB,'')))           AS [Segundo nombre],
+          LTRIM(RTRIM(ISNULL(t.APE_TERC,'')))           AS [Primer apellido],
+          LTRIM(RTRIM(ISNULL(t.SEG_APEL,'')))           AS [Segundo apellido],
+          LTRIM(RTRIM(ISNULL(t.DIR_TERC,'')))           AS [Dirección],
+          LTRIM(RTRIM(ISNULL(t.TEL_TERC,'')))           AS [Teléfono celular],
+          LTRIM(RTRIM(ISNULL(t.TEL_TERC2,'')))          AS [Teléfono fijo],
+          t.DIR_MAIL                                    AS [Email corporativo],
+          ISNULL(v.NOM_VINC, n.TIP_VINC)               AS [Tipo de vinculación],
+          n.MAIL_SARL                                   AS [Email SARLAFT],
+          ISNULL(pn.NOM_PAIS,'')                        AS [Nacionalidad],
+          ISNULL(n.ACT_PRINC,'')                        AS [Actividad principal],
+          ISNULL(n.COD_CIIU,'') + CASE WHEN ci.NOM_CIIU IS NOT NULL THEN ' — ' + ci.NOM_CIIU ELSE '' END
+                                                        AS [Actividad CIIU],
+          CONVERT(varchar,n.FEC_EXPE,103)               AS [Fecha expedición documento],
+          ISNULL(pp.NOM_PAIS,'')                        AS [País de expedición],
+          ISNULL(dp.NOM_DEPT,'')                        AS [Departamento de expedición],
+          ISNULL(mn.NOM_MUNI,'')                        AS [Ciudad de expedición]
+        FROM GN_TERCE t
+          JOIN GN_NATUR n  ON n.COD_EMPR = t.COD_EMPR AND n.COD_TERC = t.COD_TERC
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = t.COD_TPDOC
+          LEFT JOIN MAE_VINC  v  ON CAST(v.COD_VINC AS VARCHAR) = n.TIP_VINC
+          LEFT JOIN MAE_PAIS  pn ON pn.COD_PAIS = n.COD_NACIO
+          LEFT JOIN MAE_CIIU  ci ON ci.COD_CIIU  = n.COD_CIIU
+          LEFT JOIN MAE_PAIS  pp ON pp.COD_PAIS  = n.COD_PAIS_EXP
+          LEFT JOIN MAE_DEPT  dp ON dp.COD_DEPT  = n.COD_DEPT_EXP
+          LEFT JOIN MAE_MUNI  mn ON mn.COD_MUNI  = n.COD_MPIO_EXP
+        WHERE t.COD_EMPR = @COD_EMPR AND t.COD_TERC = @COD_TERC`),
+
+      q(`SELECT
+          ACT_TOTAL  AS [Activos totales ($)],
+          ING_MENS   AS [Ingresos mensuales ($)],
+          PAS_TOTAL  AS [Pasivos totales ($)],
+          EGR_MENS   AS [Egresos mensuales ($)],
+          PATRIMONIO AS [Patrimonio ($)],
+          OTR_ING    AS [Otros ingresos ($)]
+        FROM GN_NATUR_FIN
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      q(`SELECT
+          mb.NOM_BANCO                            AS [Entidad bancaria],
+          ISNULL(tc.NOM_TPCTA, '')               AS [Tipo de cuenta],
+          b.NUM_CUEN                              AS [Número de cuenta],
+          CASE b.CUEN_EXTR WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                  AS [Cuenta extranjera],
+          ISNULL(b.NOM_ENT_EXT,'')               AS [Nombre entidad extranjera],
+          ISNULL(b.TIP_CUE_EXT,'')               AS [Tipo cuenta extranjera]
+        FROM GN_TERCE_BANCO b
+          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
+          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
+        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC`),
+
+      q(`SELECT
+          CASE p.MAN_RPUB WHEN 'S' THEN 'Sí' ELSE 'No' END AS [¿Maneja recursos públicos?],
+          CASE p.CAR_PUBL WHEN 'S' THEN 'Sí' ELSE 'No' END AS [¿Ejerció cargo público?],
+          CASE a.ACT_VA_FIAT  WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Compra/venta activos virtuales (fiat)],
+          CASE a.ACT_VA_VA    WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Compra/venta activos virtuales (VA x VA)],
+          CASE a.ACT_TRANS    WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Transferencia y canje activos virtuales],
+          CASE a.ACT_CUSTO    WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Custodia de activos virtuales],
+          CASE a.ACT_SERV_FIN WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Servicios financieros para PSAV],
+          CASE a.ACT_SERV_VAP WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Servicios VAP],
+          CASE a.CERT_INFO    WHEN 'S' THEN 'Sí' ELSE 'No' END
+                                                            AS [Certifica veracidad de la información]
+        FROM GN_NATUR_PEP p
+          JOIN GN_NATUR_ACT a ON a.COD_EMPR = p.COD_EMPR AND a.COD_TERC = p.COD_TERC
+        WHERE p.COD_EMPR = @COD_EMPR AND p.COD_TERC = @COD_TERC`),
+
+      q(`SELECT
+          d.TIP_DOC                             AS [Tipo de documento],
+          ISNULL(d.NOM_DOC,'')                  AS [Nombre del documento],
+          ISNULL(d.NOM_ARCH,'')                 AS [Nombre del archivo],
+          CONVERT(varchar, d.FEC_CARG, 103)     AS [Fecha de carga],
+          '/api/documentos/' + t.NUM_IDEN + '/' + d.TIP_DOC
+                                                AS [URL de descarga]
+        FROM GN_TERCE_DOC d
+          JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
+        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC`),
+    ]);
+
+    // ── Construir libro Excel ─────────────────────────────────────────────────
+    const wb    = new ExcelJS.Workbook();
+    wb.creator  = 'SARLAFT Sistema';
+    wb.created  = new Date();
+
+    const PRIMARY   = '0C6B8C';
+    const HEADER_BG = 'E5F5FA';
+    const ACCENT    = '20A7C9';
+    const CURRENCY_FMT = '#,##0.00';
+
+    /**
+     * Agrega una hoja con etiqueta-valor en dos columnas (para filas únicas)
+     * o en modo tabla (para arrays).
+     */
+    function addSheetLabelValue(name, rows, currencyColumns = []) {
+      const ws = wb.addWorksheet(name);
+      if (!rows || rows.length === 0) {
+        ws.addRow(['Sin datos registrados']);
+        return;
+      }
+
+      const cols = Object.keys(rows[0]);
+
+      if (rows.length === 1) {
+        // ── Modo vertical (una fila → dos columnas: Campo / Valor) ────────────
+        ws.getColumn(1).width = 38;
+        ws.getColumn(2).width = 42;
+
+        // Título
+        ws.mergeCells('A1:B1');
+        const titleCell   = ws.getCell('A1');
+        titleCell.value   = name;
+        titleCell.font    = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+        titleCell.alignment = { horizontal: 'center' };
+        titleCell.fill    = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
+
+        // Cabecera de columnas
+        const hRow = ws.addRow(['Campo', 'Valor']);
+        hRow.eachCell(cell => {
+          cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+          cell.alignment = { horizontal: 'center' };
+        });
+
+        // Datos
+        cols.forEach((col, i) => {
+          const val = rows[0][col];
+          const row = ws.addRow([col, val ?? '']);
+          if (i % 2 === 0) {
+            row.eachCell(cell => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF6FA' } };
+            });
+          }
+          if (currencyColumns.includes(col) && typeof val === 'number') {
+            row.getCell(2).numFmt = CURRENCY_FMT;
+          }
+        });
+
+      } else {
+        // ── Modo tabla horizontal (varias filas) ──────────────────────────────
+        // Título
+        ws.mergeCells(1, 1, 1, cols.length);
+        const titleCell = ws.getCell(1, 1);
+        titleCell.value = name;
+        titleCell.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+        titleCell.alignment = { horizontal: 'center' };
+
+        // Cabecera
+        const hRow = ws.addRow(cols);
+        hRow.eachCell(cell => {
+          cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+          cell.border = { bottom: { style: 'thin', color: { argb: 'FF' + PRIMARY } } };
+          cell.alignment = { horizontal: 'center' };
+        });
+
+        // Datos
+        rows.forEach((row, ri) => {
+          const dRow = ws.addRow(cols.map(c => row[c] ?? ''));
+          if (ri % 2 === 0) {
+            dRow.eachCell(cell => {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
+            });
+          }
+          // Formato moneda
+          currencyColumns.forEach(cc => {
+            const ci = cols.indexOf(cc);
+            if (ci >= 0 && typeof row[cc] === 'number') {
+              dRow.getCell(ci + 1).numFmt = CURRENCY_FMT;
+            }
+          });
+        });
+
+        // Auto-ancho
+        cols.forEach((col, colIdx) => {
+          const maxLen = Math.max(col.length, ...rows.map(rw => String(rw[col] ?? '').length));
+          ws.getColumn(colIdx + 1).width = Math.min(Math.max(maxLen + 2, 14), 45);
+        });
+      }
+    }
+
+    addSheetLabelValue('Datos Personales',      personales);
+    addSheetLabelValue('Información Financiera', financiera,
+      ['Activos totales ($)', 'Ingresos mensuales ($)', 'Pasivos totales ($)',
+       'Egresos mensuales ($)', 'Patrimonio ($)', 'Otros ingresos ($)']);
+    addSheetLabelValue('Cuentas Bancarias',      bancaria);
+    addSheetLabelValue('PEP y Actividades',      pepAct);
+
+    // ── Hoja de documentos con hipervínculo de descarga ──────────────────────
+    if (documentos.length > 0) {
+      const wsDoc = wb.addWorksheet('Documentos Adjuntos');
+      const dCols = Object.keys(documentos[0]).filter(c => c !== 'URL de descarga');
+      const allCols = [...dCols, 'Acceder al archivo'];
+
+      // Título
+      wsDoc.mergeCells(1, 1, 1, allCols.length);
+      const tCell = wsDoc.getCell(1, 1);
+      tCell.value = 'Documentos Adjuntos';
+      tCell.font  = { bold: true, size: 13, color: { argb: 'FF' + PRIMARY } };
+      tCell.alignment = { horizontal: 'center' };
+
+      // Cabecera
+      const hRow = wsDoc.addRow(allCols);
+      hRow.eachCell(cell => {
+        cell.font  = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + ACCENT } };
+        cell.alignment = { horizontal: 'center' };
+      });
+
+      // Datos + hipervínculo
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      documentos.forEach((doc, ri) => {
+        const values = dCols.map(c => doc[c] ?? '');
+        values.push(doc['Nombre del archivo'] || '');
+        const dRow = wsDoc.addRow(values);
+        if (ri % 2 === 0) {
+          dRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + HEADER_BG } };
+          });
+        }
+        // Hipervínculo en la última columna
+        const urlRel  = doc['URL de descarga'] || '';
+        if (urlRel && doc['Nombre del archivo']) {
+          const linkCell = dRow.getCell(allCols.length);
+          linkCell.value = {
+            text:      doc['Nombre del archivo'],
+            hyperlink: baseUrl + urlRel,
+          };
+          linkCell.font = { color: { argb: 'FF0563C1' }, underline: true };
+        }
+      });
+
+      // Auto-ancho
+      allCols.forEach((col, colIdx) => {
+        wsDoc.getColumn(colIdx + 1).width = Math.min(Math.max(col.length + 4, 16), 45);
+      });
+    } else {
+      // Sin documentos: hoja informativa
+      const wsDoc = wb.addWorksheet('Documentos Adjuntos');
+      wsDoc.addRow(['Sin documentos adjuntos registrados.']);
+    }
+
+    // ── Enviar como descarga ──────────────────────────────────────────────────
+    const nomComp = (personales[0]?.['Primer nombre'] || '' + ' ' + (personales[0]?.['Primer apellido'] || '') || `TERC_${codTerc}`)
+      .replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
+    const filename = `SARLAFT_Natural_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+    res.setHeader('Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    await wb.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('GET /api/exportar-excel-natural:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Error generando Excel' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DOCUMENTOS ADJUNTOS — Upload y descarga
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/documentos/:numIden
+ *
+ * Recibe archivos adjuntos vía multipart/form-data y los guarda en disco
+ * (uploads/:numIden/).  Cada campo del FormData es el código TIP_DOC del
+ * documento (ej. 'RUT', 'CERT_BANC', 'DOC_ID').
+ *
+ * Inserta o actualiza filas en GN_TERCE_DOC.
+ */
+app.post('/api/documentos/:numIden',
+  upload.any(),   // acepta cualquier cantidad de campos de archivo
+  async (req, res) => {
+    const numIden = req.params.numIden;
+
+    if (!numIden) return res.status(400).json({ error: 'numIden requerido' });
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ error: 'No se recibieron archivos' });
+
+    try {
+      const pool = await sql.connect(dbConfig);
+
+      // Buscar el COD_TERC correspondiente al NUM_IDEN
+      const tercResult = await pool.request()
+        .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+        .input('NUM_IDEN', sql.VarChar(20), numIden)
+        .query(`SELECT TOP 1 COD_TERC FROM GN_TERCE
+                WHERE COD_EMPR = @COD_EMPR AND NUM_IDEN = @NUM_IDEN`);
+
+      if (!tercResult.recordset.length)
+        return res.status(404).json({ error: `No se encontró el tercero ${numIden}` });
+
+      const COD_TERC = tercResult.recordset[0].COD_TERC;
+
+      // Insertar o actualizar cada archivo en GN_TERCE_DOC
+      const guardados = [];
+      for (const file of req.files) {
+        const tipDoc  = file.fieldname;                       // clave del campo
+        const nomArch = file.originalname;
+        const rutDoc  = file.path;                            // ruta absoluta en servidor
+        const extArch = path.extname(nomArch).replace('.','').toLowerCase();
+
+        // Verificar si ya existe un registro para este TIP_DOC + COD_TERC
+        const exists = await pool.request()
+          .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+          .input('COD_TERC', sql.BigInt,      COD_TERC)
+          .input('TIP_DOC',  sql.VarChar(20), tipDoc)
+          .query(`SELECT COD_DOC FROM GN_TERCE_DOC
+                  WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC AND TIP_DOC=@TIP_DOC`);
+
+        if (exists.recordset.length > 0) {
+          // Actualizar
+          await pool.request()
+            .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+            .input('COD_TERC', sql.BigInt,      COD_TERC)
+            .input('TIP_DOC',  sql.VarChar(20), tipDoc)
+            .input('NOM_ARCH', sql.VarChar(260),nomArch)
+            .input('RUT_DOC',  sql.VarChar(500),rutDoc)
+            .input('EXT_ARCH', sql.VarChar(10), extArch)
+            .input('FEC_CARG', sql.Date,        new Date())
+            .query(`UPDATE GN_TERCE_DOC
+                    SET NOM_ARCH=@NOM_ARCH, RUT_DOC=@RUT_DOC,
+                        EXT_ARCH=@EXT_ARCH, FEC_CARG=@FEC_CARG
+                    WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC AND TIP_DOC=@TIP_DOC`);
+        } else {
+          // Insertar nuevo
+          await pool.request()
+            .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+            .input('COD_TERC', sql.BigInt,      COD_TERC)
+            .input('TIP_DOC',  sql.VarChar(20), tipDoc)
+            .input('NOM_DOC',  sql.VarChar(120),tipDoc)   // el nombre legible se puede mejorar
+            .input('NOM_ARCH', sql.VarChar(260),nomArch)
+            .input('RUT_DOC',  sql.VarChar(500),rutDoc)
+            .input('EXT_ARCH', sql.VarChar(10), extArch)
+            .input('FEC_CARG', sql.Date,        new Date())
+            .query(`INSERT INTO GN_TERCE_DOC
+                      (COD_EMPR, COD_TERC, TIP_DOC, NOM_DOC, NOM_ARCH, RUT_DOC, EXT_ARCH, FEC_CARG)
+                    VALUES
+                      (@COD_EMPR, @COD_TERC, @TIP_DOC, @NOM_DOC, @NOM_ARCH, @RUT_DOC, @EXT_ARCH, @FEC_CARG)`);
+        }
+
+        guardados.push({ tipDoc, nomArch });
+        console.log(`📎 Documento guardado: ${tipDoc} → ${nomArch} (COD_TERC=${COD_TERC})`);
+      }
+
+      res.json({ success: true, guardados, COD_TERC });
+
+    } catch (err) {
+      console.error('POST /api/documentos:', err);
+      res.status(500).json({ error: err.message || 'Error al guardar documentos' });
+    }
+  }
+);
+
+/**
+ * GET /api/documentos/:numIden/:tipDoc
+ *
+ * Sirve el archivo adjunto para el tipo de documento indicado.
+ * El campo tipDoc identifica el documento dentro de la carpeta del tercero
+ * (ej. 'RUT', 'CERT_BANC', 'DOC_ID').
+ */
+app.get('/api/documentos/:numIden/:tipDoc', async (req, res) => {
+  const { numIden, tipDoc } = req.params;
+
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    const result = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), numIden)
+      .input('TIP_DOC',  sql.VarChar(20), tipDoc)
+      .query(`SELECT d.RUT_DOC, d.NOM_ARCH, d.EXT_ARCH
+              FROM GN_TERCE_DOC d
+                JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
+              WHERE t.COD_EMPR = @COD_EMPR
+                AND t.NUM_IDEN = @NUM_IDEN
+                AND d.TIP_DOC  = @TIP_DOC`);
+
+    if (!result.recordset.length)
+      return res.status(404).json({ error: 'Documento no encontrado' });
+
+    const { RUT_DOC, NOM_ARCH } = result.recordset[0];
+
+    if (!fs.existsSync(RUT_DOC))
+      return res.status(404).json({ error: 'Archivo no encontrado en el servidor' });
+
+    res.setHeader('Content-Disposition', `inline; filename="${NOM_ARCH}"`);
+    res.sendFile(RUT_DOC);
+
+  } catch (err) {
+    console.error('GET /api/documentos:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 /* ── Puerto ──────────────────────────────────────────────────────────────────── */
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor SARLAFT escuchando en http://localhost:${PORT}`);
+  console.log(`\n  🚀  Servidor SARLAFT corriendo en http://localhost:${PORT}\n`);
 });

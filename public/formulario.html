@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Formulario SARLAFT — Persona Jurídica</title>
+  <title>Formulario SARLAFT</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -20,7 +20,7 @@
 <!--  Encabezado de página                                                  -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <header class="page-header">
-  <h1>Registro SARLAFT — Persona Jurídica</h1>
+  <h1 id="page-title">Registro SARLAFT — Persona Jurídica</h1>
   <p>Complete todos los campos obligatorios marcados con
      <span style="color:#c62828">*</span>.
      Los datos se guardarán al finalizar el formulario completo.</p>
@@ -49,8 +49,9 @@
 
         <div class="field">
           <label>Tipo de persona</label>
-          <select id="tip_terc" disabled>
+          <select id="tip_terc" onchange="onTipTercChange(this.value)">
             <option value="J" selected>Persona jurídica</option>
+            <option value="N">Persona natural</option>
           </select>
         </div>
 
@@ -89,7 +90,7 @@
                               ocultarAviso('aviso-duplicado')"
                      onblur="verificarDuplicado(this.value)" />
             </div>
-            <div style="width:68px;flex-shrink:0">
+            <div class="solo-juridica" style="width:68px;flex-shrink:0">
               <label for="dig_veri" style="font-size:.72rem;font-weight:600;color:#424242;text-transform:uppercase;letter-spacing:.02em;display:block;margin-bottom:5px">
                 Díg. verif.
               </label>
@@ -113,8 +114,8 @@
         </div>
       </div>
 
-      <!-- Fila 2 — Razón social -->
-      <div class="grid-4">
+      <!-- Fila 2J — Razón social (solo Jurídica) -->
+      <div class="grid-4 solo-juridica">
         <div class="field col-full" id="field-nom_comp">
           <label for="nom_comp">Razón social <span class="req">*</span></label>
           <input type="text" id="nom_comp" maxlength="255"
@@ -124,7 +125,37 @@
         </div>
       </div>
 
-      <div class="section-divider">Lugar de constitución / expedición</div>
+      <!-- Fila 2N — Nombres desglosados (solo Natural) -->
+      <div class="grid-4 solo-natural" style="display:none">
+        <div class="field" id="field-nom_terc_n">
+          <label for="nom_terc_n">Primer nombre <span class="req">*</span></label>
+          <input type="text" id="nom_terc_n" maxlength="40"
+                 placeholder="Primer nombre"
+                 oninput="actualizarNatur('NOM_TERC',this.value); limpiarError('field-nom_terc_n')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field">
+          <label for="seg_nomb_n">Segundo nombre</label>
+          <input type="text" id="seg_nomb_n" maxlength="40"
+                 placeholder="Segundo nombre (opcional)"
+                 oninput="actualizarNatur('SEG_NOMB',this.value)" />
+        </div>
+        <div class="field" id="field-ape_terc_n">
+          <label for="ape_terc_n">Primer apellido <span class="req">*</span></label>
+          <input type="text" id="ape_terc_n" maxlength="40"
+                 placeholder="Primer apellido"
+                 oninput="actualizarNatur('APE_TERC',this.value); limpiarError('field-ape_terc_n')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field">
+          <label for="seg_apel_n">Segundo apellido</label>
+          <input type="text" id="seg_apel_n" maxlength="40"
+                 placeholder="Segundo apellido (opcional)"
+                 oninput="actualizarNatur('SEG_APEL',this.value)" />
+        </div>
+      </div>
+
+      <div class="section-divider" id="divider-geo">Lugar de constitución / expedición</div>
 
       <!-- Fila 3 — Cascada geográfica -->
       <div class="grid-4">
@@ -193,17 +224,26 @@
           <span class="error-msg">Email inválido o vacío</span>
         </div>
 
-        <div class="field" id="field-mail_sarl">
+        <!-- Jurídica: email SARLAFT va en GN_JURID -->
+        <div class="field solo-juridica" id="field-mail_sarl">
           <label for="mail_sarl">Email gestión SARLAFT <span class="req">*</span></label>
           <input type="email" id="mail_sarl" maxlength="100"
                  placeholder="sarlaft@empresa.com"
                  oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
           <span class="error-msg">Email inválido o vacío</span>
         </div>
+        <!-- Natural: email SARLAFT va en GN_NATUR -->
+        <div class="field solo-natural" id="field-mail_sarl_n" style="display:none">
+          <label for="mail_sarl_n">Email gestión SARLAFT <span class="req">*</span></label>
+          <input type="email" id="mail_sarl_n" maxlength="100"
+                 placeholder="sarlaft@persona.com"
+                 oninput="actualizarNatur('MAIL_SARL',this.value); limpiarError('field-mail_sarl_n')" />
+          <span class="error-msg">Email inválido o vacío</span>
+        </div>
       </div>
 
-      <!-- Fila 5 — CIIU y Página web -->
-      <div class="grid-2">
+      <!-- Fila 5J — CIIU y Página web (solo Jurídica) -->
+      <div class="grid-2 solo-juridica">
 
         <div class="field" id="field-cod_ciiu">
           <label for="cod_ciiu">Actividad principal CIIU <span class="req">*</span></label>
@@ -223,10 +263,47 @@
         </div>
       </div>
 
+      <!-- Fila 5N — Datos adicionales (solo Natural) -->
+      <div class="grid-4 solo-natural" style="display:none">
+
+        <div class="field" id="field-fec_expe_n">
+          <label for="fec_expe_n">Fecha de expedición del documento <span class="req">*</span></label>
+          <input type="date" id="fec_expe_n"
+                 oninput="actualizarNatur('FEC_EXPE',this.value); limpiarError('field-fec_expe_n')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-cod_nacio_n">
+          <label for="cod_nacio_n">Nacionalidad <span class="req">*</span></label>
+          <select id="cod_nacio_n"
+                  onchange="actualizarNatur('COD_NACIO',this.value); limpiarError('field-cod_nacio_n')">
+            <option value="">— Seleccione —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field">
+          <label for="act_princ_n">Actividad económica principal</label>
+          <input type="text" id="act_princ_n" maxlength="100"
+                 placeholder="Descripción breve de la actividad"
+                 oninput="actualizarNatur('ACT_PRINC',this.value)" />
+        </div>
+
+        <div class="field" id="field-cod_ciiu_n">
+          <label for="cod_ciiu_n">Actividad CIIU <span class="req">*</span></label>
+          <input type="text" id="cod_ciiu_n" list="lista-ciiu-n"
+                 placeholder="Escriba código o nombre de actividad…"
+                 autocomplete="off"
+                 oninput="onCiiuInputNatur(this.value); limpiarError('field-cod_ciiu_n')" />
+          <datalist id="lista-ciiu-n"></datalist>
+          <span class="error-msg">Seleccione una actividad válida</span>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionBasica()">Limpiar sección</button>
-        <button class="btn btn-primary" type="button"
+        <button class="btn btn-primary" type="button" id="btn-continuar-basica"
                 onclick="validarYContinuar()">Continuar → Sección 2</button>
       </div>
 
@@ -1657,8 +1734,10 @@
 <!--  Scripts JS — orden estricto de carga                                  -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <script src="js/state.js"></script>
+<script src="js/state-natur.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/seccion-basica.js"></script>
+<script src="js/seccion-natur-basica.js"></script>
 <script src="js/seccion-rl.js"></script>
 <script src="js/seccion-sociedad.js"></script>
 <script src="js/seccion-paises.js"></script>
@@ -1672,6 +1751,7 @@
 <script src="js/seccion-bf.js"></script>
 <script src="js/seccion-docs.js"></script>
 <script src="js/guardar.js"></script>
+<script src="js/guardar-natur.js"></script>
 <script src="js/app.js"></script>
 
 <!-- ⚠️ SOLO DESARROLLO — eliminar antes de producción -->
@@ -1685,9 +1765,13 @@
 function descargarExcel() {
   const btn = document.getElementById('btn-descargar-excel');
   if (!btn) return;
-  const codTerc = btn.dataset.codTerc;
+  const codTerc  = btn.dataset.codTerc;
+  const tipoTerc = btn.dataset.tipoTerc || 'J';
   if (!codTerc) return;
-  window.open('/api/exportar-excel/' + encodeURIComponent(codTerc), '_blank');
+  const endpoint = tipoTerc === 'N'
+    ? '/api/exportar-excel-natural/'
+    : '/api/exportar-excel/';
+  window.open(endpoint + encodeURIComponent(codTerc), '_blank');
 }
 
 /* ── Ocultar aviso genérico por ID ──────────────────────────────────────── */
@@ -1697,7 +1781,8 @@ function ocultarAviso(id) {
 }
 
 /* ── Verificar duplicado en num_iden ────────────────────────────────────── */
-let _numIdenBloqueado = false;
+// var (no let) para que sea accesible como window._numIdenBloqueado
+var _numIdenBloqueado = false;
 
 async function verificarDuplicado(numIden) {
   if (!numIden || numIden.length < 3) return;
@@ -1737,7 +1822,6 @@ function validarYContinuar() {
   const numIden = params.get('numIden');
 
   if (modo === 'actualizar' && numIden) {
-    // Mostrar banner informativo en la cabecera
     const header = document.querySelector('.page-header');
     if (header) {
       const banner = document.createElement('div');
@@ -1745,7 +1829,6 @@ function validarYContinuar() {
       banner.innerHTML = '🔄 <strong>Modo Actualizar</strong> — Cargando datos del documento <strong>' + numIden + '</strong>. Modifique los campos necesarios y guarde.';
       header.appendChild(banner);
     }
-    // Pre-cargar documento (esperar a que app.js inicialice los catálogos)
     window.addEventListener('catalogosListos', function() {
       const input = document.getElementById('num_iden');
       if (input) {

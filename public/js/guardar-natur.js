@@ -1,0 +1,227 @@
+'use strict';
+/**
+ * guardar-natur.js — Guardado y exportación de Persona Natural.
+ *
+ * Expone:
+ *  · validarTodoNatural()       — valida todas las secciones del modo N
+ *  · guardarFormularioNatural() — POST /api/guardar-completo-natural
+ *
+ * Parcha onSubmitClick() y reintentarGuardado() de guardar.js para
+ * bifurcar según window.modoPersona.
+ *
+ * El Excel para Natural se descarga vía /api/exportar-excel-natural/:codTerc
+ * (ya manejado por descargarExcel() en formulario.html una vez que
+ *  btn-descargar-excel tenga dataset.tipoTerc = 'N').
+ *
+ * Depende de: state.js, state-natur.js, utils.js,
+ *             seccion-natur-basica.js, seccion-financiera.js,
+ *             seccion-bancaria.js, seccion-pep.js, guardar.js
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Validación completa — modo Natural
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Valida todas las secciones visibles en modo Persona Natural.
+ * @returns {string[]}  Array de mensajes de error (vacío = OK)
+ */
+function validarTodoNatural() {
+  const errores = [];
+
+  // ── Sección 1: Básica ─────────────────────────────────────────────────────
+  const n  = formDataNatur.basica;
+  const db = formData.basica;
+
+  if (!db.COD_VINC)   errores.push('Sección 1: Tipo de vinculación requerido');
+  if (!db.COD_TPDOC)  errores.push('Sección 1: Tipo de documento requerido');
+  if (!db.NUM_IDEN)   errores.push('Sección 1: Número de documento requerido');
+  if (!n.NOM_TERC)    errores.push('Sección 1: Primer nombre requerido');
+  if (!n.APE_TERC)    errores.push('Sección 1: Primer apellido requerido');
+  if (!n.COD_PAIS_EXP) errores.push('Sección 1: País de expedición requerido');
+  if (!n.COD_DEPT_EXP) errores.push('Sección 1: Departamento de expedición requerido');
+  if (!n.COD_MPIO_EXP) errores.push('Sección 1: Ciudad de expedición requerida');
+  if (!db.DIR_TERC)   errores.push('Sección 1: Dirección requerida');
+  if (!db.TEL_TERC)   errores.push('Sección 1: Teléfono celular requerido');
+  if (!db.DIR_MAIL || !esEmailValido(db.DIR_MAIL))
+    errores.push('Sección 1: Email corporativo inválido o vacío');
+  if (!n.MAIL_SARL || !esEmailValido(n.MAIL_SARL))
+    errores.push('Sección 1: Email SARLAFT inválido o vacío');
+  if (!n.FEC_EXPE)    errores.push('Sección 1: Fecha de expedición requerida');
+  if (!n.COD_NACIO)   errores.push('Sección 1: Nacionalidad requerida');
+  if (!n.COD_CIIU)    errores.push('Sección 1: Actividad CIIU requerida');
+
+  // ── Sección 9: Financiera ─────────────────────────────────────────────────
+  const fin = formData.financiera;
+  if (fin.ACT_TOTAL  === null) errores.push('Información financiera: Activos totales requeridos');
+  if (fin.ING_MENS   === null) errores.push('Información financiera: Ingresos mensuales requeridos');
+  if (fin.PAS_TOTAL  === null) errores.push('Información financiera: Pasivos totales requeridos');
+  if (fin.EGR_MENS   === null) errores.push('Información financiera: Egresos mensuales requeridos');
+  if (fin.PATRIMONIO === null) errores.push('Información financiera: Patrimonio requerido');
+
+  // ── Sección 10: Bancaria ──────────────────────────────────────────────────
+  if (!formData.bancaria.length || !formData.bancaria[0].COD_BANCO)
+    errores.push('Información bancaria: Registre al menos una cuenta bancaria');
+
+  // ── Sección 11: PEP + Actividades ─────────────────────────────────────────
+  if (!formData.pep.MAN_RPUB)
+    errores.push('PEP: Indique si maneja recursos públicos');
+  if (!formData.pep.CAR_PUBL)
+    errores.push('PEP: Indique si ejerció cargo público');
+  if (formData.actividades.CERT_INFO !== 'S')
+    errores.push('Certificación: Confirme que la información es verídica');
+
+  return errores;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Construcción del payload
+══════════════════════════════════════════════════════════════════════════════ */
+
+function _construirPayloadNatural() {
+  const db  = formData.basica;
+  const n   = formDataNatur.basica;
+  const fin = formData.financiera;
+  const pep = formData.pep;
+  const act = formData.actividades;
+
+  return {
+    // ── GN_TERCE ────────────────────────────────────────────────────────────
+    COD_TPDOC: db.COD_TPDOC,
+    NUM_IDEN:  db.NUM_IDEN,
+    NOM_TERC:  n.NOM_TERC,
+    SEG_NOMB:  n.SEG_NOMB,
+    APE_TERC:  n.APE_TERC,
+    SEG_APEL:  n.SEG_APEL,
+    DIR_TERC:  db.DIR_TERC,
+    TEL_TERC:  db.TEL_TERC,
+    TEL_TERC2: db.TEL_TERC2,
+    DIR_MAIL:  db.DIR_MAIL,
+    // ── GN_NATUR ────────────────────────────────────────────────────────────
+    COD_VINC:     db.COD_VINC,     // → TIP_VINC en GN_NATUR
+    MAIL_SARL:    n.MAIL_SARL,
+    COD_NACIO:    n.COD_NACIO,
+    ACT_PRINC:    n.ACT_PRINC,
+    COD_CIIU:     n.COD_CIIU,
+    FEC_EXPE:     n.FEC_EXPE,
+    COD_PAIS_EXP: n.COD_PAIS_EXP,
+    COD_DEPT_EXP: n.COD_DEPT_EXP,
+    COD_MPIO_EXP: n.COD_MPIO_EXP,
+    // ── Secciones compartidas ───────────────────────────────────────────────
+    financiera: fin,
+    bancaria:   formData.bancaria,
+    pep: {
+      MAN_RPUB: pep.MAN_RPUB,
+      CAR_PUBL: pep.CAR_PUBL,
+    },
+    actividades: {
+      ACT_VA_FIAT:  act.ACT_VA_FIAT  || 'N',
+      ACT_VA_VA:    act.ACT_VA_VA    || 'N',
+      ACT_TRANS:    act.ACT_TRANS    || 'N',
+      ACT_CUSTO:    act.ACT_CUSTO    || 'N',
+      ACT_SERV_FIN: act.ACT_SERV_FIN || 'N',
+      ACT_SERV_VAP: act.ACT_SERV_VAP || 'N',
+      CERT_INFO:    act.CERT_INFO    || 'N',
+    },
+    documentos: formData.documentos,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Guardado principal
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Valida, construye el payload y llama a POST /api/guardar-completo-natural.
+ */
+async function guardarFormularioNatural() {
+  const btnSubmit = document.getElementById('btn-submit');
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  _mostrarProgresoModal();
+
+  try {
+    const payload = _construirPayloadNatural();
+
+    const resp = await fetch('/api/guardar-completo-natural', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    clearInterval(_progresoTimer);
+    _actualizarProgreso(8, 9, 'Completado ✓');
+    await new Promise(r => setTimeout(r, 500));
+
+    _cerrarProgresoModal();
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+
+    // ── Pantalla de confirmación ─────────────────────────────────────────────
+    const nombreCompleto = [
+      formDataNatur.basica.NOM_TERC,
+      formDataNatur.basica.SEG_NOMB,
+      formDataNatur.basica.APE_TERC,
+      formDataNatur.basica.SEG_APEL,
+    ].filter(Boolean).join(' ');
+
+    _mostrarConfirmacion(nombreCompleto || formData.basica.NUM_IDEN, data.COD_TERC);
+
+    // Habilitar descarga Excel Natural
+    const btnExcel = document.getElementById('btn-descargar-excel');
+    if (btnExcel) {
+      btnExcel.dataset.codTerc  = data.COD_TERC;
+      btnExcel.dataset.tipoTerc = 'N';
+      btnExcel.style.display    = '';
+    }
+
+    console.log('✅ Persona Natural guardada. COD_TERC:', data.COD_TERC);
+
+  } catch (err) {
+    clearInterval(_progresoTimer);
+    _cerrarProgresoModal();
+    _mostrarErrorGuardado(err.message || 'Error al conectar con el servidor.');
+    console.error('guardarFormularioNatural:', err);
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Parches de guardar.js
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Parcha onSubmitClick() para bifurcar según modoPersona.
+ */
+(function patchOnSubmitClick() {
+  const _orig = window.onSubmitClick;
+  window.onSubmitClick = function () {
+    if (window.modoPersona !== 'N') {
+      return _orig && _orig();
+    }
+    // ── Modo Natural ──────────────────────────────────────────────────────
+    ocultarErroresValidacion();
+    const errores = validarTodoNatural();
+    if (errores.length > 0) {
+      mostrarErroresValidacion(errores);
+      mostrarToast(`Hay ${errores.length} campo(s) por completar.`, 'error');
+      return;
+    }
+    guardarFormularioNatural();
+  };
+})();
+
+/**
+ * Parcha reintentarGuardado() para usar el guardado correcto.
+ */
+(function patchReintentarGuardado() {
+  window.reintentarGuardado = function () {
+    cerrarErrorGuardado();
+    if (window.modoPersona === 'N') {
+      guardarFormularioNatural();
+    } else {
+      guardarFormulario();
+    }
+  };
+})();
