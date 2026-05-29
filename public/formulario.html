@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Formulario SARLAFT</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <script>
+    /* Gate: redirigir al inicio si no se aceptaron los T&C */
+    (function() {
+      if (!sessionStorage.getItem('sarlaft_terms_accepted')) {
+        window.location.replace('index.html');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -446,137 +454,19 @@
 
       </div><!-- /rl-bloque-principal -->
 
-      <hr class="rl-divider" />
+      <!-- ── Representantes adicionales (dinámicos) ─────────────────────── -->
+      <div id="rl-extras-list"></div>
 
-      <!-- ── Bloque Suplente ─────────────────────────────────────────────── -->
-      <div class="rl-bloque" id="rl-bloque-suplente">
-
-        <div class="rl-block-header">
-          <span class="rl-badge suplente">S</span>
-          Representante Legal Suplente
-          <span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">
-            (opcional — si diligencia algún campo, complete el bloque)
-          </span>
-        </div>
-
-        <!-- Fila 1 -->
-        <div class="grid-4">
-
-          <div class="field" id="field-rl_s_nom">
-            <label for="rl_s_nom">Nombres <span class="req">*</span></label>
-            <input type="text" id="rl_s_nom" maxlength="100"
-                   placeholder="Nombres completos"
-                   oninput="actualizarRL(1,'NOM_REPR',this.value); limpiarError('field-rl_s_nom')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_ape">
-            <label for="rl_s_ape">Apellidos <span class="req">*</span></label>
-            <input type="text" id="rl_s_ape" maxlength="100"
-                   placeholder="Apellidos completos"
-                   oninput="actualizarRL(1,'APE_REPR',this.value); limpiarError('field-rl_s_ape')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_tipdoc">
-            <label for="rl_s_tipdoc">Tipo de documento <span class="req">*</span></label>
-            <select id="rl_s_tipdoc"
-                    onchange="actualizarRL(1,'TIP_DOCU',this.value); limpiarError('field-rl_s_tipdoc')">
-              <option value="">— Seleccione —</option>
-            </select>
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_numdoc">
-            <label for="rl_s_numdoc">Número de documento <span class="req">*</span></label>
-            <input type="text" id="rl_s_numdoc" maxlength="20"
-                   placeholder="Ej: 12345678"
-                   inputmode="numeric" pattern="[0-9]*"
-                   oninput="this.value=this.value.replace(/\D/g,'');
-                            actualizarRL(1,'NUM_DOCU',this.value);
-                            limpiarError('field-rl_s_numdoc')" />
-            <span class="error-msg">Campo requerido y solo numérico</span>
-          </div>
-        </div>
-
-        <!-- Fila 2 -->
-        <div class="grid-4">
-
-          <div class="field" id="field-rl_s_fec">
-            <label for="rl_s_fec">Fecha de expedición <span class="req">*</span></label>
-            <input type="date" id="rl_s_fec"
-                   onchange="actualizarRL(1,'FEC_EXPE',this.value); limpiarError('field-rl_s_fec')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_pais">
-            <label for="rl_s_pais">País <span class="req">*</span></label>
-            <select id="rl_s_pais"
-                    onchange="onRLPaisChange(this.value,'rl_s',1); limpiarError('field-rl_s_pais')">
-              <option value="">— Seleccione —</option>
-            </select>
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_dept">
-            <label for="rl_s_dept">Departamento <span class="req">*</span></label>
-            <select id="rl_s_dept" disabled
-                    onchange="onRLDeptChange(this.value,'rl_s',1); limpiarError('field-rl_s_dept')">
-              <option value="">— Seleccione país primero —</option>
-            </select>
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_mpio">
-            <label for="rl_s_mpio">Ciudad <span class="req">*</span></label>
-            <select id="rl_s_mpio" disabled
-                    onchange="actualizarRL(1,'COD_MPIO',this.value); limpiarError('field-rl_s_mpio')">
-              <option value="">— Seleccione departamento primero —</option>
-            </select>
-            <span class="error-msg">Campo requerido</span>
-          </div>
-        </div>
-
-        <!-- Fila 3 -->
-        <div class="grid-4">
-
-          <div class="field" id="field-rl_s_dir">
-            <label for="rl_s_dir">Dirección <span class="req">*</span></label>
-            <input type="text" id="rl_s_dir" maxlength="255"
-                   placeholder="Ej: Cra 7 # 45-12"
-                   oninput="actualizarRL(1,'DIR_REPR',this.value); limpiarError('field-rl_s_dir')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field" id="field-rl_s_cel">
-            <label for="rl_s_cel">Celular <span class="req">*</span></label>
-            <input type="tel" id="rl_s_cel" maxlength="20"
-                   placeholder="Ej: 3001234567"
-                   oninput="actualizarRL(1,'CEL_REPR',this.value); limpiarError('field-rl_s_cel')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-
-          <div class="field">
-            <label for="rl_s_tel">Teléfono fijo</label>
-            <input type="tel" id="rl_s_tel" maxlength="20"
-                   placeholder="Ej: 6011234567"
-                   oninput="actualizarRL(1,'TEL_REPR',this.value)" />
-          </div>
-
-          <div class="field" id="field-rl_s_mail">
-            <label for="rl_s_mail">Correo electrónico <span class="req">*</span></label>
-            <input type="email" id="rl_s_mail" maxlength="100"
-                   placeholder="correo@dominio.com"
-                   oninput="actualizarRL(1,'MAIL_REPR',this.value); limpiarError('field-rl_s_mail')" />
-            <span class="error-msg">Email inválido o vacío</span>
-          </div>
-        </div>
-
-      </div><!-- /rl-bloque-suplente -->
+      <!-- Botón agregar representante adicional -->
+      <div class="grupo-add-row" style="margin-top:12px">
+        <button class="btn-agregar-grupo" type="button" onclick="agregarRLExtra()">
+          + Agregar representante adicional
+        </button>
+      </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarBloqueRL(0); limpiarBloqueRL(1)">Limpiar sección</button>
+                onclick="limpiarSeccionRL()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
                 onclick="validarYContinuarRL()">Continuar → Sección 3</button>
       </div>
@@ -804,238 +694,14 @@
         <!-- Sub-título -->
         <p class="cump-subtitle">Información del oficial de cumplimiento</p>
 
-        <!-- ── Sub-bloque B2: Oficial Principal ────────────────────────────── -->
-        <div class="rl-bloque" id="cump-bloque-principal">
+        <!-- ── Lista dinámica de oficiales ───────────────────────────────── -->
+        <div id="cump-oficiales-list" class="grupo-lista"></div>
 
-          <div class="rl-block-header">
-            <span class="rl-badge principal">P</span>
-            Oficial de cumplimiento Principal
-          </div>
-
-          <!-- Fila 1 — Tipo doc | Número | Fecha -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_p_tipdoc">
-              <label for="cump_p_tipdoc">Tipo de documento <span class="req">*</span></label>
-              <select id="cump_p_tipdoc"
-                      onchange="actualizarOficial(0,'TIP_DOCU',this.value); limpiarError('field-cump_p_tipdoc')">
-                <option value="">— Seleccione —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_numdoc">
-              <label for="cump_p_numdoc">Número de documento <span class="req">*</span></label>
-              <input type="text" id="cump_p_numdoc" maxlength="20"
-                     placeholder="Ej: 12345678"
-                     inputmode="numeric" pattern="[0-9]*"
-                     oninput="this.value=this.value.replace(/\D/g,'');
-                              actualizarOficial(0,'NUM_DOCU',this.value);
-                              limpiarError('field-cump_p_numdoc')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_fec">
-              <label for="cump_p_fec">Fecha de expedición <span class="req">*</span></label>
-              <input type="date" id="cump_p_fec"
-                     onchange="actualizarOficial(0,'FEC_EXPE',this.value); limpiarError('field-cump_p_fec')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-          </div>
-
-          <!-- Fila 2 — Nombres | Apellidos | Razón social -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_p_nom">
-              <label for="cump_p_nom">Nombres <span class="req">*</span></label>
-              <input type="text" id="cump_p_nom" maxlength="100"
-                     placeholder="Nombres completos"
-                     oninput="actualizarOficial(0,'NOM_RESP',this.value); limpiarError('field-cump_p_nom')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_ape">
-              <label for="cump_p_ape">Apellidos <span class="req">*</span></label>
-              <input type="text" id="cump_p_ape" maxlength="100"
-                     placeholder="Apellidos completos"
-                     oninput="actualizarOficial(0,'APE_RESP',this.value); limpiarError('field-cump_p_ape')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field">
-              <label for="cump_p_raz">Razón social</label>
-              <input type="text" id="cump_p_raz" maxlength="255"
-                     placeholder="Si aplica — persona jurídica"
-                     oninput="actualizarOficial(0,'RAZ_RESP',this.value)" />
-            </div>
-          </div>
-
-          <!-- Fila 3 — Cascada geográfica + Dirección -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_p_pais">
-              <label for="cump_p_pais">País <span class="req">*</span></label>
-              <select id="cump_p_pais"
-                      onchange="onCumpPaisChange(this.value,'cump_p',0); limpiarError('field-cump_p_pais')">
-                <option value="">— Seleccione —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_dept">
-              <label for="cump_p_dept">Departamento <span class="req">*</span></label>
-              <select id="cump_p_dept" disabled
-                      onchange="onCumpDeptChange(this.value,'cump_p',0); limpiarError('field-cump_p_dept')">
-                <option value="">— Seleccione país primero —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_mpio">
-              <label for="cump_p_mpio">Ciudad <span class="req">*</span></label>
-              <select id="cump_p_mpio" disabled
-                      onchange="actualizarOficial(0,'COD_MPIO',this.value); limpiarError('field-cump_p_mpio')">
-                <option value="">— Seleccione departamento primero —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field">
-              <label for="cump_p_dir">Dirección</label>
-              <input type="text" id="cump_p_dir" maxlength="255"
-                     placeholder="Ej: Cra 7 # 45-12"
-                     oninput="actualizarOficial(0,'DIR_RESP',this.value)" />
-            </div>
-          </div>
-
-          <!-- Fila 4 — Teléfono | Correo -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_p_tel">
-              <label for="cump_p_tel">Teléfono <span class="req">*</span></label>
-              <input type="tel" id="cump_p_tel" maxlength="20"
-                     placeholder="Ej: 3001234567"
-                     oninput="actualizarOficial(0,'TEL_RESP',this.value); limpiarError('field-cump_p_tel')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_p_mail">
-              <label for="cump_p_mail">Correo electrónico <span class="req">*</span></label>
-              <input type="email" id="cump_p_mail" maxlength="100"
-                     placeholder="correo@dominio.com"
-                     oninput="actualizarOficial(0,'MAIL_RESP',this.value); limpiarError('field-cump_p_mail')" />
-              <span class="error-msg">Email inválido o vacío</span>
-            </div>
-          </div>
-
-        </div><!-- /cump-bloque-principal -->
-
-        <hr class="rl-divider" />
-
-        <!-- ── Sub-bloque B2: Oficial Suplente ─────────────────────────────── -->
-        <div class="rl-bloque" id="cump-bloque-suplente">
-
-          <div class="rl-block-header">
-            <span class="rl-badge suplente">S</span>
-            Oficial de cumplimiento Suplente
-            <span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">
-              (opcional — si diligencia algún campo, complete el bloque)
-            </span>
-          </div>
-
-          <!-- Fila 1 -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_s_tipdoc">
-              <label for="cump_s_tipdoc">Tipo de documento <span class="req">*</span></label>
-              <select id="cump_s_tipdoc"
-                      onchange="actualizarOficial(1,'TIP_DOCU',this.value); limpiarError('field-cump_s_tipdoc')">
-                <option value="">— Seleccione —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_numdoc">
-              <label for="cump_s_numdoc">Número de documento <span class="req">*</span></label>
-              <input type="text" id="cump_s_numdoc" maxlength="20"
-                     placeholder="Ej: 12345678"
-                     inputmode="numeric" pattern="[0-9]*"
-                     oninput="this.value=this.value.replace(/\D/g,'');
-                              actualizarOficial(1,'NUM_DOCU',this.value);
-                              limpiarError('field-cump_s_numdoc')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_fec">
-              <label for="cump_s_fec">Fecha de expedición <span class="req">*</span></label>
-              <input type="date" id="cump_s_fec"
-                     onchange="actualizarOficial(1,'FEC_EXPE',this.value); limpiarError('field-cump_s_fec')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-          </div>
-
-          <!-- Fila 2 -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_s_nom">
-              <label for="cump_s_nom">Nombres <span class="req">*</span></label>
-              <input type="text" id="cump_s_nom" maxlength="100"
-                     placeholder="Nombres completos"
-                     oninput="actualizarOficial(1,'NOM_RESP',this.value); limpiarError('field-cump_s_nom')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_ape">
-              <label for="cump_s_ape">Apellidos <span class="req">*</span></label>
-              <input type="text" id="cump_s_ape" maxlength="100"
-                     placeholder="Apellidos completos"
-                     oninput="actualizarOficial(1,'APE_RESP',this.value); limpiarError('field-cump_s_ape')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field">
-              <label for="cump_s_raz">Razón social</label>
-              <input type="text" id="cump_s_raz" maxlength="255"
-                     placeholder="Si aplica — persona jurídica"
-                     oninput="actualizarOficial(1,'RAZ_RESP',this.value)" />
-            </div>
-          </div>
-
-          <!-- Fila 3 -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_s_pais">
-              <label for="cump_s_pais">País <span class="req">*</span></label>
-              <select id="cump_s_pais"
-                      onchange="onCumpPaisChange(this.value,'cump_s',1); limpiarError('field-cump_s_pais')">
-                <option value="">— Seleccione —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_dept">
-              <label for="cump_s_dept">Departamento <span class="req">*</span></label>
-              <select id="cump_s_dept" disabled
-                      onchange="onCumpDeptChange(this.value,'cump_s',1); limpiarError('field-cump_s_dept')">
-                <option value="">— Seleccione país primero —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_mpio">
-              <label for="cump_s_mpio">Ciudad <span class="req">*</span></label>
-              <select id="cump_s_mpio" disabled
-                      onchange="actualizarOficial(1,'COD_MPIO',this.value); limpiarError('field-cump_s_mpio')">
-                <option value="">— Seleccione departamento primero —</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field">
-              <label for="cump_s_dir">Dirección</label>
-              <input type="text" id="cump_s_dir" maxlength="255"
-                     placeholder="Ej: Cra 7 # 45-12"
-                     oninput="actualizarOficial(1,'DIR_RESP',this.value)" />
-            </div>
-          </div>
-
-          <!-- Fila 4 -->
-          <div class="grid-4">
-            <div class="field" id="field-cump_s_tel">
-              <label for="cump_s_tel">Teléfono <span class="req">*</span></label>
-              <input type="tel" id="cump_s_tel" maxlength="20"
-                     placeholder="Ej: 3001234567"
-                     oninput="actualizarOficial(1,'TEL_RESP',this.value); limpiarError('field-cump_s_tel')" />
-              <span class="error-msg">Campo requerido</span>
-            </div>
-            <div class="field" id="field-cump_s_mail">
-              <label for="cump_s_mail">Correo electrónico <span class="req">*</span></label>
-              <input type="email" id="cump_s_mail" maxlength="100"
-                     placeholder="correo@dominio.com"
-                     oninput="actualizarOficial(1,'MAIL_RESP',this.value); limpiarError('field-cump_s_mail')" />
-              <span class="error-msg">Email inválido o vacío</span>
-            </div>
-          </div>
-
-        </div><!-- /cump-bloque-suplente -->
+        <div class="pais-actions" style="margin-top:10px">
+          <button class="btn-agregar-pais" type="button" onclick="agregarCump()">
+            ＋ Agregar miembro
+          </button>
+        </div>
 
       </div><!-- /bloque-cump-sistema -->
 
@@ -1841,4 +1507,4 @@ function validarYContinuar() {
 </script>
 
 </body>
-</html>
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          

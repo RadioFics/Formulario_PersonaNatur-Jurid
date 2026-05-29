@@ -1,352 +1,299 @@
 /**
  * seccion-cumplimiento.js — Sección 5: "Información del Sistema de cumplimiento"
  *
- * Contiene:
- *  · actualizarCump(campo, valor)          — escribe en formData.cumplimiento
- *  · actualizarOficial(idx, campo, valor)  — escribe en formData.cumplimiento.oficiales[idx]
- *  · mostrarBloqueCump(el)                 — fade-in del bloque B1 (condicional grande)
- *  · ocultarBloqueCump(el)                 — fade-out del bloque B1
- *  · onTieneSistemaChange(valor)           — radio Sí/No → muestra/oculta B1
- *  · onCumpPaisChange(codPais, pref, idx)  — cascada País → Dpto → Ciudad por bloque
- *  · onCumpDeptChange(codDept, pref, idx)  — cascada Dpto → Ciudad por bloque
- *  · validarBloqueOficial(idx)             — valida Principal (siempre) o Suplente (si tocado)
- *  · validarSeccionCumplimiento()          — valida sección completa
- *  · validarYContinuarCumplimiento()       — botón "Continuar → Sección 6"
- *  · limpiarBloqueOficial(idx)             — resetea DOM + estado de un bloque oficial
- *  · limpiarSeccionCumplimiento()          — botón "Limpiar sección"
+ * Patrón: lista plana de oficiales. Cada oficial tiene un selector de Rol
+ * (Principal / Suplente). El botón "+ Agregar miembro" añade cualquier tipo.
  *
- * Prefijos de ID por bloque:
- *   Principal → 'cump_p'   (cump_p_pais, cump_p_dept, cump_p_mpio, …)
- *   Suplente  → 'cump_s'   (cump_s_pais, cump_s_dept, cump_s_mpio, …)
+ * State: formData.cumplimiento.oficiales[i] = { _id, TIP_REPR, ...campos }
+ * API IDs: cump_{id}_{campo}
  *
  * Depende de: state.js, utils.js
  */
 'use strict';
 
-/* ── Estado ─────────────────────────────────────────────────────────────────── */
+let _cumpId = 0;
 
-/**
- * Escribe un valor en formData.cumplimiento[campo].
- * Convierte cadenas vacías a null.
- */
+/* ── Estado ─────────────────────────────────────────────────────────────────── */
 function actualizarCump(campo, valor) {
   formData.cumplimiento[campo] = valor === '' ? null : valor;
 }
 
-/**
- * Escribe un valor en formData.cumplimiento.oficiales[idx][campo].
- * @param {number} idx   0 = Principal | 1 = Suplente
- * @param {string} campo Nombre del campo
- * @param {*}      valor
- */
-function actualizarOficial(idx, campo, valor) {
-  formData.cumplimiento.oficiales[idx][campo] = valor === '' ? null : valor;
+/* ── Fábrica de oficial ──────────────────────────────────────────────────────── */
+function _cumpCampos(tipRepr) {
+  return {
+    TIP_REPR: tipRepr || 'P',
+    TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
+    NOM_RESP: '', APE_RESP: '', RAZ_RESP: '',
+    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    DIR_RESP: '', TEL_RESP: '', MAIL_RESP: '',
+  };
+}
+function _cumpNuevo(tipRepr) {
+  return Object.assign({ _id: _cumpId++ }, _cumpCampos(tipRepr));
+}
+function _cumpGet(id) { return formData.cumplimiento.oficiales.find(o => o._id === id); }
+function _cumpPos(id) { return formData.cumplimiento.oficiales.findIndex(o => o._id === id); }
+
+function actualizarOficial(id, campo, valor) {
+  const o = _cumpGet(id);
+  if (o) o[campo] = valor === '' ? null : valor;
+}
+
+/* ── Título dinámico ─────────────────────────────────────────────────────────── */
+function actualizarTituloCump(id) {
+  const o = _cumpGet(id);
+  if (!o) return;
+  const pos = _cumpPos(id) + 1;
+  const nom = [(o.NOM_RESP || '').trim(), (o.APE_RESP || '').trim()].filter(Boolean).join(' ');
+  const rol = o.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
+  const el  = document.getElementById(`cump_titulo_${id}`);
+  if (el) el.textContent = `Oficial ${pos} (${rol})${nom ? ' — ' + nom : ''}`;
+}
+function _cumpRenumerarTodos() {
+  formData.cumplimiento.oficiales.forEach(o => actualizarTituloCump(o._id));
+}
+
+/* ── Colapsar/expandir ──────────────────────────────────────────────────────── */
+function toggleGrupoCump(id) {
+  const body = document.getElementById(`cump_body_${id}`);
+  if (body) body.classList.toggle('collapsed');
 }
 
 /* ── Visibilidad condicional del bloque B1 ──────────────────────────────────── */
-
-/**
- * Muestra el bloque B1 con transición suave.
- * Usa max-height:4000px para cubrir el contenido extenso del bloque.
- * @param {HTMLElement} el  El elemento #bloque-cump-sistema
- */
 function mostrarBloqueCump(el) {
   el.style.display = 'flex';
   requestAnimationFrame(() => requestAnimationFrame(() => {
     el.style.opacity   = '1';
-    el.style.maxHeight = '4000px';
+    el.style.maxHeight = '99999px';
   }));
 }
 
-/**
- * Oculta el bloque B1 con fade-out y colapsa su espacio al terminar.
- * @param {HTMLElement} el
- */
 function ocultarBloqueCump(el) {
   el.style.opacity   = '0';
   el.style.maxHeight = '0';
   setTimeout(() => { el.style.display = 'none'; }, 210);
 }
 
-/**
- * Reacciona al cambio del radio "¿Tiene sistema implementado?".
- * - 'S' → muestra bloque B1.
- * - 'N' → oculta bloque B1 y limpia errores visuales del sub-bloque.
- *
- * @param {string} valor  'S' | 'N'
- */
 function onTieneSistemaChange(valor) {
   actualizarCump('TIE_JUNTA', valor);
   const bloque = document.getElementById('bloque-cump-sistema');
   if (valor === 'S') {
     mostrarBloqueCump(bloque);
+    if (formData.cumplimiento.oficiales.length === 0) agregarCump('P');
+    renderListaCump();
   } else {
     ocultarBloqueCump(bloque);
     bloque.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
   }
 }
 
-/* ── Cascadas geográficas (independientes por bloque) ───────────────────────── */
-
-/**
- * Reacciona al cambio de País en un bloque de oficial.
- * Resetea Departamento y Ciudad del mismo bloque sin afectar el otro.
- *
- * @param {string} codPais  Valor seleccionado
- * @param {string} prefijo  'cump_p' | 'cump_s'
- * @param {number} idx      0 | 1
- */
-async function onCumpPaisChange(codPais, prefijo, idx) {
-  // Normaliza a string para mantener consistencia con DOM
-  actualizarOficial(idx, 'COD_PAIS', codPais ? String(codPais) : null);
-  actualizarOficial(idx, 'COD_DEPT', null);
-  actualizarOficial(idx, 'COD_MPIO', null);
-
-  const selDept = document.getElementById(`${prefijo}_dept`);
-  const selMpio = document.getElementById(`${prefijo}_mpio`);
-
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
-  selMpio.disabled  = true;
-  limpiarError(`field-${prefijo}_dept`);
-  limpiarError(`field-${prefijo}_mpio`);
-
-  if (!codPais) {
-    selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
-    selDept.disabled  = true;
-    return;
-  }
-
-  if (codPais === COD_COLOMBIA) {
-    selDept.disabled = false;
-    await cargarCatalogo(
-      '/api/catalogo/departamentos', `${prefijo}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',
-      { cod_pais: codPais }
-    );
-  } else {
-    // País extranjero: Departamento = "No aplica"
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
-    selDept.value     = 'NA';
-    selDept.disabled  = true;
-    actualizarOficial(idx, 'COD_DEPT', 'NA');
-
-    selMpio.disabled  = false;
-    selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
-    await cargarCatalogo(
-      '/api/catalogo/ciudades', `${prefijo}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
-      { cod_pais: codPais }
-    );
-    selMpio.onchange = (e) => {
-      actualizarOficial(idx, 'COD_MPIO', e.target.value ? String(e.target.value) : null);
-      limpiarError(`field-${prefijo}_mpio`);
-    };
-  }
+/* ── Opciones de catálogo ────────────────────────────────────────────────────── */
+function _cumpTdOpts() {
+  return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+}
+function _cumpPaOpts() {
+  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —');
 }
 
-/**
- * Reacciona al cambio de Departamento en un bloque de oficial.
- * Recarga las ciudades del mismo bloque.
- *
- * @param {string} codDept
- * @param {string} prefijo  'cump_p' | 'cump_s'
- * @param {number} idx      0 | 1
- */
-async function onCumpDeptChange(codDept, prefijo, idx) {
-  // Normaliza a string para mantener consistencia con DOM
-  actualizarOficial(idx, 'COD_DEPT', codDept ? String(codDept) : null);
-  actualizarOficial(idx, 'COD_MPIO', null);
-
-  const selMpio = document.getElementById(`${prefijo}_mpio`);
-  const codPais = document.getElementById(`${prefijo}_pais`).value;
-
-  selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
-  selMpio.disabled  = true;
-
-  if (!codDept || !codPais) return;
-
-  await cargarCatalogo(
-    '/api/catalogo/ciudades', `${prefijo}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
-    { cod_dept: codDept, cod_pais: codPais }
-  );
-  selMpio.disabled = false;
-  selMpio.onchange = (e) => {
-    actualizarOficial(idx, 'COD_MPIO', e.target.value ? String(e.target.value) : null);
-    limpiarError(`field-${prefijo}_mpio`);
-  };
+/* ── HTML de un oficial ──────────────────────────────────────────────────────── */
+function _cumpOficialHTML(o) {
+  const id  = o._id;
+  const td  = _cumpTdOpts();
+  const pa  = _cumpPaOpts();
+  const selS = o.TIP_REPR === 'S' ? 'selected' : '';
+  const selP = o.TIP_REPR !== 'S' ? 'selected' : '';
+  return `
+    <div class="grupo-header" onclick="toggleGrupoCump(${id})">
+      <span class="grupo-titulo" id="cump_titulo_${id}">Oficial ${_cumpPos(id)+1}</span>
+      <button class="btn-eliminar-grupo" type="button" onclick="eliminarCump(event,${id})" title="Eliminar">✕</button>
+    </div>
+    <div class="grupo-body" id="cump_body_${id}">
+      <div class="grid-4" style="margin-bottom:6px">
+        <div class="field">
+          <label>Rol <span class="req">*</span></label>
+          <select id="cump_${id}_tipRepr"
+                  onchange="actualizarOficial(${id},'TIP_REPR',this.value);actualizarTituloCump(${id})">
+            <option value="P" ${selP}>Principal</option>
+            <option value="S" ${selS}>Suplente</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-4">
+        <div class="field" id="field-cump_${id}_tipdoc">
+          <label>Tipo doc. <span class="req">*</span></label>
+          <select id="cump_${id}_tipdoc"
+                  onchange="actualizarOficial(${id},'TIP_DOCU',this.value);limpiarError('field-cump_${id}_tipdoc')">
+            ${td}
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_numdoc">
+          <label>Número doc. <span class="req">*</span></label>
+          <input type="text" id="cump_${id}_numdoc" maxlength="20" inputmode="numeric"
+                 oninput="this.value=this.value.replace(/\D/g,'');actualizarOficial(${id},'NUM_DOCU',this.value);limpiarError('field-cump_${id}_numdoc')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_fec">
+          <label>Fecha expedición <span class="req">*</span></label>
+          <input type="date" id="cump_${id}_fec"
+                 onchange="actualizarOficial(${id},'FEC_EXPE',this.value);limpiarError('field-cump_${id}_fec')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="cump_${id}_nom" maxlength="100"
+                 oninput="actualizarOficial(${id},'NOM_RESP',this.value);actualizarTituloCump(${id});limpiarError('field-cump_${id}_nom')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+      <div class="grid-4">
+        <div class="field" id="field-cump_${id}_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="cump_${id}_ape" maxlength="100"
+                 oninput="actualizarOficial(${id},'APE_RESP',this.value);limpiarError('field-cump_${id}_ape')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field">
+          <label>Razón social</label>
+          <input type="text" id="cump_${id}_raz" maxlength="255" placeholder="Si aplica"
+                 oninput="actualizarOficial(${id},'RAZ_RESP',this.value)" />
+        </div>
+        <div class="field" id="field-cump_${id}_tel">
+          <label>Teléfono <span class="req">*</span></label>
+          <input type="tel" id="cump_${id}_tel" maxlength="20"
+                 oninput="actualizarOficial(${id},'TEL_RESP',this.value);limpiarError('field-cump_${id}_tel')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_mail">
+          <label>Correo electrónico <span class="req">*</span></label>
+          <input type="email" id="cump_${id}_mail" maxlength="100"
+                 oninput="actualizarOficial(${id},'MAIL_RESP',this.value);limpiarError('field-cump_${id}_mail')" />
+          <span class="error-msg">Email inválido o vacío</span>
+        </div>
+      </div>
+      <div class="grid-4">
+        <div class="field" id="field-cump_${id}_pais">
+          <label>País <span class="req">*</span></label>
+          <select id="cump_${id}_pais"
+                  onchange="onCumpPaisChange(${id},this.value);limpiarError('field-cump_${id}_pais')">
+            ${pa}
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_dept">
+          <label>Departamento <span class="req">*</span></label>
+          <select id="cump_${id}_dept" disabled
+                  onchange="onCumpDeptChange(${id},this.value);limpiarError('field-cump_${id}_dept')">
+            <option value="">— Seleccione país primero —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-cump_${id}_mpio">
+          <label>Ciudad <span class="req">*</span></label>
+          <select id="cump_${id}_mpio" disabled
+                  onchange="actualizarOficial(${id},'COD_MPIO',this.value);limpiarError('field-cump_${id}_mpio')">
+            <option value="">— Seleccione departamento primero —</option>
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field">
+          <label>Dirección</label>
+          <input type="text" id="cump_${id}_dir" maxlength="255"
+                 oninput="actualizarOficial(${id},'DIR_RESP',this.value)" />
+        </div>
+      </div>
+    </div>`;
 }
 
-/* ── Validación ─────────────────────────────────────────────────────────────── */
+/* ── Crear elemento DOM ──────────────────────────────────────────────────────── */
+function _crearGrupoCumpEl(o) {
+  const el = document.createElement('div');
+  el.className = 'grupo-item';
+  el.id        = `cump_grupo_${o._id}`;
+  el.innerHTML = _cumpOficialHTML(o);
+  return el;
+}
 
-/**
- * Valida un bloque de oficial.
- *
- * - Principal (idx 0): todos los campos requeridos son obligatorios.
- * - Suplente  (idx 1): si ningún campo fue tocado → válido (no se guardará).
- *                      Si al menos un campo fue tocado → se exigen todos.
- *
- * @param {number} idx  0 | 1
- * @returns {boolean}
- */
-function validarBloqueOficial(idx) {
-  const prefijo = idx === 0 ? 'cump_p' : 'cump_s';
-  const d       = formData.cumplimiento.oficiales[idx];
+/* ── Hidratar campos ─────────────────────────────────────────────────────────── */
+function _hydrateCumpFields(o, el) {
+  const id  = o._id;
+  const set = (sel, val) => { const f = el.querySelector(sel); if (f) f.value = val || ''; };
 
-  const camposReq = [
-    { fieldId: `field-${prefijo}_tipdoc`, valor: d.TIP_DOCU },
-    { fieldId: `field-${prefijo}_numdoc`, valor: d.NUM_DOCU },
-    { fieldId: `field-${prefijo}_fec`,    valor: d.FEC_EXPE },
-    { fieldId: `field-${prefijo}_nom`,    valor: d.NOM_RESP },
-    { fieldId: `field-${prefijo}_ape`,    valor: d.APE_RESP },
-    { fieldId: `field-${prefijo}_pais`,   valor: d.COD_PAIS },
-    { fieldId: `field-${prefijo}_dept`,   valor: d.COD_DEPT },
-    { fieldId: `field-${prefijo}_mpio`,   valor: d.COD_MPIO },
-    { fieldId: `field-${prefijo}_tel`,    valor: d.TEL_RESP  },
-  ];
+  set(`#cump_${id}_tipRepr`, o.TIP_REPR);
+  set(`#cump_${id}_tipdoc`,  o.TIP_DOCU);
+  set(`#cump_${id}_numdoc`,  o.NUM_DOCU);
+  set(`#cump_${id}_fec`,     o.FEC_EXPE);
+  set(`#cump_${id}_nom`,     o.NOM_RESP);
+  set(`#cump_${id}_ape`,     o.APE_RESP);
+  set(`#cump_${id}_raz`,     o.RAZ_RESP);
+  set(`#cump_${id}_tel`,     o.TEL_RESP);
+  set(`#cump_${id}_mail`,    o.MAIL_RESP);
+  set(`#cump_${id}_dir`,     o.DIR_RESP);
 
-  // Suplente: si el bloque está completamente intacto → OK sin validar
-  if (idx === 1) {
-    const alguno = camposReq.some(c => c.valor && String(c.valor).trim() !== '')
-                || (d.MAIL_RESP && String(d.MAIL_RESP).trim() !== '')
-                || (d.RAZ_RESP  && String(d.RAZ_RESP).trim()  !== '');
-    if (!alguno) return true;
+  if (o.COD_PAIS) {
+    onCumpPaisChange(id, o.COD_PAIS)
+      .then(() => {
+        const deptEl = el.querySelector(`#cump_${id}_dept`);
+        if (deptEl) deptEl.value = o.COD_DEPT || '';
+        if (o.COD_DEPT && o.COD_DEPT !== 'NA') return onCumpDeptChange(id, o.COD_DEPT);
+        return Promise.resolve();
+      })
+      .then(() => {
+        const mpioEl = el.querySelector(`#cump_${id}_mpio`);
+        if (mpioEl) mpioEl.value = o.COD_MPIO || '';
+      })
+      .catch(err => console.error('hydrateCump:', err));
   }
 
-  let ok = true;
+  setTimeout(() => actualizarTituloCump(id), 0);
+}
 
-  camposReq.forEach(({ fieldId, valor }) => {
-    if (!valor || String(valor).trim() === '') {
-      mostrarError(fieldId);
-      ok = false;
+/* ── Renderizado de la lista ─────────────────────────────────────────────────── */
+function renderListaCump() {
+  const list = document.getElementById('cump-oficiales-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (!Array.isArray(formData.cumplimiento.oficiales)) {
+    formData.cumplimiento.oficiales = [];
+  }
+
+  // Migrar formato antiguo (array indexado sin _id) al nuevo plano
+  const migrados = [];
+  for (const o of formData.cumplimiento.oficiales) {
+    if (o._id === undefined) {
+      // Formato viejo: objeto sin _id con TIP_REPR
+      migrados.push(Object.assign({ _id: _cumpId++ }, o));
+    } else {
+      migrados.push(o);
     }
-  });
-
-  if (!d.MAIL_RESP || !esEmailValido(d.MAIL_RESP)) {
-    mostrarError(`field-${prefijo}_mail`);
-    ok = false;
   }
+  if (migrados.length > 0) formData.cumplimiento.oficiales = migrados;
 
-  return ok;
+  _cumpId = formData.cumplimiento.oficiales.length === 0
+    ? 0
+    : Math.max(...formData.cumplimiento.oficiales.map(o => o._id)) + 1;
+
+  for (const o of formData.cumplimiento.oficiales) {
+    const el = _crearGrupoCumpEl(o);
+    list.appendChild(el);
+    _hydrateCumpFields(o, el);
+  }
+  _cumpSyncEliminar();
 }
 
-/**
- * Valida toda la sección de cumplimiento.
- *
- * Siempre requerido:
- *   · DESC_NORM
- *
- * Solo si TIE_JUNTA = 'S':
- *   · SIS_PREVE
- *   · Bloque oficial Principal (completo)
- *   · Bloque oficial Suplente (condicional)
- *
- * @returns {boolean}
- */
-function validarSeccionCumplimiento() {
-  let ok = true;
-
-  // Normatividad — siempre requerida
-  if (!formData.cumplimiento.DESC_NORM || !String(formData.cumplimiento.DESC_NORM).trim()) {
-    mostrarError('field-cump_desc_norm');
-    ok = false;
+/* ── Agregar / Eliminar ──────────────────────────────────────────────────────── */
+function agregarCump(tipRepr) {
+  if (!Array.isArray(formData.cumplimiento.oficiales)) {
+    formData.cumplimiento.oficiales = [];
   }
-
-  // Campos del sub-bloque B1 — solo si tiene sistema
-  if (formData.cumplimiento.TIE_JUNTA === 'S') {
-    if (!formData.cumplimiento.SIS_PREVE) {
-      mostrarError('field-cump_sis_preve');
-      ok = false;
-    }
-    const okP = validarBloqueOficial(0);
-    const okS = validarBloqueOficial(1);
-    if (!okP || !okS) ok = false;
-  }
-
-  return ok;
-}
-
-/* ── Acciones de botones ────────────────────────────────────────────────────── */
-
-/** Valida la sección y, si es correcta, avanza al acordeón 6. */
-function validarYContinuarCumplimiento() {
-  if (!validarSeccionCumplimiento()) {
-    document.getElementById('accordion-cumplimiento').classList.remove('collapsed');
-    mostrarToast('Corrija los campos marcados en rojo.', 'error');
-    const primerError = document.querySelector('#accordion-cumplimiento .field.error');
-    if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
-
-  mostrarToast('Sección 5 completa. Continúe con la siguiente sección.', 'success');
-  document.getElementById('accordion-cumplimiento').classList.add('collapsed');
-  const acc6 = document.getElementById('accordion-jd');
-  acc6.classList.remove('collapsed');
-  acc6.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  console.log('✅ formData.cumplimiento:', JSON.stringify(formData.cumplimiento, null, 2));
-}
-
-/**
- * Resetea un bloque de oficial: DOM + estado + errores visuales.
- * @param {number} idx  0 = Principal | 1 = Suplente
- */
-function limpiarBloqueOficial(idx) {
-  const prefijo  = idx === 0 ? 'cump_p'               : 'cump_s';
-  const bloqueId = idx === 0 ? 'cump-bloque-principal' : 'cump-bloque-suplente';
-  const bloque   = document.getElementById(bloqueId);
-
-  bloque.querySelectorAll('input, select').forEach(el => {
-    el.tagName === 'SELECT' ? (el.selectedIndex = 0) : (el.value = '');
-  });
-
-  const selDept = document.getElementById(`${prefijo}_dept`);
-  const selMpio = document.getElementById(`${prefijo}_mpio`);
-  selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
-  selDept.disabled  = true;
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
-  selMpio.disabled  = true;
-
-  formData.cumplimiento.oficiales[idx] = {
-    TIP_REPR: idx === 0 ? 'P' : 'S',
-    TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-    NOM_RESP: '', APE_RESP: '', RAZ_RESP: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-    DIR_RESP: '', TEL_RESP: '', MAIL_RESP: '',
-  };
-
-  bloque.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
-}
-
-/** Resetea la sección completa al estado inicial. */
-function limpiarSeccionCumplimiento() {
-  // Textarea
-  const ta = document.getElementById('cump_desc_norm');
-  if (ta) ta.value = '';
-  formData.cumplimiento.DESC_NORM = '';
-  limpiarError('field-cump_desc_norm');
-
-  // Radio — volver a "No"
-  const radioNo = document.querySelector('input[name="cump_tie_sist"][value="N"]');
-  if (radioNo) radioNo.checked = true;
-  formData.cumplimiento.TIE_JUNTA = 'N';
-
-  // Ocultar bloque B1 sin transición
-  const bloque = document.getElementById('bloque-cump-sistema');
-  bloque.style.transition = 'none';
-  bloque.style.opacity    = '0';
-  bloque.style.maxHeight  = '0';
-  bloque.style.display    = 'none';
-  setTimeout(() => { bloque.style.transition = ''; }, 50);
-
-  // Limpiar sistema
-  const selSist = document.getElementById('cump_sis_preve');
-  if (selSist) selSist.selectedIndex = 0;
-  formData.cumplimiento.SIS_PREVE = null;
-  limpiarError('field-cump_sis_preve');
-
-  // Limpiar bloques de oficiales
-  limpiarBloqueOficial(0);
-  limpiarBloqueOficial(1);
-
-  mostrarToast('Sección limpiada.', 'success');
+  const nuevo = _cumpNuevo(tipRepr || 'P');
+  formData.cumplimiento.oficiales.push(nuevo);
+  document.querySelectorAll('#cump-oficiales-list .grupo-body').forEach(b => b.classList.add('collapsed'));
+  const list = document.getElementById('cump-oficiales-list');
+  const el   = _crearGrupoCumpEl(nuevo);
+  list.appendChild(el);
+  _cumpSyncEliminar();
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  guardarBorradorDebounced();
 }

@@ -1,71 +1,66 @@
 /**
  * seccion-rf.js — Sección 7: "Revisores fiscales"
  *
- * Patrón: grupos dinámicos con IDs estables (_id) que no cambian al borrar.
- * Cada grupo tiene bloque Principal (requerido) + Suplente (opcional) +
- * condicional de firma (REVI_FIRMA).
+ * Patrón: lista plana de miembros. Cada miembro tiene un selector de Rol
+ * (Principal / Suplente). El botón "+ Agregar miembro" añade cualquier tipo.
+ * Cada grupo mantiene el condicional de firma auditora (REVI_FIRMA).
  *
- * API IDs: rf_{id}_{bloc}_{campo}   bloc = 'p' | 's'
- *          rf_{id}_firma_wrap / rf_{id}_firma_raz / rf_{id}_firma_tipdoc / rf_{id}_firma_numdoc
- * State:   formData.revisores.revisores[i].Principal / .Suplente
+ * API IDs: rf_{id}_{campo}
+ * State:   formData.revisores.revisores[i] = { _id, TIP_REPR, REVI_FIRMA, ...campos }
  *
- * Depende de: state.js, utils.js (incluye getOpcionesHTML)
+ * Depende de: state.js, utils.js
  */
 'use strict';
 
-/* ── Counter de IDs estables ─────────────────────────────────────────────────── */
 let _rfId = 0;
 
 /* ── Fábrica de estado ──────────────────────────────────────────────────────── */
-function _rfCampos() {
+function _rfCampos(tipRepr) {
   return {
-    NOM_REVI: '', APE_REVI: '', RAZ_REVI: '',
-    TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-    DIR_REVI: '', CEL_REVI: '', TEL_REVI: '', OBS_REVI: '', MAIL_REVI: '',
+    TIP_REPR:    tipRepr || 'P',
+    REVI_FIRMA:  'N',
+    RAZ_FIRMA:   '',
+    TIP_DOCU_FIR: null,
+    NUM_DOCU_FIR: '',
+    NOM_REVI:    '', APE_REVI: '', RAZ_REVI: '',
+    TIP_DOCU:    null, NUM_DOCU: '', FEC_EXPE: '',
+    COD_PAIS:    null, COD_DEPT: null, COD_MPIO: null,
+    DIR_REVI:    '', CEL_REVI: '', TEL_REVI: '', OBS_REVI: '', MAIL_REVI: '',
   };
 }
-function _rfNuevo() {
-  return {
-    _id: _rfId++,
-    REVI_FIRMA: 'N', RAZ_FIRMA: '', TIP_DOCU_FIR: null, NUM_DOCU_FIR: '',
-    Principal: _rfCampos(), Suplente: _rfCampos(),
-  };
+function _rfNuevo(tipRepr) {
+  return Object.assign({ _id: _rfId++ }, _rfCampos(tipRepr));
 }
 function _rfGet(id) { return formData.revisores.revisores.find(r => r._id === id); }
 function _rfPos(id) { return formData.revisores.revisores.findIndex(r => r._id === id); }
 
 /* ── Actualización de estado ─────────────────────────────────────────────────── */
-function actualizarRFRev(id, SK, campo, valor) {
-  const r = _rfGet(id);
-  if (r) r[SK][campo] = valor === '' ? null : valor;
-}
-function actualizarRFGrupo(id, campo, valor) {
+function actualizarRF(id, campo, valor) {
   const r = _rfGet(id);
   if (r) r[campo] = valor === '' ? null : valor;
 }
 
-/* ── Título dinámico del grupo ──────────────────────────────────────────────── */
+/* ── Título dinámico ─────────────────────────────────────────────────────────── */
 function actualizarTituloRF(id) {
   const r = _rfGet(id);
   if (!r) return;
-  const pos    = _rfPos(id) + 1;
-  const nombre = [(r.Principal.NOM_REVI || '').trim(), (r.Principal.APE_REVI || '').trim()]
-                   .filter(Boolean).join(' ');
-  const el = document.getElementById(`rf_titulo_${id}`);
-  if (el) el.textContent = `Revisor ${pos}${nombre ? ' — ' + nombre : ''}`;
+  const pos = _rfPos(id) + 1;
+  const nom = [(r.NOM_REVI || '').trim(), (r.APE_REVI || '').trim()].filter(Boolean).join(' ');
+  const rol = r.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
+  const el  = document.getElementById(`rf_titulo_${id}`);
+  if (el) el.textContent = `Revisor ${pos} (${rol})${nom ? ' — ' + nom : ''}`;
 }
 function _rfRenumerarTodos() {
   formData.revisores.revisores.forEach(r => actualizarTituloRF(r._id));
 }
 
-/* ── Colapsar/expandir grupo interno ────────────────────────────────────────── */
+/* ── Colapsar/expandir ──────────────────────────────────────────────────────── */
 function toggleGrupoRF(id) {
   const body = document.getElementById(`rf_body_${id}`);
   if (body) body.classList.toggle('collapsed');
 }
 
-/* ── Visibilidad de la lista (booleano de cabecera) ─────────────────────────── */
+/* ── Visibilidad de la lista ─────────────────────────────────────────────────── */
 function onTieneRevisorChange(valor) {
   formData.revisores.TIE_REVIS = valor;
   const wrap = document.getElementById('rf-lista-wrap');
@@ -74,7 +69,7 @@ function onTieneRevisorChange(valor) {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       wrap.style.opacity = '1'; wrap.style.maxHeight = '99999px';
     }));
-    if (formData.revisores.revisores.length === 0) agregarRF();
+    if (formData.revisores.revisores.length === 0) agregarRF('P');
   } else {
     wrap.style.opacity = '0'; wrap.style.maxHeight = '0';
     setTimeout(() => {
@@ -84,7 +79,7 @@ function onTieneRevisorChange(valor) {
   }
 }
 
-/* ── Condicional de firma (por grupo) ────────────────────────────────────────── */
+/* ── Condicional de firma (por revisor) ──────────────────────────────────────── */
 function onTieneFirmaChange(id, valor) {
   const r = _rfGet(id);
   if (r) r.REVI_FIRMA = valor;
@@ -101,7 +96,7 @@ function onTieneFirmaChange(id, valor) {
   }
 }
 
-/* ── Opciones desde caché ────────────────────────────────────────────────────── */
+/* ── Opciones de catálogo ────────────────────────────────────────────────────── */
 function _rfTdOpts() {
   return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
 }
@@ -109,139 +104,126 @@ function _rfPaOpts() {
   return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —');
 }
 
-/* ── HTML de un bloque (Principal o Suplente) ───────────────────────────────── */
-function _rfBloque(id, bloc) {
-  const SK  = bloc === 'p' ? 'Principal' : 'Suplente';
-  const R   = bloc === 'p' ? ' <span class="req">*</span>' : '';
+/* ── HTML de un revisor ──────────────────────────────────────────────────────── */
+function _rfMiembroHTML(r) {
+  const id  = r._id;
   const td  = _rfTdOpts();
   const pa  = _rfPaOpts();
-  const lbl = bloc === 'p' ? 'Principal' : 'Suplente';
-  const bdg = bloc === 'p'
-    ? '<span class="rl-badge principal">P</span>'
-    : '<span class="rl-badge suplente">S</span>';
-  const opt = bloc === 's'
-    ? '<span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">(opcional)</span>'
-    : '';
+  const selS = r.TIP_REPR === 'S' ? 'selected' : '';
+  const selP = r.TIP_REPR !== 'S' ? 'selected' : '';
   return `
-    <div class="rl-bloque">
-      <div class="rl-block-header">${bdg} ${lbl} ${opt}</div>
+    <div class="grupo-header" onclick="toggleGrupoRF(${id})">
+      <span class="grupo-titulo" id="rf_titulo_${id}">Revisor ${_rfPos(id)+1}</span>
+      <button class="btn-eliminar-grupo" type="button" onclick="eliminarRF(event,${id})" title="Eliminar">✕</button>
+    </div>
+    <div class="grupo-body" id="rf_body_${id}">
+      <div class="grid-4" style="margin-bottom:6px">
+        <div class="field">
+          <label>Rol <span class="req">*</span></label>
+          <select id="rf_${id}_tipRepr"
+                  onchange="actualizarRF(${id},'TIP_REPR',this.value);actualizarTituloRF(${id})">
+            <option value="P" ${selP}>Principal</option>
+            <option value="S" ${selS}>Suplente</option>
+          </select>
+        </div>
+      </div>
       <div class="grid-4">
-        <div class="field" id="field-rf_${id}_${bloc}_nom">
-          <label>Nombres${R}</label>
-          <input type="text" id="rf_${id}_${bloc}_nom" maxlength="100" placeholder="Nombres completos"
-                 oninput="actualizarRFRev(${id},'${SK}','NOM_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_${bloc}_nom')" />
+        <div class="field" id="field-rf_${id}_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_nom" maxlength="100" placeholder="Nombres completos"
+                 oninput="actualizarRF(${id},'NOM_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_nom')" />
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_ape">
-          <label>Apellidos${R}</label>
-          <input type="text" id="rf_${id}_${bloc}_ape" maxlength="100" placeholder="Apellidos completos"
-                 oninput="actualizarRFRev(${id},'${SK}','APE_REVI',this.value);limpiarError('field-rf_${id}_${bloc}_ape')" />
+        <div class="field" id="field-rf_${id}_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+                 oninput="actualizarRF(${id},'APE_REVI',this.value);limpiarError('field-rf_${id}_ape')" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field">
           <label>Razón social</label>
-          <input type="text" id="rf_${id}_${bloc}_raz" maxlength="255" placeholder="Si aplica"
-                 oninput="actualizarRFRev(${id},'${SK}','RAZ_REVI',this.value)" />
+          <input type="text" id="rf_${id}_raz" maxlength="255" placeholder="Si aplica"
+                 oninput="actualizarRF(${id},'RAZ_REVI',this.value)" />
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_cel">
-          <label>Celular${R}</label>
-          <input type="tel" id="rf_${id}_${bloc}_cel" maxlength="20"
-                 oninput="actualizarRFRev(${id},'${SK}','CEL_REVI',this.value);limpiarError('field-rf_${id}_${bloc}_cel')" />
+        <div class="field" id="field-rf_${id}_cel">
+          <label>Celular <span class="req">*</span></label>
+          <input type="tel" id="rf_${id}_cel" maxlength="20"
+                 oninput="actualizarRF(${id},'CEL_REVI',this.value);limpiarError('field-rf_${id}_cel')" />
           <span class="error-msg">Campo requerido</span>
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-rf_${id}_${bloc}_tipdoc">
-          <label>Tipo doc.${R}</label>
-          <select id="rf_${id}_${bloc}_tipdoc"
-                  onchange="actualizarRFRev(${id},'${SK}','TIP_DOCU',this.value);limpiarError('field-rf_${id}_${bloc}_tipdoc')">
+        <div class="field" id="field-rf_${id}_tipdoc">
+          <label>Tipo doc. <span class="req">*</span></label>
+          <select id="rf_${id}_tipdoc"
+                  onchange="actualizarRF(${id},'TIP_DOCU',this.value);limpiarError('field-rf_${id}_tipdoc')">
             ${td}
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_numdoc">
-          <label>Número doc.${R}</label>
-          <input type="text" id="rf_${id}_${bloc}_numdoc" maxlength="20" inputmode="numeric"
-                 oninput="this.value=this.value.replace(/\\D/g,'');actualizarRFRev(${id},'${SK}','NUM_DOCU',this.value);limpiarError('field-rf_${id}_${bloc}_numdoc')" />
+        <div class="field" id="field-rf_${id}_numdoc">
+          <label>Número doc. <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_numdoc" maxlength="20" inputmode="numeric"
+                 oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU',this.value);limpiarError('field-rf_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_fec">
-          <label>Fecha expedición${R}</label>
-          <input type="date" id="rf_${id}_${bloc}_fec"
-                 onchange="actualizarRFRev(${id},'${SK}','FEC_EXPE',this.value);limpiarError('field-rf_${id}_${bloc}_fec')" />
+        <div class="field" id="field-rf_${id}_fec">
+          <label>Fecha expedición <span class="req">*</span></label>
+          <input type="date" id="rf_${id}_fec"
+                 onchange="actualizarRF(${id},'FEC_EXPE',this.value);limpiarError('field-rf_${id}_fec')" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field">
           <label>Teléfono fijo</label>
-          <input type="tel" id="rf_${id}_${bloc}_tel" maxlength="20"
-                 oninput="actualizarRFRev(${id},'${SK}','TEL_REVI',this.value)" />
+          <input type="tel" id="rf_${id}_tel" maxlength="20"
+                 oninput="actualizarRF(${id},'TEL_REVI',this.value)" />
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-rf_${id}_${bloc}_pais">
-          <label>País${R}</label>
-          <select id="rf_${id}_${bloc}_pais"
-                  onchange="onRFPaisChange(${id},'${bloc}',this.value);limpiarError('field-rf_${id}_${bloc}_pais')">
+        <div class="field" id="field-rf_${id}_pais">
+          <label>País <span class="req">*</span></label>
+          <select id="rf_${id}_pais"
+                  onchange="onRFPaisChange(${id},this.value);limpiarError('field-rf_${id}_pais')">
             ${pa}
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_dept">
-          <label>Departamento${R}</label>
-          <select id="rf_${id}_${bloc}_dept" disabled
-                  onchange="onRFDeptChange(${id},'${bloc}',this.value);limpiarError('field-rf_${id}_${bloc}_dept')">
+        <div class="field" id="field-rf_${id}_dept">
+          <label>Departamento <span class="req">*</span></label>
+          <select id="rf_${id}_dept" disabled
+                  onchange="onRFDeptChange(${id},this.value);limpiarError('field-rf_${id}_dept')">
             <option value="">— Seleccione país primero —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-rf_${id}_${bloc}_mpio">
-          <label>Ciudad${R}</label>
-          <select id="rf_${id}_${bloc}_mpio" disabled
-                  onchange="actualizarRFRev(${id},'${SK}','COD_MPIO',this.value);limpiarError('field-rf_${id}_${bloc}_mpio')">
+        <div class="field" id="field-rf_${id}_mpio">
+          <label>Ciudad <span class="req">*</span></label>
+          <select id="rf_${id}_mpio" disabled
+                  onchange="actualizarRF(${id},'COD_MPIO',this.value);limpiarError('field-rf_${id}_mpio')">
             <option value="">— Seleccione departamento primero —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field">
           <label>Dirección</label>
-          <input type="text" id="rf_${id}_${bloc}_dir" maxlength="255"
-                 oninput="actualizarRFRev(${id},'${SK}','DIR_REVI',this.value)" />
+          <input type="text" id="rf_${id}_dir" maxlength="255"
+                 oninput="actualizarRF(${id},'DIR_REVI',this.value)" />
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-rf_${id}_${bloc}_mail">
-          <label>Correo electrónico${R}</label>
-          <input type="email" id="rf_${id}_${bloc}_mail" maxlength="100"
-                 oninput="actualizarRFRev(${id},'${SK}','MAIL_REVI',this.value);limpiarError('field-rf_${id}_${bloc}_mail')" />
+        <div class="field" id="field-rf_${id}_mail">
+          <label>Correo electrónico <span class="req">*</span></label>
+          <input type="email" id="rf_${id}_mail" maxlength="100"
+                 oninput="actualizarRF(${id},'MAIL_REVI',this.value);limpiarError('field-rf_${id}_mail')" />
           <span class="error-msg">Email inválido o vacío</span>
         </div>
         <div class="field col-full">
           <label>Observaciones</label>
-          <textarea id="rf_${id}_${bloc}_obs" rows="2" maxlength="500"
+          <textarea id="rf_${id}_obs" rows="2" maxlength="500"
                     placeholder="Observaciones adicionales (opcional)"
-                    oninput="actualizarRFRev(${id},'${SK}','OBS_REVI',this.value)"></textarea>
+                    oninput="actualizarRF(${id},'OBS_REVI',this.value)"></textarea>
         </div>
       </div>
-    </div>`;
-}
-
-/* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
-function _crearGrupoRFEl(revisor) {
-  const id  = revisor._id;
-  const pos = _rfPos(id) + 1;
-  const td  = _rfTdOpts();
-  const el  = document.createElement('div');
-  el.className = 'grupo-item';
-  el.id        = `rf_grupo_${id}`;
-  el.innerHTML = `
-    <div class="grupo-header" onclick="toggleGrupoRF(${id})">
-      <span class="grupo-titulo" id="rf_titulo_${id}">Revisor ${pos}</span>
-      <button class="btn-eliminar-grupo" type="button" onclick="eliminarRF(event,${id})" title="Eliminar">✕</button>
-    </div>
-    <div class="grupo-body" id="rf_body_${id}">
-      ${_rfBloque(id, 'p')}
-      <hr class="rl-divider">
-      ${_rfBloque(id, 's')}
       <hr class="rl-divider">
       <div class="field field-radio">
         <label>¿El revisor está designado por una firma auditora? <span class="req">*</span></label>
@@ -257,82 +239,90 @@ function _crearGrupoRFEl(revisor) {
         </div>
       </div>
       <div id="rf_${id}_firma_wrap" class="firma-wrap"
-           style="display:none; opacity:0; max-height:0">
+           style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s,max-height .3s">
         <div class="grid-4">
           <div class="field col-full" id="field-rf_${id}_firma_raz">
             <label>Razón social de la firma <span class="req">*</span></label>
             <input type="text" id="rf_${id}_firma_raz" maxlength="255"
-                   oninput="actualizarRFGrupo(${id},'RAZ_FIRMA',this.value);limpiarError('field-rf_${id}_firma_raz')" />
+                   oninput="actualizarRF(${id},'RAZ_FIRMA',this.value);limpiarError('field-rf_${id}_firma_raz')" />
             <span class="error-msg">Campo requerido</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_tipdoc">
             <label>Tipo doc. de la firma <span class="req">*</span></label>
             <select id="rf_${id}_firma_tipdoc"
-                    onchange="actualizarRFGrupo(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
-              ${td}
+                    onchange="actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
+              ${_rfTdOpts()}
             </select>
             <span class="error-msg">Campo requerido</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_numdoc">
             <label>Número doc. de la firma <span class="req">*</span></label>
             <input type="text" id="rf_${id}_firma_numdoc" maxlength="20" inputmode="numeric"
-                   oninput="this.value=this.value.replace(/\\D/g,'');actualizarRFGrupo(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
+                   oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
             <span class="error-msg">Campo requerido</span>
           </div>
         </div>
       </div>
     </div>`;
+}
+
+/* ── Crear elemento DOM ──────────────────────────────────────────────────────── */
+function _crearGrupoRFEl(r) {
+  const el = document.createElement('div');
+  el.className = 'grupo-item';
+  el.id        = `rf_grupo_${r._id}`;
+  el.innerHTML = _rfMiembroHTML(r);
   return el;
 }
 
-function _hydrateRFFields(revisor, el) {
-  const id = revisor._id;
-  const set = (selector, value) => {
-    const field = el.querySelector(selector);
-    if (field) field.value = value || '';
-  };
+/* ── Hidratar campos desde estado ────────────────────────────────────────────── */
+function _hydrateRFFields(r, el) {
+  const id  = r._id;
+  const set = (sel, val) => { const f = el.querySelector(sel); if (f) f.value = val || ''; };
 
-  [['p', 'Principal'], ['s', 'Suplente']].forEach(([bloc, SK]) => {
-    const data = revisor[SK];
-    set(`#rf_${id}_${bloc}_nom`, data.NOM_REVI);
-    set(`#rf_${id}_${bloc}_ape`, data.APE_REVI);
-    set(`#rf_${id}_${bloc}_raz`, data.RAZ_REVI);
-    set(`#rf_${id}_${bloc}_cel`, data.CEL_REVI);
-    set(`#rf_${id}_${bloc}_tipdoc`, data.TIP_DOCU);
-    set(`#rf_${id}_${bloc}_numdoc`, data.NUM_DOCU);
-    set(`#rf_${id}_${bloc}_fec`, data.FEC_EXPE);
-    set(`#rf_${id}_${bloc}_pais`, data.COD_PAIS);
-    set(`#rf_${id}_${bloc}_dir`, data.DIR_REVI);
-    set(`#rf_${id}_${bloc}_tel`, data.TEL_REVI);
-    set(`#rf_${id}_${bloc}_mail`, data.MAIL_REVI);
-    set(`#rf_${id}_${bloc}_obs`, data.OBS_REVI);
+  set(`#rf_${id}_tipRepr`,  r.TIP_REPR);
+  set(`#rf_${id}_nom`,      r.NOM_REVI);
+  set(`#rf_${id}_ape`,      r.APE_REVI);
+  set(`#rf_${id}_raz`,      r.RAZ_REVI);
+  set(`#rf_${id}_cel`,      r.CEL_REVI);
+  set(`#rf_${id}_tipdoc`,   r.TIP_DOCU);
+  set(`#rf_${id}_numdoc`,   r.NUM_DOCU);
+  set(`#rf_${id}_fec`,      r.FEC_EXPE);
+  set(`#rf_${id}_tel`,      r.TEL_REVI);
+  set(`#rf_${id}_dir`,      r.DIR_REVI);
+  set(`#rf_${id}_mail`,     r.MAIL_REVI);
+  set(`#rf_${id}_obs`,      r.OBS_REVI);
 
-    if (data.COD_PAIS) {
-      onRFPaisChange(id, bloc, data.COD_PAIS)
-        .then(() => {
-          const deptEl = el.querySelector(`#rf_${id}_${bloc}_dept`);
-          if (deptEl) deptEl.value = data.COD_DEPT || '';
-          if (data.COD_DEPT && data.COD_DEPT !== 'NA') {
-            return onRFDeptChange(id, bloc, data.COD_DEPT);
-          }
-          return Promise.resolve();
-        })
-        .then(() => {
-          const mpioEl = el.querySelector(`#rf_${id}_${bloc}_mpio`);
-          if (mpioEl) mpioEl.value = data.COD_MPIO || '';
-        })
-        .catch(err => console.error('hydrate RF fields:', err));
-    }
-  });
+  if (r.COD_PAIS) {
+    onRFPaisChange(id, r.COD_PAIS)
+      .then(() => {
+        const deptEl = el.querySelector(`#rf_${id}_dept`);
+        if (deptEl) deptEl.value = r.COD_DEPT || '';
+        if (r.COD_DEPT && r.COD_DEPT !== 'NA') {
+          return onRFDeptChange(id, r.COD_DEPT);
+        }
+        return Promise.resolve();
+      })
+      .then(() => {
+        const mpioEl = el.querySelector(`#rf_${id}_mpio`);
+        if (mpioEl) mpioEl.value = r.COD_MPIO || '';
+      })
+      .catch(err => console.error('hydrateRF:', err));
+  }
 
-  if (revisor.REVI_FIRMA === 'S') {
+  if (r.REVI_FIRMA === 'S') {
     const yes = el.querySelector(`input[name="rf_firma_${id}"][value="S"]`);
     if (yes) yes.checked = true;
     onTieneFirmaChange(id, 'S');
+    set(`#rf_${id}_firma_raz`,    r.RAZ_FIRMA);
+    set(`#rf_${id}_firma_tipdoc`, r.TIP_DOCU_FIR);
+    set(`#rf_${id}_firma_numdoc`, r.NUM_DOCU_FIR);
   }
+
   setTimeout(() => actualizarTituloRF(id), 0);
 }
 
+/* ── Renderizado inicial ─────────────────────────────────────────────────────── */
 async function renderListaRF() {
   const wrap = document.getElementById('rf-lista-wrap');
   const list = document.getElementById('rf-grupos-list');
@@ -341,8 +331,31 @@ async function renderListaRF() {
   if (!Array.isArray(formData.revisores.revisores)) {
     formData.revisores.revisores = [];
   }
+
+  // Migrar formato antiguo { Principal:{}, Suplente:{} } al nuevo plano
+  const migrados = [];
+  for (const r of formData.revisores.revisores) {
+    if (r.Principal !== undefined || r.Suplente !== undefined) {
+      // Formato viejo agrupado → convertir a plano
+      if (r.Principal) {
+        const m = Object.assign({ _id: _rfId++, TIP_REPR: 'P', REVI_FIRMA: r.REVI_FIRMA || 'N',
+          RAZ_FIRMA: r.RAZ_FIRMA || '', TIP_DOCU_FIR: r.TIP_DOCU_FIR || null, NUM_DOCU_FIR: r.NUM_DOCU_FIR || '' },
+          r.Principal);
+        migrados.push(m);
+      }
+      if (r.Suplente && r.Suplente.NOM_REVI && String(r.Suplente.NOM_REVI).trim()) {
+        const s = Object.assign({ _id: _rfId++, TIP_REPR: 'S', REVI_FIRMA: 'N', RAZ_FIRMA: '',
+          TIP_DOCU_FIR: null, NUM_DOCU_FIR: '' }, r.Suplente);
+        migrados.push(s);
+      }
+    } else {
+      migrados.push(r);
+    }
+  }
+  if (migrados.length > 0) formData.revisores.revisores = migrados;
+
   if (formData.revisores.revisores.length === 0 && formData.revisores.TIE_REVIS === 'S') {
-    formData.revisores.revisores.push(_rfNuevo());
+    formData.revisores.revisores.push(_rfNuevo('P'));
   }
   _rfId = formData.revisores.revisores.length === 0
     ? 0
@@ -358,16 +371,17 @@ async function renderListaRF() {
     setTimeout(() => { wrap.style.display = 'none'; }, 210);
   }
 
-  for (const revisor of formData.revisores.revisores) {
-    const el = _crearGrupoRFEl(revisor);
+  for (const r of formData.revisores.revisores) {
+    const el = _crearGrupoRFEl(r);
     list.appendChild(el);
-    _hydrateRFFields(revisor, el);
+    _hydrateRFFields(r, el);
   }
   _rfSyncEliminar();
 }
 
-function agregarRF() {
-  const nuevo = _rfNuevo();
+/* ── Agregar / Eliminar ──────────────────────────────────────────────────────── */
+function agregarRF(tipRepr) {
+  const nuevo = _rfNuevo(tipRepr || 'P');
   formData.revisores.revisores.push(nuevo);
   document.querySelectorAll('#rf-grupos-list .grupo-body').forEach(b => b.classList.add('collapsed'));
   const list = document.getElementById('rf-grupos-list');
@@ -394,21 +408,19 @@ function _rfSyncEliminar() {
 }
 
 /* ── Cascadas geográficas ────────────────────────────────────────────────────── */
-async function onRFPaisChange(id, bloc, codPais) {
+async function onRFPaisChange(id, codPais) {
   const r = _rfGet(id);
   if (!r) return;
-  const SK = bloc === 'p' ? 'Principal' : 'Suplente';
-  // Normaliza a string para mantener consistencia con DOM
-  r[SK].COD_PAIS = codPais ? String(codPais) : null;
-  r[SK].COD_DEPT = null;
-  r[SK].COD_MPIO = null;
+  r.COD_PAIS = codPais ? String(codPais) : null;
+  r.COD_DEPT = null;
+  r.COD_MPIO = null;
 
-  const selDept = document.getElementById(`rf_${id}_${bloc}_dept`);
-  const selMpio = document.getElementById(`rf_${id}_${bloc}_mpio`);
+  const selDept = document.getElementById(`rf_${id}_dept`);
+  const selMpio = document.getElementById(`rf_${id}_mpio`);
   selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
   selMpio.disabled  = true;
-  limpiarError(`field-rf_${id}_${bloc}_dept`);
-  limpiarError(`field-rf_${id}_${bloc}_mpio`);
+  limpiarError(`field-rf_${id}_dept`);
+  limpiarError(`field-rf_${id}_mpio`);
 
   if (!codPais) {
     selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
@@ -416,88 +428,66 @@ async function onRFPaisChange(id, bloc, codPais) {
   }
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
-    await cargarCatalogo('/api/catalogo/departamentos', `rf_${id}_${bloc}_dept`,
+    await cargarCatalogo('/api/catalogo/departamentos', `rf_${id}_dept`,
       'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
   } else {
     selDept.innerHTML = '<option value="NA">No aplica</option>';
     selDept.value = 'NA'; selDept.disabled = true;
-    r[SK].COD_DEPT = 'NA';
+    r.COD_DEPT = 'NA';
     selMpio.disabled = false;
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
-    await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_${bloc}_mpio`,
+    await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_mpio`,
       'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
     selMpio.onchange = e => {
-      r[SK].COD_MPIO = e.target.value ? String(e.target.value) : null;
-      limpiarError(`field-rf_${id}_${bloc}_mpio`);
+      r.COD_MPIO = e.target.value ? String(e.target.value) : null;
+      limpiarError(`field-rf_${id}_mpio`);
     };
   }
 }
 
-async function onRFDeptChange(id, bloc, codDept) {
+async function onRFDeptChange(id, codDept) {
   const r = _rfGet(id);
   if (!r) return;
-  const SK = bloc === 'p' ? 'Principal' : 'Suplente';
-  // Normaliza a string para mantener consistencia con DOM
-  r[SK].COD_DEPT = codDept ? String(codDept) : null;
-  r[SK].COD_MPIO = null;
+  r.COD_DEPT = codDept ? String(codDept) : null;
+  r.COD_MPIO = null;
 
-  const selMpio = document.getElementById(`rf_${id}_${bloc}_mpio`);
-  const codPais = document.getElementById(`rf_${id}_${bloc}_pais`).value;
+  const selMpio = document.getElementById(`rf_${id}_mpio`);
+  const codPais = document.getElementById(`rf_${id}_pais`).value;
   selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
-  await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_${bloc}_mpio`,
+  await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_mpio`,
     'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
   selMpio.onchange = e => {
-    r[SK].COD_MPIO = e.target.value ? String(e.target.value) : null;
-    limpiarError(`field-rf_${id}_${bloc}_mpio`);
+    r.COD_MPIO = e.target.value ? String(e.target.value) : null;
+    limpiarError(`field-rf_${id}_mpio`);
   };
 }
 
 /* ── Validación ─────────────────────────────────────────────────────────────── */
-function _validarBloqueRF(id, SK) {
-  const r = _rfGet(id);
-  if (!r) return true;
-  const d    = r[SK];
-  const bloc = SK === 'Principal' ? 'p' : 's';
-  const req  = [
-    [`field-rf_${id}_${bloc}_nom`,    d.NOM_REVI],
-    [`field-rf_${id}_${bloc}_ape`,    d.APE_REVI],
-    [`field-rf_${id}_${bloc}_cel`,    d.CEL_REVI],
-    [`field-rf_${id}_${bloc}_tipdoc`, d.TIP_DOCU],
-    [`field-rf_${id}_${bloc}_numdoc`, d.NUM_DOCU],
-    [`field-rf_${id}_${bloc}_fec`,    d.FEC_EXPE],
-    [`field-rf_${id}_${bloc}_pais`,   d.COD_PAIS],
-    [`field-rf_${id}_${bloc}_dept`,   d.COD_DEPT],
-    [`field-rf_${id}_${bloc}_mpio`,   d.COD_MPIO],
+function _validarMiembroRF(r) {
+  const id = r._id;
+  const req = [
+    [`field-rf_${id}_nom`,    r.NOM_REVI],
+    [`field-rf_${id}_ape`,    r.APE_REVI],
+    [`field-rf_${id}_cel`,    r.CEL_REVI],
+    [`field-rf_${id}_tipdoc`, r.TIP_DOCU],
+    [`field-rf_${id}_numdoc`, r.NUM_DOCU],
+    [`field-rf_${id}_fec`,    r.FEC_EXPE],
+    [`field-rf_${id}_pais`,   r.COD_PAIS],
+    [`field-rf_${id}_dept`,   r.COD_DEPT],
+    [`field-rf_${id}_mpio`,   r.COD_MPIO],
   ];
-  if (SK === 'Suplente') {
-    const tocado = req.some(([, v]) => v && String(v).trim())
-                || (d.MAIL_REVI && String(d.MAIL_REVI).trim())
-                || (d.RAZ_REVI  && String(d.RAZ_REVI).trim());
-    if (!tocado) return true;
-  }
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
-  if (!d.MAIL_REVI || !esEmailValido(d.MAIL_REVI)) {
-    mostrarError(`field-rf_${id}_${bloc}_mail`); ok = false;
+  if (!r.MAIL_REVI || !esEmailValido(r.MAIL_REVI)) {
+    mostrarError(`field-rf_${id}_mail`); ok = false;
   }
-  return ok;
-}
-
-function _validarFirmaRF(id) {
-  const r = _rfGet(id);
-  if (!r || r.REVI_FIRMA !== 'S') return true;
-  let ok = true;
-  if (!r.RAZ_FIRMA || !String(r.RAZ_FIRMA).trim()) {
-    mostrarError(`field-rf_${id}_firma_raz`); ok = false;
-  }
-  if (!r.TIP_DOCU_FIR) {
-    mostrarError(`field-rf_${id}_firma_tipdoc`); ok = false;
-  }
-  if (!r.NUM_DOCU_FIR || !String(r.NUM_DOCU_FIR).trim()) {
-    mostrarError(`field-rf_${id}_firma_numdoc`); ok = false;
+  if (r.REVI_FIRMA === 'S') {
+    if (!r.RAZ_FIRMA || !String(r.RAZ_FIRMA).trim()) { mostrarError(`field-rf_${id}_firma_raz`); ok = false; }
+    if (!r.TIP_DOCU_FIR) { mostrarError(`field-rf_${id}_firma_tipdoc`); ok = false; }
+    if (!r.NUM_DOCU_FIR || !String(r.NUM_DOCU_FIR).trim()) { mostrarError(`field-rf_${id}_firma_numdoc`); ok = false; }
   }
   return ok;
 }
@@ -509,10 +499,7 @@ function validarSeccionRF() {
   }
   let ok = true;
   for (const r of formData.revisores.revisores) {
-    const okP = _validarBloqueRF(r._id, 'Principal');
-    const okS = _validarBloqueRF(r._id, 'Suplente');
-    const okF = _validarFirmaRF(r._id);
-    if (!okP || !okS || !okF) {
+    if (!_validarMiembroRF(r)) {
       document.getElementById(`rf_body_${r._id}`).classList.remove('collapsed');
       ok = false;
     }
@@ -534,7 +521,6 @@ function validarYContinuarRF() {
   const acc8 = document.getElementById('accordion-ac');
   acc8.classList.remove('collapsed');
   acc8.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  console.log('✅ formData.revisores:', JSON.stringify(formData.revisores, null, 2));
 }
 
 function limpiarSeccionRF() {

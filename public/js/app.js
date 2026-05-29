@@ -152,9 +152,22 @@ async function inicializar() {
 /* ── Arranque ───────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   await inicializar();
-  const hasDraft = cargarBorrador();
 
-  // Renderizar listas dinámicas con el estado restaurado si existe borrador.
+  const _qp      = new URLSearchParams(window.location.search);
+  const _modo    = _qp.get('modo');
+  const _numIden = _qp.get('numIden');
+
+  if (_modo === 'actualizar' && _numIden) {
+    // Cargar datos desde la BD; ignorar borrador local
+    await _cargarRegistroExistente(_numIden);
+  } else {
+    const hasDraft = cargarBorrador();
+    if (hasDraft) {
+      mostrarToast('Borrador restaurado desde la sesión anterior.', 'info');
+    }
+  }
+
+  // Renderizar listas dinámicas con el estado restaurado.
   await renderListaPaises();
   await renderListaAC();
   await renderListaBancaria();
@@ -171,10 +184,109 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.body.addEventListener('change', guardarBorradorDebounced);
   window.addEventListener('beforeunload', guardarBorrador);
 
-  if (hasDraft) {
-    mostrarToast('Borrador restaurado desde la sesión anterior.', 'info');
+  // Adaptar UI para modo actualizar
+  if (_modo === 'actualizar') {
+    const btnSubmit = document.getElementById('btn-submit');
+    if (btnSubmit) {
+      btnSubmit.textContent = '💾 Guardar cambios';
+      btnSubmit.title = 'Actualiza el registro existente en la base de datos';
+    }
+    const header = document.querySelector('.form-header') || document.querySelector('header');
+    if (header) {
+      const banner = document.createElement('div');
+      banner.id = 'modo-actualizar-banner';
+      banner.innerHTML = `<span>✏️ Modo actualizar — modificando registro <strong>${_numIden}</strong></span>`;
+      banner.style.cssText = 'background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:6px;padding:8px 14px;margin-bottom:12px;font-size:.875rem;font-weight:500;display:block';
+      header.insertAdjacentElement('afterend', banner);
+    }
   }
 });
+
+/**
+ * Carga el registro completo de una Persona Jurídica desde la BD
+ * y lo vuelca en formData para que hidratarFormularioVisual() lo pinte.
+ */
+async function _cargarRegistroExistente(numIden) {
+  try {
+    mostrarToast('Cargando registro…', 'info');
+    const resp = await fetch(`/api/cargar-completo/${encodeURIComponent(numIden)}`);
+    if (!resp.ok) {
+      const d = await resp.json().catch(() => ({}));
+      mostrarToast(d.error || `Error al cargar el registro (${resp.status}).`, 'error');
+      return;
+    }
+    const datos = await resp.json();
+
+    if (datos.basica)        Object.assign(formData.basica,      datos.basica);
+    if (datos.sociedad)      Object.assign(formData.sociedad,    datos.sociedad);
+    if (datos.financiera)    Object.assign(formData.financiera,  datos.financiera);
+    if (datos.pep)           Object.assign(formData.pep,         datos.pep);
+    if (datos.actividades)   Object.assign(formData.actividades, datos.actividades);
+    if (Array.isArray(datos.paises))        formData.paises        = datos.paises;
+    if (Array.isArray(datos.bancaria))      formData.bancaria      = datos.bancaria;
+    if (Array.isArray(datos.accionistas))   formData.accionistas   = datos.accionistas;
+    if (Array.isArray(datos.beneficiarios)) formData.beneficiarios = datos.beneficiarios;
+    if (datos.firma)         Object.assign(formData.firma,       datos.firma);
+
+    // Representantes: el API devuelve filas planas (TIP_REPR P/S)
+    if (Array.isArray(datos.representantes) && datos.representantes.length) {
+      formData.representantes = datos.representantes.map(r => ({
+        TIP_REPR:  r.TIP_REPR,
+        NOM_REPR:  r.NOM_REPR  || '',
+        APE_REPR:  r.APE_REPR  || '',
+        TIP_DOCU:  r.TIP_DOCU,
+        NUM_DOCU:  r.NUM_DOCU  || '',
+        FEC_EXPE:  r.FEC_EXPE  || '',
+        COD_PAIS:  r.COD_PAIS,
+        COD_DEPT:  r.COD_DEPT,
+        COD_MPIO:  r.COD_MPIO,
+        DIR_REPR:  r.DIR_REPR  || '',
+        CEL_REPR:  r.CEL_REPR  || '',
+        TEL_REPR:  r.TEL_REPR  || '',
+        MAIL_REPR: r.MAIL_REPR || '',
+      }));
+    }
+
+    // Cumplimiento
+    if (datos.cumplimiento) {
+      formData.cumplimiento.DESC_NORM = datos.cumplimiento.DESC_NORM || '';
+      formData.cumplimiento.NORM_LAFT = datos.cumplimiento.NORM_LAFT || '';
+      formData.cumplimiento.TIE_JUNTA = datos.cumplimiento.TIE_JUNTA || 'N';
+      formData.cumplimiento.SIS_PREVE = datos.cumplimiento.SIS_PREVE || null;
+      if (Array.isArray(datos.cumplimiento.oficiales) && datos.cumplimiento.oficiales.length) {
+        formData.cumplimiento.oficiales = datos.cumplimiento.oficiales.map(o => ({
+          TIP_REPR:  o.TIP_REPR,
+          TIP_DOCU:  o.TIP_DOCU,
+          NUM_DOCU:  o.NUM_DOCU  || '',
+          FEC_EXPE:  o.FEC_EXPE  || '',
+          NOM_RESP:  o.NOM_RESP  || '',
+          APE_RESP:  o.APE_RESP  || '',
+          RAZ_RESP:  o.RAZ_RESP  || '',
+          COD_PAIS:  o.COD_PAIS,
+          COD_DEPT:  o.COD_DEPT,
+          COD_MPIO:  o.COD_MPIO,
+          DIR_RESP:  o.DIR_RESP  || '',
+          TEL_RESP:  o.TEL_RESP  || '',
+          MAIL_RESP: o.MAIL_RESP || '',
+        }));
+      }
+    }
+
+    if (datos.juntaDirectiva) {
+      formData.juntaDirectiva.TIE_JUNTA = datos.juntaDirectiva.TIE_JUNTA || 'N';
+      formData.juntaDirectiva.miembros  = datos.juntaDirectiva.miembros  || [];
+    }
+    if (datos.revisores) {
+      formData.revisores.TIE_REVIS = datos.revisores.TIE_REVIS || 'N';
+      formData.revisores.revisores = datos.revisores.revisores || [];
+    }
+
+    mostrarToast('Registro cargado correctamente.', 'success');
+  } catch (err) {
+    console.error('_cargarRegistroExistente():', err);
+    mostrarToast('Error al cargar el registro desde el servidor.', 'error');
+  }
+}
 
 /**
  * Rellena los campos del formulario a partir del estado global.

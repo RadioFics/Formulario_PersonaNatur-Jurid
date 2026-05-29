@@ -16,6 +16,11 @@
  */
 'use strict';
 
+/* ── Helpers de modo ────────────────────────────────────────────────────────── */
+const _urlParams       = new URLSearchParams(window.location.search);
+const _modoActual      = _urlParams.get('modo');   // 'actualizar' | null
+const _esModoActualizar = _modoActual === 'actualizar';
+
 /* ════════════════════════════════════════════════════════════════════════════════
    VALIDACIÓN GLOBAL
    ════════════════════════════════════════════════════════════════════════════════ */
@@ -243,10 +248,17 @@ function _cerrarProgresoModal() {
  * @param {string}      numIden
  * @param {number|null} codTerc  COD_TERC devuelto por el servidor (para Excel)
  */
-function _mostrarConfirmacion(numIden, codTerc) {
+function _mostrarConfirmacion(numIden, codTerc, esActualizacion) {
   const modal = document.getElementById('confirmacion-modal');
   const idEl  = document.getElementById('confirm-num-iden');
   if (idEl) idEl.textContent = numIden;
+
+  const titleEl = modal.querySelector('.confirm-title');
+  const bodyEl  = modal.querySelector('.confirm-body');
+  if (titleEl) titleEl.textContent = esActualizacion ? '¡Registro actualizado!' : '¡Registro enviado con éxito!';
+  if (bodyEl)  bodyEl.innerHTML    = esActualizacion
+    ? 'Los cambios han sido guardados correctamente en la base de datos.<br>Número de identificación:'
+    : 'Su información SARLAFT ha sido registrada correctamente.<br>Guarde el siguiente número de identificación para sus registros:';
 
   const btnExcel = document.getElementById('btn-descargar-excel');
   if (btnExcel) {
@@ -309,7 +321,11 @@ function onSubmitClick() {
     mostrarToast(`Hay ${errores.length} campo(s) por completar.`, 'error');
     return;
   }
-  guardarFormulario();
+  if (_esModoActualizar) {
+    actualizarFormulario();
+  } else {
+    guardarFormulario();
+  }
 }
 
 /**
@@ -379,6 +395,53 @@ async function guardarFormulario() {
 }
 
 /**
+ * Actualiza un registro jurídico existente — PUT /api/actualizar-completo.
+ * Usa el mismo payload que guardarFormulario() pero método PUT.
+ */
+async function actualizarFormulario() {
+  const btnSubmit = document.getElementById('btn-submit');
+  if (btnSubmit) { btnSubmit.disabled = true; }
+  _mostrarProgresoModal();
+  try {
+    const payload = _construirPayload();
+    const response = await fetch('/api/actualizar-completo', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    clearInterval(_progresoTimer);
+    _actualizarProgreso(14, 15, 'Completado ✓');
+    await new Promise(r => setTimeout(r, 500));
+    _cerrarProgresoModal();
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      _mostrarErrorGuardado(data.error || `Error HTTP ${response.status}`);
+      return;
+    }
+    const data    = await response.json();
+    const numIden = data.NUM_IDEN || payload.NUM_IDEN;
+    if (typeof hayArchivosSeleccionados === 'function' && hayArchivosSeleccionados()) {
+      try {
+        const fd = construirFormDataArchivos(numIden);
+        await fetch(`/api/documentos/${encodeURIComponent(numIden)}`, { method: 'POST', body: fd });
+      } catch (docErr) {
+        console.warn('actualizarFormulario() — subida de docs falló:', docErr);
+        mostrarToast('Datos actualizados. Algunos documentos no pudieron subirse.', 'warning');
+      }
+    }
+    borrarBorrador();
+    _mostrarConfirmacion(numIden, data.COD_TERC || null, true);
+  } catch (err) {
+    clearInterval(_progresoTimer);
+    _cerrarProgresoModal();
+    _mostrarErrorGuardado(err.message || 'Error de red — verifique su conexión.');
+    console.error('actualizarFormulario():', err);
+  } finally {
+    if (btnSubmit) { btnSubmit.disabled = false; }
+  }
+}
+
+/**
  * Construye el objeto completo que el backend necesita para la transacción.
  *
  * El servidor espera un objeto plano para los campos escalares de GN_TERCE,
@@ -413,6 +476,7 @@ function _construirPayload() {
     MAIL_SARL:    b.MAIL_SARL   || null,
     COD_CIIU:     b.COD_CIIU    || null,
     URL_WEB:      b.URL_WEB     || null,
+    ACE_POLI:     true,  // T&C aceptados
 
     // ── Sección 3 — GN_JURID (sociedad) ────────────────────────────────────
     UBIC_SOC:     s.UBIC_SOC    || null,
@@ -434,25 +498,15 @@ function _construirPayload() {
     NORM_LAFT:      c.NORM_LAFT   || null,
     cump_TIE_JUNTA: c.TIE_JUNTA  || 'N',
     SIS_PREVE:      c.SIS_PREVE   || null,
-    oficiales:      c.oficiales.map(o => ({ ...o })),
+    oficiales:      (c.oficiales || []).map(o => _omitir(o, ['_id'])),
 
     // ── Sección 6 — Junta directiva (GN_JURID_JD) ──────────────────────────
     jd_TIE_JUNTA:  jd.TIE_JUNTA || 'N',
-    juntaDirectiva: jd.miembros.map(m => ({
-      Principal: _omitir(m.Principal, []),
-      Suplente:  _omitir(m.Suplente,  []),
-    })),
+    juntaDirectiva: jd.miembros.map(m => _omitir(m, ['_id'])),
 
     // ── Sección 7 — Revisores fiscales (GN_JURID_RF) ───────────────────────
     rf_TIE_REVIS: rf.TIE_REVIS || 'N',
-    revisores:    rf.revisores.map(r => ({
-      REVI_FIRMA:   r.REVI_FIRMA   || 'N',
-      RAZ_FIRMA:    r.RAZ_FIRMA    || null,
-      TIP_DOCU_FIR: r.TIP_DOCU_FIR || null,
-      NUM_DOCU_FIR: r.NUM_DOCU_FIR || null,
-      Principal:    _omitir(r.Principal, []),
-      Suplente:     _omitir(r.Suplente,  []),
-    })),
+    revisores:    rf.revisores.map(r => _omitir(r, ['_id'])),
 
     // ── Sección 8 — Composición accionaria (GN_JURID_AC) ───────────────────
     accionistas: formData.accionistas.map(a => _omitir(a, ['_id'])),

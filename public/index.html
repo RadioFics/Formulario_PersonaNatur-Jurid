@@ -6,7 +6,6 @@
   <title>SARLAFT — Inicio</title>
   <link rel="stylesheet" href="css/styles.css" />
   <style>
-    /* ── Landing page ─────────────────────────────────────────────────────── */
     .landing-wrapper {
       max-width: 700px;
       margin: 60px auto;
@@ -16,277 +15,268 @@
       gap: 32px;
       padding: 0 16px;
     }
+    .landing-header { text-align: center; }
+    .landing-header h1 { font-size: 1.6rem; font-weight: 700; color: var(--color-primary); }
+    .landing-header p { margin-top: 8px; color: #616161; font-size: 0.9rem; }
 
-    .landing-header {
-      text-align: center;
-    }
-    .landing-header h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--color-primary);
-    }
-    .landing-header p {
-      margin-top: 8px;
-      color: #616161;
-      font-size: 0.9rem;
-    }
-
-    .landing-cards {
-      display: flex;
-      gap: 24px;
+    .terms-box {
       width: 100%;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .landing-card {
-      flex: 1 1 260px;
-      max-width: 300px;
-      border: 1px solid #C2E4EF;
+      background: #fffdf4;
+      border: 1px solid #e8d08a;
       border-radius: 10px;
-      padding: 32px 24px;
-      background: #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      padding: 18px 22px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      text-align: center;
-      cursor: pointer;
-      text-decoration: none;
-      color: inherit;
+      gap: 10px;
+    }
+    .terms-box label {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 0.88rem; color: #424242; cursor: pointer;
+    }
+    .terms-box input[type="checkbox"] {
+      flex-shrink: 0; margin-top: 2px; width: 17px; height: 17px;
+      accent-color: var(--color-primary); cursor: pointer;
+    }
+    .terms-box a { color: var(--color-primary); font-weight: 600; }
+    .terms-badge { display: none; align-items: center; gap: 6px; font-size: 0.82rem; color: #2e7d32; font-weight: 600; }
+    .terms-badge.visible { display: flex; }
+
+    .landing-cards { display: flex; gap: 24px; width: 100%; flex-wrap: wrap; justify-content: center; }
+    .landing-card {
+      flex: 1 1 260px; max-width: 300px;
+      border: 1px solid #C2E4EF; border-radius: 10px; padding: 32px 24px;
+      background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      text-align: center; cursor: pointer; text-decoration: none; color: inherit;
       transition: transform .15s, box-shadow .15s, border-color .15s;
     }
-    .landing-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 6px 20px rgba(0,0,0,.13);
-      border-color: var(--color-accent);
-    }
-
-    .landing-card-icon {
-      font-size: 2.8rem;
-      line-height: 1;
-    }
-
-    .landing-card h2 {
-      font-size: 1.15rem;
-      font-weight: 700;
-      color: var(--color-primary);
-      margin: 0;
-    }
-
-    .landing-card p {
-      font-size: 0.83rem;
-      color: #616161;
-      line-height: 1.5;
-      margin: 0;
-    }
-
-    .landing-card .btn-landing {
-      margin-top: 8px;
-      padding: 10px 28px;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-    }
-    .btn-crear   { background: var(--color-accent); color: #fff; }
-    .btn-crear:hover   { background: var(--color-accent-dark); }
+    .landing-card.locked { opacity: .55; pointer-events: none; filter: grayscale(.4); }
+    .landing-card.unlocked { opacity: 1; pointer-events: auto; filter: none; }
+    .landing-card.unlocked:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.13); border-color: var(--color-accent); }
+    .landing-card-icon { font-size: 2.8rem; line-height: 1; }
+    .landing-card h2 { font-size: 1.15rem; font-weight: 700; color: var(--color-primary); margin: 0; }
+    .landing-card p { font-size: 0.83rem; color: #616161; line-height: 1.5; margin: 0; }
+    .landing-card .btn-landing { margin-top: 8px; padding: 10px 28px; border-radius: 6px; font-size: 0.9rem; font-weight: 600; border: none; cursor: pointer; width: 100%; }
+    .btn-crear { background: var(--color-accent); color: #fff; }
+    .btn-crear:hover { background: var(--color-accent-dark); }
     .btn-actualizar { background: #E5F5FA; color: var(--color-primary); border: 1px solid #89CDD9; }
     .btn-actualizar:hover { background: #C2E4EF; }
 
-    /* ── Modal Actualizar ───────────────────────────────────────────────────── */
+    .consolidado-section {
+      width: 100%; background: #fffdf4; border: 1px solid #e8d08a;
+      border-radius: 10px; padding: 18px 24px;
+    }
+    .consolidado-section h3 { font-size: 0.95rem; font-weight: 700; color: var(--color-primary); margin: 0 0 12px; }
+    .consolidado-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn-consolidado {
+      padding: 9px 18px; border-radius: 6px; border: 1px solid var(--color-primary);
+      background: var(--color-primary); color: #fff; font-size: 0.87rem; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-consolidado:hover { background: #8a6500; }
+    .btn-consolidado-sec { background: #fff; color: var(--color-primary); }
+    .btn-consolidado-sec:hover { background: #fff8e1; }
+
     .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.45);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 1000;
+      align-items: center; justify-content: center;
     }
     .modal-overlay.show { display: flex; }
-
     .modal-card {
-      background: #fff;
-      border-radius: 10px;
-      padding: 32px 28px;
-      max-width: 420px;
-      width: 90%;
-      box-shadow: 0 8px 32px rgba(0,0,0,.18);
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+      background: #fff; border-radius: 10px; padding: 32px 28px;
+      max-width: 460px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.18);
+      display: flex; flex-direction: column; gap: 16px;
     }
-    .modal-card h3 {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--color-primary);
-    }
+    .modal-card-header { display: flex; align-items: center; justify-content: space-between; }
+    .modal-card-header h3 { font-size: 1.1rem; font-weight: 700; color: var(--color-primary); margin: 0; }
+    .modal-close-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #616161; line-height: 1; }
     .modal-card p { font-size: 0.87rem; color: #424242; line-height: 1.5; }
-
-    .search-row {
-      display: flex;
-      gap: 8px;
-    }
+    .modal-policy-body { max-height: 280px; overflow-y: auto; font-size: 0.86rem; color: #424242; }
+    .modal-policy-body p { margin: 0 0 10px; }
+    .search-row { display: flex; gap: 8px; }
     .search-row input {
-      flex: 1;
-      padding: 9px 12px;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius);
-      font-size: 0.9rem;
+      flex: 1; padding: 9px 12px;
+      border: 1px solid var(--color-border); border-radius: var(--radius); font-size: 0.9rem;
     }
-    .search-row input:focus {
-      outline: none;
-      border-color: var(--color-focus);
-      box-shadow: 0 0 0 3px rgba(21,101,192,.15);
-    }
+    .search-row input:focus { outline: none; border-color: var(--color-focus); box-shadow: 0 0 0 3px rgba(21,101,192,.15); }
     .search-row button {
-      padding: 9px 18px;
-      background: var(--color-accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
+      padding: 9px 18px; background: var(--color-accent); color: #fff;
+      border: none; border-radius: var(--radius); font-size: 0.9rem; font-weight: 600; cursor: pointer;
     }
     .search-row button:hover { background: var(--color-accent-dark); }
-
-    #actualizar-resultado {
-      min-height: 40px;
-      font-size: 0.87rem;
-    }
-    .result-found {
-      border: 1px solid #89CDD9;
-      background: #E5F5FA;
-      border-radius: 6px;
-      padding: 12px 14px;
-      color: #0C6B8C;
-    }
+    #actualizar-resultado { min-height: 40px; font-size: 0.87rem; }
+    .result-found { border: 1px solid #89CDD9; background: #E5F5FA; border-radius: 6px; padding: 12px 14px; color: #0C6B8C; }
     .result-found strong { display: block; font-size: 0.95rem; margin-bottom: 4px; }
-    .result-not-found {
-      border: 1px solid #ffcdd2;
-      background: #ffebee;
-      border-radius: 6px;
-      padding: 12px 14px;
-      color: #c62828;
-    }
-    .result-error {
-      color: #e53935;
-      font-style: italic;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-    }
-    .btn-sm {
-      padding: 8px 18px;
-      border-radius: 6px;
-      font-size: 0.87rem;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-    }
+    .result-not-found { border: 1px solid #ffcdd2; background: #ffebee; border-radius: 6px; padding: 12px 14px; color: #c62828; }
+    .result-error { color: #e53935; font-style: italic; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+    .btn-sm { padding: 8px 18px; border-radius: 6px; font-size: 0.87rem; font-weight: 600; border: none; cursor: pointer; }
     .btn-sm-secondary { background: #e0e0e0; color: #424242; }
     .btn-sm-secondary:hover { background: #bdbdbd; }
     .btn-sm-primary { background: var(--color-accent); color: #fff; }
     .btn-sm-primary:hover { background: var(--color-accent-dark); }
     .btn-sm-primary:disabled { background: #89CDD9; cursor: default; }
-
-    .landing-footer {
-      font-size: 0.78rem;
-      color: #9e9e9e;
-      text-align: center;
-    }
+    .landing-footer { font-size: 0.78rem; color: #9e9e9e; text-align: center; }
   </style>
 </head>
 <body>
 
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-<!--  Landing — selección de modo                                            -->
-<!-- ════════════════════════════════════════════════════════════════════════ -->
 <div class="landing-wrapper">
 
   <div class="landing-header">
-    <h1>Registro SARLAFT</h1>
+    <h1>Registro - Persona Jurídica y Natural</h1>
     <p>Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo</p>
   </div>
 
-  <div class="landing-cards">
+  <!-- T&C -->
+  <div class="terms-box">
+    <label>
+      <input type="checkbox" id="chk-terms" onchange="onTermsChange(this.checked)" />
+      <span>
+        He leído y acepto la
+        <a href="#" onclick="abrirModalPolitica(event)">Política de tratamiento de datos personales</a>
+        y autorizo el uso de mis datos conforme a los términos indicados.
+      </span>
+    </label>
+    <div class="terms-badge" id="terms-badge">
+      ✅ Términos aceptados — puede continuar
+    </div>
+  </div>
 
-    <!-- Tarjeta: Crear -->
-    <a class="landing-card" href="formulario.html">
+  <!-- Tarjetas -->
+  <div class="landing-cards">
+    <a class="landing-card locked" id="card-crear" href="formulario.html"
+       onclick="return onCardClick(event, 'formulario.html')">
       <div class="landing-card-icon">📋</div>
       <h2>Crear registro</h2>
-      <p>Diligencie el formulario completo para registrar una nueva persona jurídica en el sistema.</p>
-      <button class="btn-landing btn-crear" onclick="event.preventDefault(); window.location.href='formulario.html'">
+      <p>Diligencie el formulario completo para registrar una nueva persona natural o jurídica en el sistema.</p>
+      <button class="btn-landing btn-crear" type="button"
+              onclick="event.stopPropagation(); onCardClick(event, 'formulario.html')">
         Ir al formulario
       </button>
     </a>
 
-    <!-- Tarjeta: Actualizar -->
-    <div class="landing-card" onclick="abrirModalActualizar()">
+    <div class="landing-card locked" id="card-actualizar" onclick="onActualizarClick()">
       <div class="landing-card-icon">🔄</div>
       <h2>Actualizar registro</h2>
       <p>Busque un registro existente por número de documento para revisar o actualizar su información.</p>
-      <button class="btn-landing btn-actualizar" onclick="event.stopPropagation(); abrirModalActualizar()">
+      <button class="btn-landing btn-actualizar" type="button"
+              onclick="event.stopPropagation(); onActualizarClick()">
         Buscar registro
       </button>
     </div>
+  </div>
 
+  <!-- Consolidados -->
+  <div class="consolidado-section">
+    <h3>📥 Descargar consolidado de registros</h3>
+    <div class="consolidado-btns">
+      <button class="btn-consolidado" type="button" onclick="descargarConsolidado('natural')">
+        ⬇ Consolidado Persona Natural
+      </button>
+      <button class="btn-consolidado btn-consolidado-sec" type="button" onclick="descargarConsolidado('juridica')">
+        ⬇ Consolidado Persona Jurídica
+      </button>
+    </div>
   </div>
 
   <div class="landing-footer">
-    SARLAFT &mdash; Persona Jurídica &nbsp;|&nbsp; Solo para uso interno
+    SARLAFT &mdash; Persona Natural y Jurídica &nbsp;|&nbsp; Solo para uso interno
   </div>
 
 </div>
 
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-<!--  Modal — Buscar para actualizar                                         -->
-<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- Modal Política -->
+<div class="modal-overlay" id="modal-politica">
+  <div class="modal-card">
+    <div class="modal-card-header">
+      <h3>Política de tratamiento de datos</h3>
+      <button class="modal-close-btn" onclick="cerrarModalPolitica()" title="Cerrar">✕</button>
+    </div>
+    <div class="modal-policy-body">
+      <p><strong>AVISO DE PRIVACIDAD:</strong></p>
+      <p>Desde este punto se puede disponer cualquier mensaje relacionado a las políticas de privacidad.</p>
+      <p><strong>Para que lo tomes en cuenta =P.</strong></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalPolitica()">Cerrar</button>
+      <button class="btn-sm btn-sm-primary" onclick="aceptarDesdeModal()">Acepto la política</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Actualizar -->
 <div class="modal-overlay" id="modal-actualizar">
   <div class="modal-card">
-    <h3>🔍 Buscar registro existente</h3>
+    <div class="modal-card-header">
+      <h3>🔍 Buscar registro existente</h3>
+      <button class="modal-close-btn" onclick="cerrarModalActualizar()" title="Cerrar">✕</button>
+    </div>
     <p>Ingrese el número de documento (cédula, NIT, etc.) del tercero que desea actualizar.</p>
-
     <div class="search-row">
       <input type="text" id="buscar-num-iden"
-             placeholder="Ej: 900123456"
-             inputmode="numeric"
-             maxlength="20"
+             placeholder="Ej: 900123456" inputmode="numeric" maxlength="20"
              oninput="this.value=this.value.replace(/\D/g,'')"
              onkeydown="if(event.key==='Enter') buscarTercero()" />
       <button onclick="buscarTercero()">Buscar</button>
     </div>
-
     <div id="actualizar-resultado"></div>
-
     <div class="modal-actions">
       <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">Cancelar</button>
-      <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled
-              onclick="irAActualizar()">Abrir registro</button>
+      <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled onclick="irAActualizar()">Abrir registro</button>
     </div>
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════════════════════════════════ -->
-<!--  Scripts                                                                -->
-<!-- ════════════════════════════════════════════════════════════════════════ -->
 <script>
+  'use strict';
+
+  const TERMS_KEY = 'sarlaft_terms_accepted';
   let _terceroEncontrado = null;
 
-  function abrirModalActualizar() {
-    document.getElementById('modal-actualizar').classList.add('show');
-    document.getElementById('buscar-num-iden').focus();
+  (function init() {
+    if (sessionStorage.getItem(TERMS_KEY) === '1') _setTermsUI(true);
+  })();
+
+  function _setTermsUI(accepted) {
+    document.getElementById('chk-terms').checked = accepted;
+    document.getElementById('terms-badge').classList.toggle('visible', accepted);
+    ['card-crear','card-actualizar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.toggle('unlocked', accepted); el.classList.toggle('locked', !accepted); }
+    });
+    if (accepted) sessionStorage.setItem(TERMS_KEY, '1');
+    else          sessionStorage.removeItem(TERMS_KEY);
   }
 
+  function onTermsChange(checked) { _setTermsUI(checked); }
+
+  function onCardClick(event, url) {
+    if (sessionStorage.getItem(TERMS_KEY) !== '1') {
+      event.preventDefault(); mostrarAvisoTerminos(); return false;
+    }
+    return true;
+  }
+
+  function onActualizarClick() {
+    if (sessionStorage.getItem(TERMS_KEY) !== '1') { mostrarAvisoTerminos(); return; }
+    abrirModalActualizar();
+  }
+
+  function mostrarAvisoTerminos() {
+    const box = document.querySelector('.terms-box');
+    box.style.outline = '2px solid #e53935';
+    setTimeout(() => { box.style.outline = ''; }, 1800);
+    document.getElementById('chk-terms').focus();
+  }
+
+  function abrirModalPolitica(e) { if (e) e.preventDefault(); document.getElementById('modal-politica').classList.add('show'); }
+  function cerrarModalPolitica() { document.getElementById('modal-politica').classList.remove('show'); }
+  function aceptarDesdeModal() { cerrarModalPolitica(); _setTermsUI(true); }
+  document.getElementById('modal-politica').addEventListener('click', function(e) { if (e.target === this) cerrarModalPolitica(); });
+
+  function abrirModalActualizar() { document.getElementById('modal-actualizar').classList.add('show'); document.getElementById('buscar-num-iden').focus(); }
   function cerrarModalActualizar() {
     document.getElementById('modal-actualizar').classList.remove('show');
     document.getElementById('buscar-num-iden').value = '';
@@ -299,37 +289,19 @@
     const numIden = document.getElementById('buscar-num-iden').value.trim();
     const resEl   = document.getElementById('actualizar-resultado');
     const btnIr   = document.getElementById('btn-ir-actualizar');
-
-    if (!numIden) {
-      resEl.innerHTML = '<p class="result-error">Ingrese un número de documento.</p>';
-      return;
-    }
-
-    btnIr.disabled = true;
-    _terceroEncontrado = null;
+    if (!numIden) { resEl.innerHTML = '<p class="result-error">Ingrese un número de documento.</p>'; return; }
+    btnIr.disabled = true; _terceroEncontrado = null;
     resEl.innerHTML = '<p style="color:#616161;font-style:italic">Buscando…</p>';
-
     try {
       const resp = await fetch(`/api/verificar-identidad/${encodeURIComponent(numIden)}`);
       const data = await resp.json();
-
       if (data.existe) {
         _terceroEncontrado = data;
-        resEl.innerHTML = `
-          <div class="result-found">
-            <strong>${data.NOM_COMP || '—'}</strong>
-            Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo: ${data.TIP_TPDOC || '—'}<br>
-            <span style="font-size:.8rem;color:#20A7C9">Registro encontrado ✔</span>
-          </div>`;
+        const tipLabel = data.TIP_TERC === 'N' ? 'Persona Natural' : 'Persona Jurídica';
+        resEl.innerHTML = `<div class="result-found"><strong>${data.NOM_COMP || data.NOM_TERC || '—'}</strong>Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo doc.: ${data.TIP_TPDOC || '—'}<br><span style="font-size:.8rem;color:#20A7C9">${tipLabel} — Registro encontrado ✔</span></div>`;
         btnIr.disabled = false;
       } else {
-        resEl.innerHTML = `
-          <div class="result-not-found">
-            No se encontró ningún registro con ese número de documento.<br>
-            <a href="formulario.html" style="color:#c62828;font-weight:600">
-              ¿Desea crear uno nuevo?
-            </a>
-          </div>`;
+        resEl.innerHTML = `<div class="result-not-found">No se encontró ningún registro con ese número de documento.<br><a href="formulario.html" style="color:#c62828;font-weight:600">¿Desea crear uno nuevo?</a></div>`;
       }
     } catch (err) {
       resEl.innerHTML = '<p class="result-error">Error al conectar con el servidor.</p>';
@@ -338,13 +310,18 @@
 
   function irAActualizar() {
     if (!_terceroEncontrado) return;
-    window.location.href = `formulario.html?modo=actualizar&numIden=${encodeURIComponent(_terceroEncontrado.NUM_IDEN)}`;
+    const tipTerc = _terceroEncontrado.TIP_TERC || '';
+    window.location.href = `formulario.html?modo=actualizar&numIden=${encodeURIComponent(_terceroEncontrado.NUM_IDEN)}&tipTerc=${encodeURIComponent(tipTerc)}`;
   }
 
-  // Cerrar modal al hacer clic fuera
-  document.getElementById('modal-actualizar').addEventListener('click', function(e) {
-    if (e.target === this) cerrarModalActualizar();
-  });
+  document.getElementById('modal-actualizar').addEventListener('click', function(e) { if (e.target === this) cerrarModalActualizar(); });
+
+  function descargarConsolidado(tipo) {
+    const url = tipo === 'natural' ? '/api/exportar-consolidado-natural' : '/api/exportar-consolidado-juridica';
+    const a = document.createElement('a');
+    a.href = url; a.download = '';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
 </script>
 
 </body>

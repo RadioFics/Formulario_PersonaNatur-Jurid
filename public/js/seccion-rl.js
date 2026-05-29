@@ -1,47 +1,172 @@
 /**
- * seccion-rl.js — Lógica de la Sección 2: "Información del representante legal"
+ * seccion-rl.js — Sección 2: "Información del representante legal"
  *
- * Contiene:
- *  · actualizarRL()         — escritura en formData.representantes[idx]
- *  · onRLPaisChange()       — cascada País → Dpto → Ciudad (por bloque)
- *  · onRLDeptChange()       — cascada Dpto → Ciudad (por bloque)
- *  · validarBloqueRL()      — valida Principal (siempre) o Suplente (si tocado)
- *  · validarSeccionRL()     — valida ambos bloques
- *  · validarYContinuarRL()  — botón "Continuar → Sección 3"
- *  · limpiarBloqueRL()      — botón "Limpiar sección" (por bloque)
+ * Patrón: bloque Principal fijo en HTML (idx 0) + extras dinámicos (idx >= 1).
+ * Los extras se renderizan en #rl-extras-list.
  *
+ * State: formData.representantes[]  (array, TIP_REPR: 'P' | 'S')
  * Depende de: state.js, utils.js
- *
- * Convención de IDs por bloque:
- *   Principal → prefijo 'rl_p'  (rl_p_pais, rl_p_dept, rl_p_mpio, …)
- *   Suplente  → prefijo 'rl_s'  (rl_s_pais, rl_s_dept, rl_s_mpio, …)
  */
 'use strict';
 
-/* ── Estado ─────────────────────────────────────────────────────────────────── */
+let _rlExtraId = 0;
+const _rlExtraMap = new Map(); // extraId → arrayIndex
 
-/**
- * Escribe un valor en formData.representantes[idx][campo].
- * Convierte cadenas vacías a null.
- *
- * @param {number} idx    0 = Principal | 1 = Suplente
- * @param {string} campo  Nombre del campo (p.ej. 'NOM_REPR')
- * @param {*}      valor
- */
+function _rlCampos(tipRepr) {
+  return {
+    TIP_REPR: tipRepr,
+    NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, NUM_DOCU: '',
+    FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
+  };
+}
+
 function actualizarRL(idx, campo, valor) {
+  if (!formData.representantes[idx]) return;
   formData.representantes[idx][campo] = valor === '' ? null : valor;
 }
 
-/* ── Cascadas geográficas (independientes por bloque) ───────────────────────── */
+function _rlTdOpts() {
+  return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+}
+function _rlPaOpts() {
+  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —');
+}
 
-/**
- * Reacciona al cambio de País dentro de un bloque RL.
- * Resetea Departamento y Ciudad del mismo bloque (sin afectar el otro).
- *
- * @param {string} codPais  Valor seleccionado en el <select> de país
- * @param {string} prefijo  'rl_p' | 'rl_s'
- * @param {number} idx      0 | 1
- */
+/* ── HTML extra ─────────────────────────────────────────────────────────────── */
+function _rlExtraHTML(extraId, idx) {
+  const td  = _rlTdOpts();
+  const pa  = _rlPaOpts();
+  const num = idx;
+  return `
+    <hr class="rl-divider">
+    <div class="grupo-item" id="rl_extra_${extraId}">
+      <div class="grupo-header" style="cursor:default">
+        <span class="grupo-titulo">
+          <span class="rl-badge suplente">S</span>
+          Representante adicional ${num}
+        </span>
+        <button class="btn-eliminar-grupo" type="button"
+                onclick="eliminarRLExtra(${extraId})" title="Eliminar">&#10005;</button>
+      </div>
+      <div>
+        <div class="grid-4">
+          <div class="field" id="field-rl_x${extraId}_nom">
+            <label>Nombres <span class="req">*</span></label>
+            <input type="text" id="rl_x${extraId}_nom" maxlength="100" placeholder="Nombres completos"
+                   oninput="actualizarRL(${idx},'NOM_REPR',this.value);limpiarError('field-rl_x${extraId}_nom')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_ape">
+            <label>Apellidos <span class="req">*</span></label>
+            <input type="text" id="rl_x${extraId}_ape" maxlength="100" placeholder="Apellidos completos"
+                   oninput="actualizarRL(${idx},'APE_REPR',this.value);limpiarError('field-rl_x${extraId}_ape')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_tipdoc">
+            <label>Tipo de documento <span class="req">*</span></label>
+            <select id="rl_x${extraId}_tipdoc"
+                    onchange="actualizarRL(${idx},'TIP_DOCU',this.value);limpiarError('field-rl_x${extraId}_tipdoc')">
+              ${td}
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_numdoc">
+            <label>Número de documento <span class="req">*</span></label>
+            <input type="text" id="rl_x${extraId}_numdoc" maxlength="20" inputmode="numeric"
+                   oninput="this.value=this.value.replace(/\D/g,'');actualizarRL(${idx},'NUM_DOCU',this.value);limpiarError('field-rl_x${extraId}_numdoc')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+        <div class="grid-4">
+          <div class="field" id="field-rl_x${extraId}_fec">
+            <label>Fecha de expedición <span class="req">*</span></label>
+            <input type="date" id="rl_x${extraId}_fec"
+                   onchange="actualizarRL(${idx},'FEC_EXPE',this.value);limpiarError('field-rl_x${extraId}_fec')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_pais">
+            <label>País <span class="req">*</span></label>
+            <select id="rl_x${extraId}_pais"
+                    onchange="onRLExtraPaisChange(${extraId},${idx},this.value);limpiarError('field-rl_x${extraId}_pais')">
+              ${pa}
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_dept">
+            <label>Departamento <span class="req">*</span></label>
+            <select id="rl_x${extraId}_dept" disabled
+                    onchange="onRLExtraDeptChange(${extraId},${idx},this.value);limpiarError('field-rl_x${extraId}_dept')">
+              <option value="">— Seleccione país primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_mpio">
+            <label>Ciudad <span class="req">*</span></label>
+            <select id="rl_x${extraId}_mpio" disabled
+                    onchange="actualizarRL(${idx},'COD_MPIO',this.value);limpiarError('field-rl_x${extraId}_mpio')">
+              <option value="">— Seleccione departamento primero —</option>
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+        <div class="grid-4">
+          <div class="field" id="field-rl_x${extraId}_dir">
+            <label>Dirección <span class="req">*</span></label>
+            <input type="text" id="rl_x${extraId}_dir" maxlength="255"
+                   oninput="actualizarRL(${idx},'DIR_REPR',this.value);limpiarError('field-rl_x${extraId}_dir')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-rl_x${extraId}_cel">
+            <label>Celular <span class="req">*</span></label>
+            <input type="tel" id="rl_x${extraId}_cel" maxlength="20"
+                   oninput="actualizarRL(${idx},'CEL_REPR',this.value);limpiarError('field-rl_x${extraId}_cel')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field">
+            <label>Teléfono fijo</label>
+            <input type="tel" id="rl_x${extraId}_tel" maxlength="20"
+                   oninput="actualizarRL(${idx},'TEL_REPR',this.value)" />
+          </div>
+          <div class="field" id="field-rl_x${extraId}_mail">
+            <label>Correo electrónico <span class="req">*</span></label>
+            <input type="email" id="rl_x${extraId}_mail" maxlength="100"
+                   oninput="actualizarRL(${idx},'MAIL_REPR',this.value);limpiarError('field-rl_x${extraId}_mail')" />
+            <span class="error-msg">Email inválido o vacío</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ── Agregar / Eliminar extras ──────────────────────────────────────────────── */
+function agregarRLExtra() {
+  const idx     = formData.representantes.length;
+  const extraId = _rlExtraId++;
+  _rlExtraMap.set(extraId, idx);
+  formData.representantes.push(_rlCampos('S'));
+
+  const list = document.getElementById('rl-extras-list');
+  const div  = document.createElement('div');
+  div.id = `rl_extra_wrap_${extraId}`;
+  div.innerHTML = _rlExtraHTML(extraId, idx);
+  list.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  guardarBorradorDebounced();
+}
+
+function eliminarRLExtra(extraId) {
+  const idx = _rlExtraMap.get(extraId);
+  if (idx === undefined) return;
+  formData.representantes.splice(idx, 1);
+  _rlExtraMap.forEach((v, k) => { if (v > idx) _rlExtraMap.set(k, v - 1); });
+  _rlExtraMap.delete(extraId);
+  const wrap = document.getElementById(`rl_extra_wrap_${extraId}`);
+  if (wrap) wrap.remove();
+  guardarBorradorDebounced();
+}
+
+/* ── Cascadas — Principal ───────────────────────────────────────────────────── */
 async function onRLPaisChange(codPais, prefijo, idx) {
   actualizarRL(idx, 'COD_PAIS', codPais);
   actualizarRL(idx, 'COD_DEPT', null);
@@ -49,7 +174,6 @@ async function onRLPaisChange(codPais, prefijo, idx) {
 
   const selDept = document.getElementById(`${prefijo}_dept`);
   const selMpio = document.getElementById(`${prefijo}_mpio`);
-
   selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
   selMpio.disabled  = true;
   limpiarError(`field-${prefijo}_dept`);
@@ -57,134 +181,114 @@ async function onRLPaisChange(codPais, prefijo, idx) {
 
   if (!codPais) {
     selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
-    selDept.disabled  = true;
-    return;
+    selDept.disabled  = true; return;
   }
-
   if (codPais === COD_COLOMBIA) {
     selDept.disabled = false;
-    await cargarCatalogo(
-      '/api/catalogo/departamentos', `${prefijo}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',
-      { cod_pais: codPais }
-    );
+    await cargarCatalogo('/api/catalogo/departamentos', `${prefijo}_dept`,
+      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
   } else {
-    // País extranjero: Departamento = "No aplica"
     selDept.innerHTML = '<option value="NA">No aplica</option>';
-    selDept.value     = 'NA';
-    selDept.disabled  = true;
+    selDept.value = 'NA'; selDept.disabled = true;
     actualizarRL(idx, 'COD_DEPT', 'NA');
-
-    selMpio.disabled  = false;
+    selMpio.disabled = false;
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
-    await cargarCatalogo(
-      '/api/catalogo/ciudades', `${prefijo}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
-      { cod_pais: codPais }
-    );
-    selMpio.onchange = (e) => {
-      actualizarRL(idx, 'COD_MPIO', e.target.value);
-      limpiarError(`field-${prefijo}_mpio`);
-    };
+    await cargarCatalogo('/api/catalogo/ciudades', `${prefijo}_mpio`,
+      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+    selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-${prefijo}_mpio`); };
   }
 }
 
-/**
- * Reacciona al cambio de Departamento dentro de un bloque RL.
- * Recarga el listado de ciudades del mismo bloque.
- *
- * @param {string} codDept
- * @param {string} prefijo  'rl_p' | 'rl_s'
- * @param {number} idx      0 | 1
- */
 async function onRLDeptChange(codDept, prefijo, idx) {
   actualizarRL(idx, 'COD_DEPT', codDept);
   actualizarRL(idx, 'COD_MPIO', null);
-
   const selMpio = document.getElementById(`${prefijo}_mpio`);
   const codPais = document.getElementById(`${prefijo}_pais`).value;
-
   selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
   selMpio.disabled  = true;
-
   if (!codDept || !codPais) return;
-
-  await cargarCatalogo(
-    '/api/catalogo/ciudades', `${prefijo}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
-    { cod_dept: codDept, cod_pais: codPais }
-  );
+  await cargarCatalogo('/api/catalogo/ciudades', `${prefijo}_mpio`,
+    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
-  selMpio.onchange = (e) => {
-    actualizarRL(idx, 'COD_MPIO', e.target.value);
-    limpiarError(`field-${prefijo}_mpio`);
-  };
+  selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-${prefijo}_mpio`); };
+}
+
+/* ── Cascadas — Extras ──────────────────────────────────────────────────────── */
+async function onRLExtraPaisChange(extraId, idx, codPais) {
+  actualizarRL(idx, 'COD_PAIS', codPais);
+  actualizarRL(idx, 'COD_DEPT', null);
+  actualizarRL(idx, 'COD_MPIO', null);
+  const selDept = document.getElementById(`rl_x${extraId}_dept`);
+  const selMpio = document.getElementById(`rl_x${extraId}_mpio`);
+  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.disabled  = true;
+  limpiarError(`field-rl_x${extraId}_dept`);
+  limpiarError(`field-rl_x${extraId}_mpio`);
+  if (!codPais) { selDept.innerHTML = '<option value="">— Seleccione país primero —</option>'; selDept.disabled = true; return; }
+  if (String(codPais) === COD_COLOMBIA) {
+    selDept.disabled = false;
+    await cargarCatalogo('/api/catalogo/departamentos', `rl_x${extraId}_dept`,
+      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+  } else {
+    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.value = 'NA'; selDept.disabled = true;
+    actualizarRL(idx, 'COD_DEPT', 'NA');
+    selMpio.disabled = false;
+    selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
+    await cargarCatalogo('/api/catalogo/ciudades', `rl_x${extraId}_mpio`,
+      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+    selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-rl_x${extraId}_mpio`); };
+  }
+}
+
+async function onRLExtraDeptChange(extraId, idx, codDept) {
+  actualizarRL(idx, 'COD_DEPT', codDept);
+  actualizarRL(idx, 'COD_MPIO', null);
+  const selMpio = document.getElementById(`rl_x${extraId}_mpio`);
+  const codPais = document.getElementById(`rl_x${extraId}_pais`).value;
+  selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
+  selMpio.disabled  = true;
+  if (!codDept || !codPais) return;
+  await cargarCatalogo('/api/catalogo/ciudades', `rl_x${extraId}_mpio`,
+    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+  selMpio.disabled = false;
+  selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-rl_x${extraId}_mpio`); };
 }
 
 /* ── Validación ─────────────────────────────────────────────────────────────── */
+function _rlExtraIdFromIdx(idx) {
+  for (const [k, v] of _rlExtraMap) { if (v === idx) return k; }
+  return null;
+}
 
-/**
- * Valida un bloque RL.
- *
- * - Principal (idx 0): todos los campos requeridos son obligatorios.
- * - Suplente  (idx 1): si ningún campo fue tocado → válido (no se guardará).
- *                      Si al menos un campo fue tocado → se exigen todos.
- *
- * @param {number} idx  0 | 1
- * @returns {boolean}
- */
 function validarBloqueRL(idx) {
-  const prefijo = idx === 0 ? 'rl_p' : 'rl_s';
-  const d       = formData.representantes[idx];
+  const d = formData.representantes[idx];
+  if (!d) return true;
+  const isExtra  = idx > 0;
+  const extraId  = isExtra ? _rlExtraIdFromIdx(idx) : null;
+  const pid = (c) => isExtra ? `field-rl_x${extraId}_${c}` : `field-rl_p_${c}`;
 
-  const camposReq = [
-    { fieldId: `field-${prefijo}_nom`,    valor: d.NOM_REPR },
-    { fieldId: `field-${prefijo}_ape`,    valor: d.APE_REPR },
-    { fieldId: `field-${prefijo}_tipdoc`, valor: d.TIP_DOCU },
-    { fieldId: `field-${prefijo}_numdoc`, valor: d.NUM_DOCU },
-    { fieldId: `field-${prefijo}_fec`,    valor: d.FEC_EXPE },
-    { fieldId: `field-${prefijo}_pais`,   valor: d.COD_PAIS },
-    { fieldId: `field-${prefijo}_dept`,   valor: d.COD_DEPT },
-    { fieldId: `field-${prefijo}_mpio`,   valor: d.COD_MPIO },
-    { fieldId: `field-${prefijo}_dir`,    valor: d.DIR_REPR },
-    { fieldId: `field-${prefijo}_cel`,    valor: d.CEL_REPR },
+  const req = [
+    [pid('nom'),    d.NOM_REPR], [pid('ape'),    d.APE_REPR],
+    [pid('tipdoc'), d.TIP_DOCU], [pid('numdoc'), d.NUM_DOCU],
+    [pid('fec'),    d.FEC_EXPE], [pid('pais'),   d.COD_PAIS],
+    [pid('dept'),   d.COD_DEPT], [pid('mpio'),   d.COD_MPIO],
+    [pid('dir'),    d.DIR_REPR], [pid('cel'),    d.CEL_REPR],
   ];
-
-  // Suplente: si el bloque está completamente intacto → OK sin validar
-  if (idx === 1) {
-    const alguno = camposReq.some(c => c.valor && String(c.valor).trim() !== '')
-                || (d.MAIL_REPR && String(d.MAIL_REPR).trim() !== '')
-                || (d.TEL_REPR  && String(d.TEL_REPR).trim()  !== '');
-    if (!alguno) return true;
-  }
-
   let ok = true;
-
-  camposReq.forEach(({ fieldId, valor }) => {
-    if (!valor || String(valor).trim() === '') {
-      mostrarError(fieldId);
-      ok = false;
-    }
-  });
-
-  if (!d.MAIL_REPR || !esEmailValido(d.MAIL_REPR)) {
-    mostrarError(`field-${prefijo}_mail`);
-    ok = false;
-  }
-
+  req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  if (!d.MAIL_REPR || !esEmailValido(d.MAIL_REPR)) { mostrarError(pid('mail')); ok = false; }
   return ok;
 }
 
-/** Valida ambos bloques (Principal obligatorio, Suplente condicional). */
 function validarSeccionRL() {
-  const okP = validarBloqueRL(0);
-  const okS = validarBloqueRL(1);
-  return okP && okS;
+  let ok = validarBloqueRL(0);
+  for (let i = 1; i < formData.representantes.length; i++) {
+    if (!validarBloqueRL(i)) ok = false;
+  }
+  return ok;
 }
 
-/* ── Acciones de botones ────────────────────────────────────────────────────── */
-
-/** Valida la sección y, si es correcta, avanza al acordeón 3. */
 function validarYContinuarRL() {
   if (!validarSeccionRL()) {
     document.getElementById('accordion-rl').classList.remove('collapsed');
@@ -193,7 +297,6 @@ function validarYContinuarRL() {
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-
   mostrarToast('Sección 2 completa. Continúe con la siguiente sección.', 'success');
   document.getElementById('accordion-rl').classList.add('collapsed');
   const acc3 = document.getElementById('accordion-sociedad');
@@ -202,33 +305,47 @@ function validarYContinuarRL() {
   console.log('✅ formData.representantes:', JSON.stringify(formData.representantes, null, 2));
 }
 
-/**
- * Resetea un bloque RL completo: DOM + estado + errores visuales.
- *
- * @param {number} idx  0 = Principal | 1 = Suplente
- */
-function limpiarBloqueRL(idx) {
-  const prefijo  = idx === 0 ? 'rl_p'               : 'rl_s';
-  const bloqueId = idx === 0 ? 'rl-bloque-principal' : 'rl-bloque-suplente';
-  const bloque   = document.getElementById(bloqueId);
+function limpiarSeccionRL() {
+  document.getElementById('rl-extras-list').innerHTML = '';
+  _rlExtraMap.clear();
+  _rlExtraId = 0;
+  formData.representantes = [_rlCampos('P')];
 
-  bloque.querySelectorAll('input, select').forEach(el => {
-    el.tagName === 'SELECT' ? (el.selectedIndex = 0) : (el.value = '');
-  });
+  const bloque = document.getElementById('rl-bloque-principal');
+  if (bloque) {
+    bloque.querySelectorAll('input, select').forEach(el => {
+      el.tagName === 'SELECT' ? (el.selectedIndex = 0) : (el.value = '');
+    });
+    const dept = document.getElementById('rl_p_dept');
+    const mpio = document.getElementById('rl_p_mpio');
+    if (dept) { dept.innerHTML = '<option value="">— Seleccione país primero —</option>'; dept.disabled = true; }
+    if (mpio) { mpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>'; mpio.disabled = true; }
+    bloque.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
+  }
+  mostrarToast('Sección limpiada.', 'success');
+}
 
-  const selDept = document.getElementById(`${prefijo}_dept`);
-  const selMpio = document.getElementById(`${prefijo}_mpio`);
-  selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
-  selDept.disabled  = true;
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
-  selMpio.disabled  = true;
-
-  formData.representantes[idx] = {
-    TIP_REPR: idx === 0 ? 'P' : 'S',
-    NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, NUM_DOCU: '',
-    FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-    DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
-  };
-
-  bloque.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
+/* ── Hidratación (borrador / modo actualizar) ───────────────────────────────── */
+async function hidratarBloqueRLPrincipal() {
+  const d = formData.representantes[0];
+  if (!d) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('rl_p_nom',    d.NOM_REPR);
+  set('rl_p_ape',    d.APE_REPR);
+  set('rl_p_tipdoc', d.TIP_DOCU);
+  set('rl_p_numdoc', d.NUM_DOCU);
+  set('rl_p_fec',    d.FEC_EXPE);
+  set('rl_p_dir',    d.DIR_REPR);
+  set('rl_p_cel',    d.CEL_REPR);
+  set('rl_p_tel',    d.TEL_REPR);
+  set('rl_p_mail',   d.MAIL_REPR);
+  if (d.COD_PAIS) {
+    await onRLPaisChange(d.COD_PAIS, 'rl_p', 0);
+    set('rl_p_pais', d.COD_PAIS);
+    if (d.COD_DEPT && d.COD_DEPT !== 'NA') {
+      await onRLDeptChange(d.COD_DEPT, 'rl_p', 0);
+      set('rl_p_dept', d.COD_DEPT);
+    }
+    set('rl_p_mpio', d.COD_MPIO);
+  }
 }

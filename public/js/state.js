@@ -174,22 +174,35 @@ const COD_COLOMBIA = '1';
  */
 const catalogCache = {};
 
-const BORRADOR_STORAGE_KEY = 'formularioSarlaftBorrador';
+const BORRADOR_BASE_KEY = 'formularioSarlaftBorrador';
 let _draftTimer = null;
 
 /**
+ * Devuelve la clave de localStorage para el borrador actual.
+ * Si el formulario tiene NUM_IDEN cargado, usa una clave específica por NIT
+ * para que distintos borradores no se sobreescriban entre sí.
+ */
+function _borradorKey() {
+  const numIden = (formData.basica && formData.basica.NUM_IDEN)
+    ? String(formData.basica.NUM_IDEN).trim()
+    : '';
+  return numIden ? `${BORRADOR_BASE_KEY}_${numIden}` : BORRADOR_BASE_KEY;
+}
+
+/**
  * Guarda el estado actual en localStorage como borrador.
+ * La clave incluye el NIT cuando ya está disponible.
  */
 function guardarBorrador() {
   try {
-    localStorage.setItem(BORRADOR_STORAGE_KEY, JSON.stringify(formData));
+    localStorage.setItem(_borradorKey(), JSON.stringify(formData));
   } catch (err) {
     console.error('guardarBorrador():', err);
   }
 }
 
 /**
- * Guarda el estado actual en localStorage con debounce para no escribir en cada tecla.
+ * Guarda el estado actual en localStorage con debounce.
  */
 function guardarBorradorDebounced() {
   clearTimeout(_draftTimer);
@@ -197,23 +210,35 @@ function guardarBorradorDebounced() {
 }
 
 /**
- * Elimina el borrador guardado en localStorage.
+ * Elimina el borrador guardado (clave actual y clave genérica).
  */
 function borrarBorrador() {
   try {
-    localStorage.removeItem(BORRADOR_STORAGE_KEY);
+    localStorage.removeItem(_borradorKey());
+    localStorage.removeItem(BORRADOR_BASE_KEY);
   } catch (err) {
     console.error('borrarBorrador():', err);
   }
 }
 
 /**
- * Carga el borrador desde localStorage y restaura el estado global.
+ * Carga el borrador desde localStorage.
+ * Primero intenta con la clave NIT-específica (si NUM_IDEN está en la URL),
+ * luego con la clave genérica.
  * Devuelve true si se encontró un borrador válido.
  */
 function cargarBorrador() {
   try {
-    const raw = localStorage.getItem(BORRADOR_STORAGE_KEY);
+    // Detectar numIden desde la URL (?numIden=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const numIdenUrl = urlParams.get('numIden') || '';
+    const claveEspecifica = numIdenUrl
+      ? `${BORRADOR_BASE_KEY}_${numIdenUrl}`
+      : null;
+
+    const raw = (claveEspecifica && localStorage.getItem(claveEspecifica))
+      || localStorage.getItem(BORRADOR_BASE_KEY);
+
     if (!raw) return false;
     const datos = JSON.parse(raw);
     if (!datos || typeof datos !== 'object') return false;

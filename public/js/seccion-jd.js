@@ -1,61 +1,56 @@
 /**
  * seccion-jd.js — Sección 6: "Junta directiva / Consejo de administración"
  *
- * Patrón: grupos dinámicos con IDs estables (_id) que no cambian al borrar.
- * Cada grupo tiene bloque Principal (requerido) + Suplente (opcional).
+ * Patrón: lista plana de miembros. Cada miembro tiene un selector de Rol
+ * (Principal / Suplente). El botón "+ Agregar miembro" añade cualquier tipo.
  *
- * API IDs: jd_{id}_{bloc}_{campo}   bloc = 'p' | 's'
- * State:   formData.juntaDirectiva.miembros[i].Principal / .Suplente
+ * API IDs: jd_{id}_{campo}
+ * State:   formData.juntaDirectiva.miembros[i] = { _id, TIP_REPR, ...campos }
  *
- * Depende de: state.js, utils.js (incluye getOpcionesHTML)
+ * Depende de: state.js, utils.js
  */
 'use strict';
 
-/* ── Counter de IDs estables ─────────────────────────────────────────────────── */
 let _jdId = 0;
 
-/* ── Fábrica de estado ──────────────────────────────────────────────────────── */
-function _jdCampos() {
+function _jdCampos(tipRepr) {
   return {
+    TIP_REPR: tipRepr || 'P',
     TIP_MIEM: '', NOM_MIEM: '', APE_MIEM: '', RAZ_MIEM: '',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
     COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
     DIR_MIEM: '', TEL_MIEM: '', MAIL_MIEM: '',
   };
 }
-function _jdNuevo() {
-  return { _id: _jdId++, Principal: _jdCampos(), Suplente: _jdCampos() };
+function _jdNuevo(tipRepr) {
+  return Object.assign({ _id: _jdId++ }, _jdCampos(tipRepr));
 }
 function _jdGet(id)  { return formData.juntaDirectiva.miembros.find(m => m._id === id); }
 function _jdPos(id)  { return formData.juntaDirectiva.miembros.findIndex(m => m._id === id); }
 
-/* ── Actualización de estado ─────────────────────────────────────────────────── */
-function actualizarJDMiem(id, SK, campo, valor) {
+function actualizarJDMiem(id, campo, valor) {
   const m = _jdGet(id);
-  if (m) m[SK][campo] = valor === '' ? null : valor;
+  if (m) m[campo] = valor === '' ? null : valor;
 }
 
-/* ── Título dinámico del grupo ──────────────────────────────────────────────── */
 function actualizarTituloJD(id) {
-  const m = _jdGet(id);
+  const m   = _jdGet(id);
   if (!m) return;
-  const pos    = _jdPos(id) + 1;
-  const nombre = [(m.Principal.NOM_MIEM || '').trim(), (m.Principal.APE_MIEM || '').trim()]
-                   .filter(Boolean).join(' ');
-  const el = document.getElementById(`jd_titulo_${id}`);
-  if (el) el.textContent = `Miembro ${pos}${nombre ? ' — ' + nombre : ''}`;
+  const pos = _jdPos(id) + 1;
+  const nom = [(m.NOM_MIEM || '').trim(), (m.APE_MIEM || '').trim()].filter(Boolean).join(' ');
+  const rol = m.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
+  const el  = document.getElementById(`jd_titulo_${id}`);
+  if (el) el.textContent = `Miembro ${pos} (${rol})${nom ? ' — ' + nom : ''}`;
 }
 function _jdRenumerarTodos() {
   formData.juntaDirectiva.miembros.forEach(m => actualizarTituloJD(m._id));
 }
 
-/* ── Colapsar/expandir grupo interno ────────────────────────────────────────── */
 function toggleGrupoJD(id) {
   const body = document.getElementById(`jd_body_${id}`);
   if (body) body.classList.toggle('collapsed');
 }
 
-/* ── Visibilidad de la lista (booleano de cabecera) ─────────────────────────── */
 function onTieneJuntaChange(valor) {
   formData.juntaDirectiva.TIE_JUNTA = valor;
   const wrap = document.getElementById('jd-lista-wrap');
@@ -64,7 +59,7 @@ function onTieneJuntaChange(valor) {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       wrap.style.opacity = '1'; wrap.style.maxHeight = '99999px';
     }));
-    if (formData.juntaDirectiva.miembros.length === 0) agregarJD();
+    if (formData.juntaDirectiva.miembros.length === 0) agregarJD('P');
   } else {
     wrap.style.opacity = '0'; wrap.style.maxHeight = '0';
     setTimeout(() => {
@@ -74,175 +69,160 @@ function onTieneJuntaChange(valor) {
   }
 }
 
-/* ── Opciones desde caché ────────────────────────────────────────────────────── */
 function _jdTdOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1','COD_TPDOC','NOM_TPDOC','— Seleccione —'); }
 function _jdPaOpts() { return getOpcionesHTML('/api/catalogo/paises','COD_PAIS','NOM_PAIS','— Seleccione —'); }
 
-/* ── HTML de un bloque (Principal o Suplente) ───────────────────────────────── */
-function _jdBloque(id, bloc) {
-  const SK   = bloc === 'p' ? 'Principal' : 'Suplente';
-  const R    = bloc === 'p' ? ' <span class="req">*</span>' : '';
-  const td   = _jdTdOpts();
-  const pa   = _jdPaOpts();
-  const lbl  = bloc === 'p' ? 'Principal' : 'Suplente';
-  const bdg  = bloc === 'p' ? '<span class="rl-badge principal">P</span>' : '<span class="rl-badge suplente">S</span>';
-  const opt  = bloc === 's' ? '<span style="font-size:.72rem;font-weight:400;color:#9e9e9e;margin-left:4px">(opcional)</span>' : '';
+function _jdMiembroHTML(m) {
+  const id  = m._id;
+  const td  = _jdTdOpts();
+  const pa  = _jdPaOpts();
+  const sel = m.TIP_REPR === 'S' ? 'selected' : '';
+  const selP = m.TIP_REPR !== 'S' ? 'selected' : '';
   return `
-    <div class="rl-bloque">
-      <div class="rl-block-header">${bdg} ${lbl} ${opt}</div>
-      <div class="grid-4">
-        <div class="field" id="field-jd_${id}_${bloc}_tipmiem">
-          <label>Tipo de miembro${R}</label>
-          <input type="text" id="jd_${id}_${bloc}_tipmiem" maxlength="100" placeholder="Ej: Titular, Suplente de consejo…"
-                 oninput="actualizarJDMiem(${id},'${SK}','TIP_MIEM',this.value);limpiarError('field-jd_${id}_${bloc}_tipmiem')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-jd_${id}_${bloc}_nom">
-          <label>Nombres${R}</label>
-          <input type="text" id="jd_${id}_${bloc}_nom" maxlength="100" placeholder="Nombres completos"
-                 oninput="actualizarJDMiem(${id},'${SK}','NOM_MIEM',this.value);actualizarTituloJD(${id});limpiarError('field-jd_${id}_${bloc}_nom')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-jd_${id}_${bloc}_ape">
-          <label>Apellidos${R}</label>
-          <input type="text" id="jd_${id}_${bloc}_ape" maxlength="100" placeholder="Apellidos completos"
-                 oninput="actualizarJDMiem(${id},'${SK}','APE_MIEM',this.value);limpiarError('field-jd_${id}_${bloc}_ape')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
+    <div class="grupo-header" onclick="toggleGrupoJD(${id})">
+      <span class="grupo-titulo" id="jd_titulo_${id}">Miembro ${_jdPos(id)+1}</span>
+      <button class="btn-eliminar-grupo" type="button" onclick="eliminarJD(event,${id})" title="Eliminar">✕</button>
+    </div>
+    <div class="grupo-body" id="jd_body_${id}">
+      <div class="grid-4" style="margin-bottom:6px">
         <div class="field">
-          <label>Razón social</label>
-          <input type="text" id="jd_${id}_${bloc}_raz" maxlength="255" placeholder="Si aplica"
-                 oninput="actualizarJDMiem(${id},'${SK}','RAZ_MIEM',this.value)" />
+          <label>Rol <span class="req">*</span></label>
+          <select id="jd_${id}_tipRepr"
+                  onchange="actualizarJDMiem(${id},'TIP_REPR',this.value);actualizarTituloJD(${id})">
+            <option value="P" ${selP}>Principal</option>
+            <option value="S" ${sel}>Suplente</option>
+          </select>
+        </div>
+        <div class="field" id="field-jd_${id}_tipmiem">
+          <label>Tipo de miembro <span class="req">*</span></label>
+          <input type="text" id="jd_${id}_tipmiem" maxlength="100" placeholder="Ej: Titular, Suplente de consejo…"
+                 oninput="actualizarJDMiem(${id},'TIP_MIEM',this.value);limpiarError('field-jd_${id}_tipmiem')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-jd_${id}_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="jd_${id}_nom" maxlength="100" placeholder="Nombres completos"
+                 oninput="actualizarJDMiem(${id},'NOM_MIEM',this.value);actualizarTituloJD(${id});limpiarError('field-jd_${id}_nom')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-jd_${id}_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="jd_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+                 oninput="actualizarJDMiem(${id},'APE_MIEM',this.value);limpiarError('field-jd_${id}_ape')" />
+          <span class="error-msg">Campo requerido</span>
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-jd_${id}_${bloc}_tipdoc">
-          <label>Tipo doc.${R}</label>
-          <select id="jd_${id}_${bloc}_tipdoc"
-                  onchange="actualizarJDMiem(${id},'${SK}','TIP_DOCU',this.value);limpiarError('field-jd_${id}_${bloc}_tipdoc')">
+        <div class="field">
+          <label>Razón social</label>
+          <input type="text" id="jd_${id}_raz" maxlength="255" placeholder="Si aplica"
+                 oninput="actualizarJDMiem(${id},'RAZ_MIEM',this.value)" />
+        </div>
+        <div class="field" id="field-jd_${id}_tipdoc">
+          <label>Tipo doc. <span class="req">*</span></label>
+          <select id="jd_${id}_tipdoc"
+                  onchange="actualizarJDMiem(${id},'TIP_DOCU',this.value);limpiarError('field-jd_${id}_tipdoc')">
             ${td}
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-jd_${id}_${bloc}_numdoc">
-          <label>Número doc.${R}</label>
-          <input type="text" id="jd_${id}_${bloc}_numdoc" maxlength="20" inputmode="numeric"
-                 oninput="this.value=this.value.replace(/\\D/g,'');actualizarJDMiem(${id},'${SK}','NUM_DOCU',this.value);limpiarError('field-jd_${id}_${bloc}_numdoc')" />
+        <div class="field" id="field-jd_${id}_numdoc">
+          <label>Número doc. <span class="req">*</span></label>
+          <input type="text" id="jd_${id}_numdoc" maxlength="20" inputmode="numeric"
+                 oninput="this.value=this.value.replace(/\D/g,'');actualizarJDMiem(${id},'NUM_DOCU',this.value);limpiarError('field-jd_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-jd_${id}_${bloc}_fec">
-          <label>Fecha expedición${R}</label>
-          <input type="date" id="jd_${id}_${bloc}_fec"
-                 onchange="actualizarJDMiem(${id},'${SK}','FEC_EXPE',this.value);limpiarError('field-jd_${id}_${bloc}_fec')" />
+        <div class="field" id="field-jd_${id}_fec">
+          <label>Fecha expedición <span class="req">*</span></label>
+          <input type="date" id="jd_${id}_fec"
+                 onchange="actualizarJDMiem(${id},'FEC_EXPE',this.value);limpiarError('field-jd_${id}_fec')" />
           <span class="error-msg">Campo requerido</span>
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-jd_${id}_${bloc}_pais">
-          <label>País${R}</label>
-          <select id="jd_${id}_${bloc}_pais"
-                  onchange="onJDPaisChange(${id},'${bloc}',this.value);limpiarError('field-jd_${id}_${bloc}_pais')">
+        <div class="field" id="field-jd_${id}_pais">
+          <label>País <span class="req">*</span></label>
+          <select id="jd_${id}_pais"
+                  onchange="onJDPaisChange(${id},this.value);limpiarError('field-jd_${id}_pais')">
             ${pa}
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-jd_${id}_${bloc}_dept">
-          <label>Departamento${R}</label>
-          <select id="jd_${id}_${bloc}_dept" disabled
-                  onchange="onJDDeptChange(${id},'${bloc}',this.value);limpiarError('field-jd_${id}_${bloc}_dept')">
+        <div class="field" id="field-jd_${id}_dept">
+          <label>Departamento <span class="req">*</span></label>
+          <select id="jd_${id}_dept" disabled
+                  onchange="onJDDeptChange(${id},this.value);limpiarError('field-jd_${id}_dept')">
             <option value="">— Seleccione país primero —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-jd_${id}_${bloc}_mpio">
-          <label>Ciudad${R}</label>
-          <select id="jd_${id}_${bloc}_mpio" disabled
-                  onchange="actualizarJDMiem(${id},'${SK}','COD_MPIO',this.value);limpiarError('field-jd_${id}_${bloc}_mpio')">
+        <div class="field" id="field-jd_${id}_mpio">
+          <label>Ciudad <span class="req">*</span></label>
+          <select id="jd_${id}_mpio" disabled
+                  onchange="actualizarJDMiem(${id},'COD_MPIO',this.value);limpiarError('field-jd_${id}_mpio')">
             <option value="">— Seleccione departamento primero —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field">
           <label>Dirección</label>
-          <input type="text" id="jd_${id}_${bloc}_dir" maxlength="255"
-                 oninput="actualizarJDMiem(${id},'${SK}','DIR_MIEM',this.value)" />
+          <input type="text" id="jd_${id}_dir" maxlength="255"
+                 oninput="actualizarJDMiem(${id},'DIR_MIEM',this.value)" />
         </div>
       </div>
       <div class="grid-4">
-        <div class="field" id="field-jd_${id}_${bloc}_tel">
-          <label>Teléfono${R}</label>
-          <input type="tel" id="jd_${id}_${bloc}_tel" maxlength="20"
-                 oninput="actualizarJDMiem(${id},'${SK}','TEL_MIEM',this.value);limpiarError('field-jd_${id}_${bloc}_tel')" />
+        <div class="field" id="field-jd_${id}_tel">
+          <label>Teléfono <span class="req">*</span></label>
+          <input type="tel" id="jd_${id}_tel" maxlength="20"
+                 oninput="actualizarJDMiem(${id},'TEL_MIEM',this.value);limpiarError('field-jd_${id}_tel')" />
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-jd_${id}_${bloc}_mail">
-          <label>Correo electrónico${R}</label>
-          <input type="email" id="jd_${id}_${bloc}_mail" maxlength="100"
-                 oninput="actualizarJDMiem(${id},'${SK}','MAIL_MIEM',this.value);limpiarError('field-jd_${id}_${bloc}_mail')" />
+        <div class="field" id="field-jd_${id}_mail">
+          <label>Correo electrónico <span class="req">*</span></label>
+          <input type="email" id="jd_${id}_mail" maxlength="100"
+                 oninput="actualizarJDMiem(${id},'MAIL_MIEM',this.value);limpiarError('field-jd_${id}_mail')" />
           <span class="error-msg">Email inválido o vacío</span>
         </div>
       </div>
     </div>`;
 }
 
-/* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
-function _crearGrupoJDEl(miembro) {
-  const id  = miembro._id;
-  const pos = _jdPos(id) + 1;
-  const el  = document.createElement('div');
+function _crearGrupoJDEl(m) {
+  const el = document.createElement('div');
   el.className = 'grupo-item';
-  el.id        = `jd_grupo_${id}`;
-  el.innerHTML = `
-    <div class="grupo-header" onclick="toggleGrupoJD(${id})">
-      <span class="grupo-titulo" id="jd_titulo_${id}">Miembro ${pos}</span>
-      <button class="btn-eliminar-grupo" type="button" onclick="eliminarJD(event,${id})" title="Eliminar">✕</button>
-    </div>
-    <div class="grupo-body" id="jd_body_${id}">
-      ${_jdBloque(id, 'p')}
-      <hr class="rl-divider">
-      ${_jdBloque(id, 's')}
-    </div>`;
+  el.id        = `jd_grupo_${m._id}`;
+  el.innerHTML = _jdMiembroHTML(m);
   return el;
 }
 
-function _hydrateJDFields(miembro, el) {
-  const id = miembro._id;
-  const set = (selector, value) => {
-    const field = el.querySelector(selector);
-    if (field) field.value = value || '';
-  };
-
-  [['p', 'Principal'], ['s', 'Suplente']].forEach(([bloc, SK]) => {
-    const data = miembro[SK];
-    set(`#jd_${id}_${bloc}_tipmiem`, data.TIP_MIEM);
-    set(`#jd_${id}_${bloc}_nom`, data.NOM_MIEM);
-    set(`#jd_${id}_${bloc}_ape`, data.APE_MIEM);
-    set(`#jd_${id}_${bloc}_raz`, data.RAZ_MIEM);
-    set(`#jd_${id}_${bloc}_tipdoc`, data.TIP_DOCU);
-    set(`#jd_${id}_${bloc}_numdoc`, data.NUM_DOCU);
-    set(`#jd_${id}_${bloc}_fec`, data.FEC_EXPE);
-    set(`#jd_${id}_${bloc}_pais`, data.COD_PAIS);
-    set(`#jd_${id}_${bloc}_dir`, data.DIR_MIEM);
-    set(`#jd_${id}_${bloc}_tel`, data.TEL_MIEM);
-    set(`#jd_${id}_${bloc}_mail`, data.MAIL_MIEM);
-
-    if (data.COD_PAIS) {
-      onJDPaisChange(id, bloc, data.COD_PAIS)
-        .then(() => {
-          const deptEl = el.querySelector(`#jd_${id}_${bloc}_dept`);
-          if (deptEl) deptEl.value = data.COD_DEPT || '';
-          if (data.COD_DEPT && data.COD_DEPT !== 'NA') {
-            return onJDDeptChange(id, bloc, data.COD_DEPT);
-          }
-          return Promise.resolve();
-        })
-        .then(() => {
-          const mpioEl = el.querySelector(`#jd_${id}_${bloc}_mpio`);
-          if (mpioEl) mpioEl.value = data.COD_MPIO || '';
-        })
-        .catch(err => console.error('hydrate JD fields:', err));
-    }
-  });
+function _hydrateJDFields(m, el) {
+  const id  = m._id;
+  const set = (sel, val) => { const f = el.querySelector(sel); if (f) f.value = val || ''; };
+  set(`#jd_${id}_tipRepr`,  m.TIP_REPR);
+  set(`#jd_${id}_tipmiem`,  m.TIP_MIEM);
+  set(`#jd_${id}_nom`,      m.NOM_MIEM);
+  set(`#jd_${id}_ape`,      m.APE_MIEM);
+  set(`#jd_${id}_raz`,      m.RAZ_MIEM);
+  set(`#jd_${id}_tipdoc`,   m.TIP_DOCU);
+  set(`#jd_${id}_numdoc`,   m.NUM_DOCU);
+  set(`#jd_${id}_fec`,      m.FEC_EXPE);
+  set(`#jd_${id}_pais`,     m.COD_PAIS);
+  set(`#jd_${id}_dir`,      m.DIR_MIEM);
+  set(`#jd_${id}_tel`,      m.TEL_MIEM);
+  set(`#jd_${id}_mail`,     m.MAIL_MIEM);
+  if (m.COD_PAIS) {
+    onJDPaisChange(id, m.COD_PAIS)
+      .then(() => {
+        const deptEl = el.querySelector(`#jd_${id}_dept`);
+        if (deptEl) deptEl.value = m.COD_DEPT || '';
+        if (m.COD_DEPT && m.COD_DEPT !== 'NA') return onJDDeptChange(id, m.COD_DEPT);
+      })
+      .then(() => {
+        const mpioEl = el.querySelector(`#jd_${id}_mpio`);
+        if (mpioEl) mpioEl.value = m.COD_MPIO || '';
+      })
+      .catch(err => console.error('hydrate JD:', err));
+  }
   actualizarTituloJD(id);
 }
 
@@ -254,8 +234,24 @@ async function renderListaJD() {
   if (!Array.isArray(formData.juntaDirectiva.miembros)) {
     formData.juntaDirectiva.miembros = [];
   }
+
+  // Migrar formato antiguo {_id, Principal:{}, Suplente:{}} → plano
+  formData.juntaDirectiva.miembros = formData.juntaDirectiva.miembros.map(m => {
+    if (m.Principal || m.Suplente) {
+      const roles = [];
+      if (m.Principal && (m.Principal.NOM_MIEM || m.Principal.APE_MIEM)) {
+        roles.push(Object.assign({ _id: m._id, TIP_REPR: 'P' }, m.Principal));
+      }
+      if (m.Suplente && (m.Suplente.NOM_MIEM || m.Suplente.APE_MIEM)) {
+        roles.push(Object.assign({ _id: _jdId++ }, m.Suplente, { TIP_REPR: 'S' }));
+      }
+      return roles.length ? roles : null;
+    }
+    return m;
+  }).flat().filter(Boolean);
+
   if (formData.juntaDirectiva.miembros.length === 0 && formData.juntaDirectiva.TIE_JUNTA === 'S') {
-    formData.juntaDirectiva.miembros.push(_jdNuevo());
+    formData.juntaDirectiva.miembros.push(_jdNuevo('P'));
   }
   _jdId = formData.juntaDirectiva.miembros.length === 0
     ? 0
@@ -271,16 +267,16 @@ async function renderListaJD() {
     setTimeout(() => { wrap.style.display = 'none'; }, 210);
   }
 
-  for (const miembro of formData.juntaDirectiva.miembros) {
-    const el = _crearGrupoJDEl(miembro);
+  for (const m of formData.juntaDirectiva.miembros) {
+    const el = _crearGrupoJDEl(m);
     list.appendChild(el);
-    _hydrateJDFields(miembro, el);
+    _hydrateJDFields(m, el);
   }
   _jdSyncEliminar();
 }
 
 function agregarJD() {
-  const nuevo = _jdNuevo();
+  const nuevo = _jdNuevo('P');
   formData.juntaDirectiva.miembros.push(nuevo);
   document.querySelectorAll('#jd-grupos-list .grupo-body').forEach(b => b.classList.add('collapsed'));
   const list = document.getElementById('jd-grupos-list');
@@ -306,88 +302,66 @@ function _jdSyncEliminar() {
   document.querySelectorAll('#jd-grupos-list .btn-eliminar-grupo').forEach(b => { b.disabled = sola; });
 }
 
-/* ── Cascadas geográficas ────────────────────────────────────────────────────── */
-async function onJDPaisChange(id, bloc, codPais) {
+/* ── Cascadas geográficas ─────────────────────────────────────────────────── */
+async function onJDPaisChange(id, codPais) {
   const m = _jdGet(id);
   if (!m) return;
-  const SK = bloc === 'p' ? 'Principal' : 'Suplente';
-  // Normaliza a string para mantener consistencia con DOM
-  m[SK].COD_PAIS = codPais ? String(codPais) : null;
-  m[SK].COD_DEPT = null;
-  m[SK].COD_MPIO = null;
-
-  const selDept = document.getElementById(`jd_${id}_${bloc}_dept`);
-  const selMpio = document.getElementById(`jd_${id}_${bloc}_mpio`);
+  m.COD_PAIS = codPais ? String(codPais) : null;
+  m.COD_DEPT = null;
+  m.COD_MPIO = null;
+  const selDept = document.getElementById(`jd_${id}_dept`);
+  const selMpio = document.getElementById(`jd_${id}_mpio`);
   selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
   selMpio.disabled  = true;
-  limpiarError(`field-jd_${id}_${bloc}_dept`);
-  limpiarError(`field-jd_${id}_${bloc}_mpio`);
-
-  if (!codPais) {
-    selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
-    selDept.disabled  = true; return;
-  }
+  limpiarError(`field-jd_${id}_dept`);
+  limpiarError(`field-jd_${id}_mpio`);
+  if (!codPais) { selDept.innerHTML = '<option value="">— Seleccione país primero —</option>'; selDept.disabled = true; return; }
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
-    await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_${bloc}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+    await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_dept`, 'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
   } else {
     selDept.innerHTML = '<option value="NA">No aplica</option>';
     selDept.value = 'NA'; selDept.disabled = true;
-    m[SK].COD_DEPT = 'NA';
+    m.COD_DEPT = 'NA';
     selMpio.disabled = false;
-    selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
-    await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_${bloc}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
-    selMpio.onchange = e => { m[SK].COD_MPIO = e.target.value ? String(e.target.value) : null; limpiarError(`field-jd_${id}_${bloc}_mpio`); };
+    await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+    selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
   }
 }
 
-async function onJDDeptChange(id, bloc, codDept) {
+async function onJDDeptChange(id, codDept) {
   const m = _jdGet(id);
   if (!m) return;
-  const SK = bloc === 'p' ? 'Principal' : 'Suplente';
-  // Normaliza a string para mantener consistencia con DOM
-  m[SK].COD_DEPT = codDept ? String(codDept) : null;
-  m[SK].COD_MPIO = null;
-
-  const selMpio = document.getElementById(`jd_${id}_${bloc}_mpio`);
-  const codPais = document.getElementById(`jd_${id}_${bloc}_pais`).value;
+  m.COD_DEPT = codDept ? String(codDept) : null;
+  m.COD_MPIO = null;
+  const selMpio = document.getElementById(`jd_${id}_mpio`);
+  const codPais = document.getElementById(`jd_${id}_pais`)?.value;
   selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
-  await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_${bloc}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+  await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
-  selMpio.onchange = e => { m[SK].COD_MPIO = e.target.value ? String(e.target.value) : null; limpiarError(`field-jd_${id}_${bloc}_mpio`); };
+  selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
 }
 
-/* ── Validación ─────────────────────────────────────────────────────────────── */
-function _validarBloqueJD(id, SK) {
-  const m = _jdGet(id);
-  if (!m) return true;
-  const d    = m[SK];
-  const bloc = SK === 'Principal' ? 'p' : 's';
-  const req  = [
-    [`field-jd_${id}_${bloc}_tipmiem`, d.TIP_MIEM],
-    [`field-jd_${id}_${bloc}_nom`,     d.NOM_MIEM],
-    [`field-jd_${id}_${bloc}_ape`,     d.APE_MIEM],
-    [`field-jd_${id}_${bloc}_tipdoc`,  d.TIP_DOCU],
-    [`field-jd_${id}_${bloc}_numdoc`,  d.NUM_DOCU],
-    [`field-jd_${id}_${bloc}_fec`,     d.FEC_EXPE],
-    [`field-jd_${id}_${bloc}_pais`,    d.COD_PAIS],
-    [`field-jd_${id}_${bloc}_dept`,    d.COD_DEPT],
-    [`field-jd_${id}_${bloc}_mpio`,    d.COD_MPIO],
-    [`field-jd_${id}_${bloc}_tel`,     d.TEL_MIEM],
+/* ── Validación ──────────────────────────────────────────────────────────── */
+function _validarMiembroJD(m) {
+  const id  = m._id;
+  const req = [
+    [`field-jd_${id}_tipmiem`, m.TIP_MIEM],
+    [`field-jd_${id}_nom`,     m.NOM_MIEM],
+    [`field-jd_${id}_ape`,     m.APE_MIEM],
+    [`field-jd_${id}_tipdoc`,  m.TIP_DOCU],
+    [`field-jd_${id}_numdoc`,  m.NUM_DOCU],
+    [`field-jd_${id}_fec`,     m.FEC_EXPE],
+    [`field-jd_${id}_pais`,    m.COD_PAIS],
+    [`field-jd_${id}_dept`,    m.COD_DEPT],
+    [`field-jd_${id}_mpio`,    m.COD_MPIO],
+    [`field-jd_${id}_tel`,     m.TEL_MIEM],
   ];
-  if (SK === 'Suplente') {
-    const tocado = req.some(([, v]) => v && String(v).trim())
-                || (d.MAIL_MIEM && String(d.MAIL_MIEM).trim());
-    if (!tocado) return true;
-  }
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
-  if (!d.MAIL_MIEM || !esEmailValido(d.MAIL_MIEM)) { mostrarError(`field-jd_${id}_${bloc}_mail`); ok = false; }
+  if (!m.MAIL_MIEM || !esEmailValido(m.MAIL_MIEM)) { mostrarError(`field-jd_${id}_mail`); ok = false; }
   return ok;
 }
 
@@ -398,28 +372,26 @@ function validarSeccionJD() {
   }
   let ok = true;
   for (const m of formData.juntaDirectiva.miembros) {
-    const okP = _validarBloqueJD(m._id, 'Principal');
-    const okS = _validarBloqueJD(m._id, 'Suplente');
-    if (!okP || !okS) { document.getElementById(`jd_body_${m._id}`).classList.remove('collapsed'); ok = false; }
+    if (!_validarMiembroJD(m)) {
+      document.getElementById(`jd_body_${m._id}`)?.classList.remove('collapsed');
+      ok = false;
+    }
   }
   return ok;
 }
 
-/* ── Acciones de botones ────────────────────────────────────────────────────── */
 function validarYContinuarJD() {
   if (!validarSeccionJD()) {
     document.getElementById('accordion-jd').classList.remove('collapsed');
     mostrarToast('Corrija los campos marcados en rojo.', 'error');
-    const primerError = document.querySelector('#accordion-jd .field.error');
-    if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelector('#accordion-jd .field.error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 6 completa. Continúe con la siguiente sección.', 'success');
+  mostrarToast('Sección 6 completa.', 'success');
   document.getElementById('accordion-jd').classList.add('collapsed');
   const acc7 = document.getElementById('accordion-rf');
   acc7.classList.remove('collapsed');
   acc7.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  console.log('✅ formData.juntaDirectiva:', JSON.stringify(formData.juntaDirectiva, null, 2));
 }
 
 function limpiarSeccionJD() {
@@ -429,7 +401,7 @@ function limpiarSeccionJD() {
   if (radioNo) radioNo.checked = true;
   const wrap = document.getElementById('jd-lista-wrap');
   wrap.style.transition = 'none'; wrap.style.opacity = '0';
-  wrap.style.maxHeight  = '0';   wrap.style.display  = 'none';
+  wrap.style.maxHeight  = '0';    wrap.style.display  = 'none';
   setTimeout(() => { wrap.style.transition = ''; }, 50);
   document.getElementById('jd-grupos-list').innerHTML = '';
   mostrarToast('Sección limpiada.', 'success');

@@ -124,6 +124,7 @@ function _construirPayloadNatural() {
       CERT_INFO:    act.CERT_INFO    || 'N',
     },
     documentos: formData.documentos,
+    ACE_POLI:   true,  // T&C aceptados (verificado en index.html)
   };
 }
 
