@@ -1,11 +1,10 @@
 /**
  * seccion-ac.js — Sección 8: "Composición accionaria"
  *
- * Diferencias respecto a JD/RF:
- *  · Sin bloque Suplente — un registro por accionista.
- *  · Sin booleano de cabecera — la lista es siempre visible.
- *  · Campo PCT_PART (decimal): validación de suma = 100 % en tiempo real.
- *  · renderListaAC() inicializa la lista con un accionista vacío al arrancar.
+ * Cada accionista puede ser Persona Natural ('N') o Jurídica ('J').
+ * - Natural:  muestra NOM, APE, FEC_EXPE; TIP_DOCU acepta todos los tipos.
+ * - Jurídica: oculta NOM, APE, FEC_EXPE; RAZ_ACCI es obligatoria;
+ *             TIP_DOCU se filtra a solo NIT (COD_TPDOC = 8).
  *
  * API IDs: ac_{id}_{campo}
  * State:   formData.accionistas[]
@@ -20,6 +19,7 @@ let _acId = 0;
 /* ── Fábrica de estado ──────────────────────────────────────────────────────── */
 function _acCampos() {
   return {
+    TIP_PERS: 'N',
     NOM_ACCI: '', APE_ACCI: '', RAZ_ACCI: '',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
     COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
@@ -39,9 +39,6 @@ function actualizarAC(id, campo, valor) {
   if (a) a[campo] = valor === '' ? null : valor;
 }
 
-/**
- * Actualiza PCT_PART y recalcula el indicador de suma.
- */
 function actualizarACPCT(id, valor) {
   const a = _acGet(id);
   if (a) a.PCT_PART = valor === '' ? null : valor;
@@ -52,10 +49,14 @@ function actualizarACPCT(id, valor) {
 function actualizarTituloAC(id) {
   const a = _acGet(id);
   if (!a) return;
-  const pos    = _acPos(id) + 1;
-  const partes = [(a.NOM_ACCI || '').trim(), (a.APE_ACCI || '').trim(),
-                  (a.RAZ_ACCI || '').trim()].filter(Boolean);
-  const nombre = partes.join(' / ').slice(0, 45);
+  const pos = _acPos(id) + 1;
+  let nombre = '';
+  if (a.TIP_PERS === 'J') {
+    nombre = (a.RAZ_ACCI || '').trim().slice(0, 45);
+  } else {
+    nombre = [(a.NOM_ACCI || '').trim(), (a.APE_ACCI || '').trim(), (a.RAZ_ACCI || '').trim()]
+      .filter(Boolean).join(' / ').slice(0, 45);
+  }
   const el = document.getElementById(`ac_titulo_${id}`);
   if (el) el.textContent = `Accionista ${pos}${nombre ? ' — ' + nombre : ''}`;
 }
@@ -69,74 +70,96 @@ function toggleGrupoAC(id) {
   if (body) body.classList.toggle('collapsed');
 }
 
-/* ── Indicador de suma de porcentajes ───────────────────────────────────────── */
+/* ── Indicador de suma (solo informativo) ───────────────────────────────────── */
 function _acActualizarIndicador() {
-  const ind = document.getElementById('ac-pct-indicador');
-  if (!ind) return;
+  // Sin restricción de suma al 100%.
+}
 
-  if (formData.accionistas.length === 0) {
-    ind.textContent = 'Sin accionistas registrados.';
-    ind.className   = 'pct-indicador pct-neutro';
-    return;
-  }
+/* ── Cambio de tipo de persona (Natural / Jurídica) ─────────────────────────── */
+function onACTipoPersonaChange(id, tipPers) {
+  const a = _acGet(id);
+  if (!a) return;
+  a.TIP_PERS = tipPers;
 
-  const vals  = formData.accionistas.map(a => parseFloat(a.PCT_PART) || 0);
-  const suma  = vals.reduce((s, v) => s + v, 0);
-  const total = Math.round(suma * 100) / 100;
-  const sinPct = vals.some(v => v === 0);
+  const naturalWrap = document.getElementById(`ac_${id}_natural_wrap`);
+  const razReq      = document.getElementById(`ac_${id}_raz_req`);
+  const fieldRaz    = document.getElementById(`field-ac_${id}_raz`);
 
-  if (sinPct) {
-    ind.textContent = `Suma actual: ${total}% — Hay accionistas sin porcentaje definido.`;
-    ind.className   = 'pct-indicador pct-neutro';
-  } else if (Math.abs(total - 100) < 0.01) {
-    ind.textContent = `✓ La suma de participaciones es ${total}% — Correcto.`;
-    ind.className   = 'pct-indicador pct-ok';
+  if (tipPers === 'J') {
+    if (naturalWrap) { naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; naturalWrap.style.overflow = 'hidden'; setTimeout(() => { naturalWrap.style.display = 'none'; }, 210); }
+    if (razReq)      razReq.style.display = '';
+    a.NOM_ACCI = null; a.APE_ACCI = null; a.FEC_EXPE = null;
+    const nomEl = document.getElementById(`ac_${id}_nom`); if (nomEl) nomEl.value = '';
+    const apeEl = document.getElementById(`ac_${id}_ape`); if (apeEl) apeEl.value = '';
+    const fecEl = document.getElementById(`ac_${id}_fec`); if (fecEl) fecEl.value = '';
+    _acFiltrarTipoDoc(id, true);
   } else {
-    ind.textContent = `⚠ La suma de participaciones es ${total}% — Debe ser exactamente 100%.`;
-    ind.className   = 'pct-indicador pct-error';
+    if (naturalWrap) { naturalWrap.style.display = ''; requestAnimationFrame(() => requestAnimationFrame(() => { naturalWrap.style.opacity = '1'; naturalWrap.style.maxHeight = '99999px'; naturalWrap.style.overflow = ''; })); }
+    if (razReq)      razReq.style.display = 'none';
+    a.RAZ_ACCI = null;
+    const razEl = document.getElementById(`ac_${id}_raz`); if (razEl) razEl.value = '';
+    if (fieldRaz) fieldRaz.classList.remove('error');
+    _acFiltrarTipoDoc(id, false);
+  }
+  actualizarTituloAC(id);
+}
+
+/* ── Filtrar opciones de tipo de documento ───────────────────────────────────── */
+function _acFiltrarTipoDoc(id, soloNit) {
+  const sel = document.getElementById(`ac_${id}_tipdoc`);
+  if (!sel) return;
+  const endpoint = soloNit
+    ? '/api/catalogo/tipos-documento'
+    : '/api/catalogo/tipos-documento?todos=1';
+  const optsHtml = getOpcionesHTML(endpoint, 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+  const current  = sel.value;
+  sel.innerHTML  = optsHtml;
+  if (current && sel.querySelector(`option[value="${current}"]`)) {
+    sel.value = current;
+  } else {
+    sel.value = '';
+    actualizarAC(id, 'TIP_DOCU', null);
   }
 }
 
 /* ── Opciones desde caché ────────────────────────────────────────────────────── */
-function _acTdOpts() {
-  return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
-}
-function _acPaOpts() {
-  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —');
-}
+function _acTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
+function _acTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
+function _acPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —'); }
 
 /* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
 function _crearGrupoACEl(accionista) {
   const id  = accionista._id;
-  const pos = _acPos(id) + 1;
-  const td  = _acTdOpts();
+  const esJ = accionista.TIP_PERS === 'J';
+  const td  = esJ ? _acTdNitOpts() : _acTdOpts();
   const pa  = _acPaOpts();
+  const natDisplay    = esJ ? 'display:none;opacity:0;max-height:0;overflow:hidden' : '';
+  const razReqDisplay = esJ ? '' : 'display:none';
+
   const el  = document.createElement('div');
   el.className = 'grupo-item';
   el.id        = `ac_grupo_${id}`;
   el.innerHTML = `
     <div class="grupo-header" onclick="toggleGrupoAC(${id})">
-      <span class="grupo-titulo" id="ac_titulo_${id}">Accionista ${pos}</span>
+      <span class="grupo-titulo" id="ac_titulo_${id}">Accionista ${_acPos(id)+1}</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarAC(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="ac_body_${id}">
-      <div class="grid-4">
-        <div class="field" id="field-ac_${id}_nom">
-          <label>Nombres <span class="req">*</span></label>
-          <input type="text" id="ac_${id}_nom" maxlength="100" placeholder="Nombres completos"
-                 oninput="actualizarAC(${id},'NOM_ACCI',this.value);actualizarTituloAC(${id});limpiarError('field-ac_${id}_nom')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-ac_${id}_ape">
-          <label>Apellidos <span class="req">*</span></label>
-          <input type="text" id="ac_${id}_ape" maxlength="100" placeholder="Apellidos completos"
-                 oninput="actualizarAC(${id},'APE_ACCI',this.value);limpiarError('field-ac_${id}_ape')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field">
-          <label>Razón social</label>
-          <input type="text" id="ac_${id}_raz" maxlength="255" placeholder="Si aplica"
-                 oninput="actualizarAC(${id},'RAZ_ACCI',this.value);actualizarTituloAC(${id})" />
+
+      <!-- Tipo de persona -->
+      <div class="grid-4" style="margin-bottom:6px">
+        <div class="field field-radio">
+          <label>Tipo de persona <span class="req">*</span></label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="ac_tippers_${id}" value="N" ${!esJ ? 'checked' : ''}
+                     onchange="onACTipoPersonaChange(${id},'N')"> Natural
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="ac_tippers_${id}" value="J" ${esJ ? 'checked' : ''}
+                     onchange="onACTipoPersonaChange(${id},'J')"> Jurídica
+            </label>
+          </div>
         </div>
         <div class="field" id="field-ac_${id}_pct">
           <label>% Participación <span class="req">*</span></label>
@@ -146,7 +169,39 @@ function _crearGrupoACEl(accionista) {
           <span class="error-msg">Requerido (0.01 – 100)</span>
         </div>
       </div>
+
+      <!-- Campos solo persona natural: NOM, APE, FEC_EXPE -->
+      <div id="ac_${id}_natural_wrap" style="${natDisplay}; transition:opacity .2s,max-height .3s">
+        <div class="grid-4">
+          <div class="field" id="field-ac_${id}_nom">
+            <label>Nombres <span class="req">*</span></label>
+            <input type="text" id="ac_${id}_nom" maxlength="100" placeholder="Nombres completos"
+                   oninput="actualizarAC(${id},'NOM_ACCI',this.value);actualizarTituloAC(${id});limpiarError('field-ac_${id}_nom')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-ac_${id}_ape">
+            <label>Apellidos <span class="req">*</span></label>
+            <input type="text" id="ac_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+                   oninput="actualizarAC(${id},'APE_ACCI',this.value);limpiarError('field-ac_${id}_ape')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-ac_${id}_fec">
+            <label>Fecha expedición doc. <span class="req">*</span></label>
+            <input type="date" id="ac_${id}_fec"
+                   onchange="actualizarAC(${id},'FEC_EXPE',this.value);limpiarError('field-ac_${id}_fec')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos comunes: RAZ, TIP_DOCU, NUM_DOCU -->
       <div class="grid-4">
+        <div class="field" id="field-ac_${id}_raz">
+          <label>Razón social <span class="req" id="ac_${id}_raz_req" style="${razReqDisplay}">*</span></label>
+          <input type="text" id="ac_${id}_raz" maxlength="255" placeholder="${esJ ? 'Nombre de la empresa' : 'Si aplica'}"
+                 oninput="actualizarAC(${id},'RAZ_ACCI',this.value);actualizarTituloAC(${id});limpiarError('field-ac_${id}_raz')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
         <div class="field" id="field-ac_${id}_tipdoc">
           <label>Tipo doc. <span class="req">*</span></label>
           <select id="ac_${id}_tipdoc"
@@ -161,18 +216,14 @@ function _crearGrupoACEl(accionista) {
                  oninput="this.value=this.value.replace(/\\D/g,'');actualizarAC(${id},'NUM_DOCU',this.value);limpiarError('field-ac_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
         </div>
-        <div class="field" id="field-ac_${id}_fec">
-          <label>Fecha expedición <span class="req">*</span></label>
-          <input type="date" id="ac_${id}_fec"
-                 onchange="actualizarAC(${id},'FEC_EXPE',this.value);limpiarError('field-ac_${id}_fec')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
         <div class="field">
           <label>Celular</label>
           <input type="tel" id="ac_${id}_cel" maxlength="20"
                  oninput="actualizarAC(${id},'CEL_ACCI',this.value)" />
         </div>
       </div>
+
+      <!-- País / Dept / Ciudad / Dirección -->
       <div class="grid-4">
         <div class="field" id="field-ac_${id}_pais">
           <label>País <span class="req">*</span></label>
@@ -204,6 +255,8 @@ function _crearGrupoACEl(accionista) {
                  oninput="actualizarAC(${id},'DIR_ACCI',this.value)" />
         </div>
       </div>
+
+      <!-- Tel / Mail -->
       <div class="grid-4">
         <div class="field">
           <label>Teléfono fijo</label>
@@ -221,25 +274,43 @@ function _crearGrupoACEl(accionista) {
   return el;
 }
 
+/* ── Hidratar campos desde estado ────────────────────────────────────────────── */
 function _hydrateACFields(accionista, el) {
-  const id = accionista._id;
+  const id  = accionista._id;
+  const esJ = accionista.TIP_PERS === 'J';
   const set = (selector, value) => {
     const field = el.querySelector(selector);
     if (field) field.value = value || '';
   };
 
-  set(`#ac_${id}_nom`, accionista.NOM_ACCI);
-  set(`#ac_${id}_ape`, accionista.APE_ACCI);
-  set(`#ac_${id}_raz`, accionista.RAZ_ACCI);
-  set(`#ac_${id}_pct`, accionista.PCT_PART);
+  // Restaurar radio tipo persona
+  const radJ = el.querySelector(`input[name="ac_tippers_${id}"][value="J"]`);
+  const radN = el.querySelector(`input[name="ac_tippers_${id}"][value="N"]`);
+  if (esJ && radJ) radJ.checked = true;
+  if (!esJ && radN) radN.checked = true;
+
+  set(`#ac_${id}_nom`,    accionista.NOM_ACCI);
+  set(`#ac_${id}_ape`,    accionista.APE_ACCI);
+  set(`#ac_${id}_raz`,    accionista.RAZ_ACCI);
+  set(`#ac_${id}_pct`,    accionista.PCT_PART);
   set(`#ac_${id}_tipdoc`, accionista.TIP_DOCU);
   set(`#ac_${id}_numdoc`, accionista.NUM_DOCU);
-  set(`#ac_${id}_fec`, accionista.FEC_EXPE);
-  set(`#ac_${id}_cel`, accionista.CEL_ACCI);
-  set(`#ac_${id}_pais`, accionista.COD_PAIS);
-  set(`#ac_${id}_dir`, accionista.DIR_ACCI);
-  set(`#ac_${id}_tel`, accionista.TEL_ACCI);
-  set(`#ac_${id}_mail`, accionista.MAIL_ACCI);
+  set(`#ac_${id}_fec`,    accionista.FEC_EXPE);
+  set(`#ac_${id}_cel`,    accionista.CEL_ACCI);
+  set(`#ac_${id}_dir`,    accionista.DIR_ACCI);
+  set(`#ac_${id}_tel`,    accionista.TEL_ACCI);
+  set(`#ac_${id}_mail`,   accionista.MAIL_ACCI);
+
+  // Aplicar visibilidad sin animación en carga
+  const naturalWrap = el.querySelector(`#ac_${id}_natural_wrap`);
+  const razReq      = el.querySelector(`#ac_${id}_raz_req`);
+  if (esJ) {
+    if (naturalWrap) { naturalWrap.style.display = 'none'; naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; }
+    if (razReq)      razReq.style.display = '';
+  } else {
+    if (naturalWrap) { naturalWrap.style.display = ''; naturalWrap.style.opacity = '1'; naturalWrap.style.maxHeight = '99999px'; }
+    if (razReq)      razReq.style.display = 'none';
+  }
 
   if (accionista.COD_PAIS) {
     onACPaisChange(id, accionista.COD_PAIS).then(() => {
@@ -256,13 +327,9 @@ function _hydrateACFields(accionista, el) {
       if (mpioEl) mpioEl.value = accionista.COD_MPIO || '';
     }).catch(err => console.error('hydrate AC fields:', err));
   }
-} // cierra _hydrateACFields
+}
 
-/**
- * Inicializa la lista de accionistas con un registro vacío.
- * Se llama una sola vez desde app.js, una vez que el catálogo de países
- * y tipos de documento están en cache.
- */
+/* ── Render inicial de la lista ─────────────────────────────────────────────── */
 async function renderListaAC() {
   const list = document.getElementById('ac-grupos-list');
   list.innerHTML = '';
@@ -272,6 +339,8 @@ async function renderListaAC() {
     const primero = _acNuevo();
     formData.accionistas.push(primero);
   } else {
+    // Migrar registros sin TIP_PERS
+    formData.accionistas.forEach(a => { if (!a.TIP_PERS) a.TIP_PERS = 'N'; });
     _acId = Math.max(...formData.accionistas.map(a => a._id)) + 1;
   }
 
@@ -317,7 +386,6 @@ function _acSyncEliminar() {
 async function onACPaisChange(id, codPais) {
   const a = _acGet(id);
   if (!a) return;
-  // Normaliza a string para mantener consistencia con DOM
   a.COD_PAIS = codPais ? String(codPais) : null;
   a.COD_DEPT = null;
   a.COD_MPIO = null;
@@ -355,7 +423,6 @@ async function onACPaisChange(id, codPais) {
 async function onACDeptChange(id, codDept) {
   const a = _acGet(id);
   if (!a) return;
-  // Normaliza a string para mantener consistencia con DOM
   a.COD_DEPT = codDept ? String(codDept) : null;
   a.COD_MPIO = null;
 
@@ -375,20 +442,34 @@ async function onACDeptChange(id, codDept) {
 
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 function _validarGrupoAC(id) {
-  const a = _acGet(id);
+  const a   = _acGet(id);
   if (!a) return true;
-  const req = [
-    [`field-ac_${id}_nom`,    a.NOM_ACCI],
-    [`field-ac_${id}_ape`,    a.APE_ACCI],
+  const esJ = a.TIP_PERS === 'J';
+  let ok    = true;
+
+  // Campos solo persona natural
+  if (!esJ) {
+    [
+      [`field-ac_${id}_nom`, a.NOM_ACCI],
+      [`field-ac_${id}_ape`, a.APE_ACCI],
+      [`field-ac_${id}_fec`, a.FEC_EXPE],
+    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  }
+
+  // RAZ obligatoria para jurídica
+  if (esJ && (!a.RAZ_ACCI || !String(a.RAZ_ACCI).trim())) {
+    mostrarError(`field-ac_${id}_raz`); ok = false;
+  }
+
+  // Campos comunes
+  [
     [`field-ac_${id}_tipdoc`, a.TIP_DOCU],
     [`field-ac_${id}_numdoc`, a.NUM_DOCU],
-    [`field-ac_${id}_fec`,    a.FEC_EXPE],
     [`field-ac_${id}_pais`,   a.COD_PAIS],
     [`field-ac_${id}_dept`,   a.COD_DEPT],
     [`field-ac_${id}_mpio`,   a.COD_MPIO],
-  ];
-  let ok = true;
-  req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+
   const pct = parseFloat(a.PCT_PART);
   if (!a.PCT_PART || isNaN(pct) || pct <= 0 || pct > 100) {
     mostrarError(`field-ac_${id}_pct`); ok = false;
@@ -410,14 +491,6 @@ function validarSeccionAC() {
       ok = false;
     }
   }
-  if (ok) {
-    const suma = formData.accionistas.reduce((s, a) => s + (parseFloat(a.PCT_PART) || 0), 0);
-    if (Math.abs(suma - 100) > 0.01) {
-      const total = Math.round(suma * 100) / 100;
-      mostrarToast(`La suma de participaciones es ${total}%. Debe ser exactamente 100%.`, 'error');
-      ok = false;
-    }
-  }
   return ok;
 }
 
@@ -425,13 +498,19 @@ function validarSeccionAC() {
 function validarYContinuarAC() {
   if (!validarSeccionAC()) {
     document.getElementById('accordion-ac').classList.remove('collapsed');
-    mostrarToast('Corrija los campos marcados en rojo.', 'error');
+    const errCount = document.querySelectorAll('#accordion-ac .field.error').length;
+    mostrarToast(`Faltan ${errCount} campo(s) en la sección 8. Revise los campos en rojo.`, 'error');
     const primerError = document.querySelector('#accordion-ac .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 8 completa. Puede enviar el formulario.', 'success');
+  mostrarToast('Sección 8 completa. Continúe con la siguiente sección.', 'success');
   document.getElementById('accordion-ac').classList.add('collapsed');
+  const acc9 = document.getElementById('accordion-financiera');
+  if (acc9) {
+    acc9.classList.remove('collapsed');
+    acc9.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   console.log('✅ formData.accionistas:', JSON.stringify(formData.accionistas, null, 2));
 }
 

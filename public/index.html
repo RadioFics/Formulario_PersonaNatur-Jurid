@@ -29,6 +29,21 @@
       flex-direction: column;
       gap: 10px;
     }
+    .terms-policy-preview {
+      max-height: 88px;
+      overflow-y: auto;
+      font-size: 0.775rem;
+      color: #5a5a5a;
+      line-height: 1.55;
+      padding: 8px 12px;
+      background: #fffbee;
+      border: 1px solid #edd99a;
+      border-radius: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: #d4b84a #fffbee;
+    }
+    .terms-policy-preview p { margin: 0 0 6px; }
+    .terms-policy-preview p:last-child { margin-bottom: 0; }
     .terms-box label {
       display: flex; align-items: flex-start; gap: 10px;
       font-size: 0.88rem; color: #424242; cursor: pointer;
@@ -131,6 +146,10 @@
 
   <!-- T&C -->
   <div class="terms-box">
+    <div class="terms-policy-preview">
+      <p><strong>Política de tratamiento de datos personales:</strong> En cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015, la información recopilada mediante este formulario será utilizada exclusivamente para los procesos de vinculación y gestión de riesgos en el marco del Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SARLAFT).</p>
+      <p>Sus datos serán tratados con estricta confidencialidad y solo serán compartidos con autoridades competentes cuando así lo exija la normativa vigente. Como titular, usted tiene derecho a conocer, actualizar, rectificar y suprimir su información personal. Para ejercer estos derechos o presentar quejas, puede comunicarse directamente con el oficial de cumplimiento de la entidad.</p>
+    </div>
     <label>
       <input type="checkbox" id="chk-terms" onchange="onTermsChange(this.checked)" />
       <span>
@@ -237,6 +256,20 @@
 
   (function init() {
     if (sessionStorage.getItem(TERMS_KEY) === '1') _setTermsUI(true);
+
+    // Si viene desde formulario con ?accion=actualizar, abrir modal de actualizar automáticamente
+    const _qp = new URLSearchParams(window.location.search);
+    if (_qp.get('accion') === 'actualizar' && sessionStorage.getItem(TERMS_KEY) === '1') {
+      abrirModalActualizar();
+      const numIdenParam = _qp.get('numIden');
+      if (numIdenParam) {
+        const inp = document.getElementById('buscar-num-iden');
+        if (inp) {
+          inp.value = numIdenParam;
+          buscarTercero();
+        }
+      }
+    }
   })();
 
   function _setTermsUI(accepted) {

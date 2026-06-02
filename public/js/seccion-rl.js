@@ -284,6 +284,11 @@ function validarBloqueRL(idx) {
 function validarSeccionRL() {
   let ok = validarBloqueRL(0);
   for (let i = 1; i < formData.representantes.length; i++) {
+    // Saltar entradas huérfanas: entradas que existen en el array de estado
+    // pero no tienen una entrada en _rlExtraMap (ej. borradores guardados con el
+    // suplente vacío de la versión anterior). Sin esta guarda, fallan silenciosamente
+    // porque su fieldId (field-rl_xnull_*) no existe en el DOM.
+    if (_rlExtraIdFromIdx(i) === null) continue;
     if (!validarBloqueRL(i)) ok = false;
   }
   return ok;

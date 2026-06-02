@@ -200,6 +200,42 @@ function _primero(arr, key) {
 /** Espera ms milisegundos. */
 const _esperar = ms => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Selecciona País → Departamento → Ciudad en una cascada geográfica y
+ * actualiza el objeto de estado indicado.
+ *
+ * Usa _setSelect() que dispara 'change' en el select nativo, activando
+ * automáticamente el onchange del HTML (onPaisChange, onACPaisChange, etc.).
+ * Así no se duplica la ejecución ni hay que pasar funciones de cascade.
+ *
+ * @param {string}   idPais     ID del select de país
+ * @param {string}   idDept     ID del select de departamento
+ * @param {string}   idMpio     ID del select de ciudad
+ * @param {*}        codPais    Código de país a seleccionar
+ * @param {Object}   ref        Objeto de estado (formData.basica, miem, ac, etc.)
+ * @param {string}   campoDept  Clave de COD_DEPT en ref
+ * @param {string}   campoMpio  Clave de COD_MPIO en ref
+ */
+async function _fillGeoCascade(idPais, idDept, idMpio, codPais, ref, campoDept, campoMpio) {
+  _setSelect(idPais, codPais);        // dispara onchange → carga departamentos
+  await _esperar(700);
+
+  const selDept = document.getElementById(idDept);
+  if (selDept && selDept.options.length > 1) {
+    const codDept = selDept.options[1].value;
+    if (ref && campoDept) ref[campoDept] = codDept;
+    _setSelect(idDept, codDept);      // dispara onchange → carga ciudades
+    await _esperar(700);
+  }
+
+  const selMpio = document.getElementById(idMpio);
+  if (selMpio && selMpio.options.length > 1) {
+    const codMpio = selMpio.options[1].value;
+    if (ref && campoMpio) ref[campoMpio] = codMpio;
+    _setSelect(idMpio, codMpio);
+  }
+}
+
 /* ─── Función principal de relleno ──────────────────────────────────────────── */
 
 async function rellenarPrueba() {
@@ -233,8 +269,13 @@ async function rellenarPrueba() {
     }
 
     _setInput('num_iden', _TEST.NUM_IDEN);  actualizarFormData('basica', 'NUM_IDEN', _TEST.NUM_IDEN);
-    // Disparar verificación de duplicado igual que si el usuario saliera del campo
-    if (typeof verificarDuplicado === 'function') verificarDuplicado(_TEST.NUM_IDEN);
+    // Verificar duplicado solo en modo creación — en modo actualizar el NIT ya
+    // existe por definición (es el registro que se edita) y causaría un ciclo
+    // de modal → redirección → dev-fill → modal.
+    const _devModo = new URLSearchParams(window.location.search).get('modo');
+    if (typeof verificarDuplicado === 'function' && _devModo !== 'actualizar') {
+      verificarDuplicado(_TEST.NUM_IDEN);
+    }
     _setInput('dig_veri', _TEST.DIG_VERI);  actualizarFormData('basica', 'DIG_VERI', _TEST.DIG_VERI);
     _setInput('nom_comp', _TEST.NOM_COMP);  actualizarFormData('basica', 'NOM_COMP', _TEST.NOM_COMP);
 
@@ -245,26 +286,12 @@ async function rellenarPrueba() {
       actualizarFormData('basica', 'COD_VINC', String(codVinc));
     }
 
-    // País de expedición → Colombia
+    // País de expedición → Colombia (con cascada dept → ciudad)
     actualizarFormData('basica', 'COD_PAIS_EXP', codPais);
-    _setSelect('cod_pais_exp', codPais);
-    await onPaisChange(String(codPais));
-    await _esperar(600);
-
-    const selDept = document.getElementById('cod_dept_exp');
-    if (selDept && selDept.options.length > 1) {
-      const codDept = selDept.options[1].value;
-      selDept.value = codDept;
-      actualizarFormData('basica', 'COD_DEPT_EXP', codDept);
-      await onDeptChange(codDept);
-      await _esperar(600);
-    }
-    const selMpio = document.getElementById('cod_mpio_exp');
-    if (selMpio && selMpio.options.length > 1) {
-      const codMpio = selMpio.options[1].value;
-      selMpio.value = codMpio;
-      actualizarFormData('basica', 'COD_MPIO_EXP', codMpio);
-    }
+    await _fillGeoCascade(
+      'cod_pais_exp', 'cod_dept_exp', 'cod_mpio_exp',
+      codPais, formData.basica, 'COD_DEPT_EXP', 'COD_MPIO_EXP'
+    );
 
     _setInput('dir_terc',  _TEST.DIR_TERC);  actualizarFormData('basica', 'DIR_TERC',  _TEST.DIR_TERC);
     _setInput('tel_terc',  _TEST.TEL_TERC);  actualizarFormData('basica', 'TEL_TERC',  _TEST.TEL_TERC);
@@ -273,59 +300,44 @@ async function rellenarPrueba() {
     _setInput('mail_sarl', _TEST.MAIL_SARL); actualizarFormData('basica', 'MAIL_SARL', _TEST.MAIL_SARL);
     _setInput('url_web',   _TEST.URL_WEB);   actualizarFormData('basica', 'URL_WEB',   _TEST.URL_WEB);
 
-    // CIIU — primer código disponible del datalist
+    // CIIU — ahora es un select (no datalist), usar _setSelect directamente
     if (ciius.length) {
-      const primerCiiu = ciius[0];
-      const inputCiiu  = document.getElementById('cod_ciiu');
-      const listaCiiu  = document.getElementById('lista-ciiu');
-      if (inputCiiu && listaCiiu) {
-        if (!listaCiiu.options.length) {
-          await cargarDatalist('/api/catalogo/ciiu', 'lista-ciiu', 'COD_CIIU', 'NOM_CIIU');
-          await _esperar(300);
-        }
-        const opts = Array.from(listaCiiu.options);
-        if (opts.length) {
-          inputCiiu.value = opts[0].value;
-          actualizarFormData('basica', 'COD_CIIU', opts[0].dataset.cod || primerCiiu.COD_CIIU);
-          inputCiiu.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+      const codCiiu = _primero(ciius, 'COD_CIIU');
+      if (codCiiu != null) {
+        _setSelect('cod_ciiu', codCiiu);
+        actualizarFormData('basica', 'COD_CIIU', codCiiu);
       }
     }
 
     if (btn) btn.textContent = '⏳ Sección 2 — Rep. legal…';
 
     /* ════════════════════════════════════════════════════════════════════════
-       SECCIÓN 2 — Representantes legales
-       IDs reales: rl_p_* (principal)  /  rl_s_* (suplente)
+       SECCIÓN 2 — Representante Legal Principal
+       Solo se rellenan los campos DOM del Principal (rl_p_*); el Suplente
+       se actualiza en estado pero sus IDs estáticos no existen en el DOM.
     ════════════════════════════════════════════════════════════════════════ */
-    const bloqueRL = [
-      { prefijo: 'rl_p', idx: 0, datos: _TEST.RL,     tipRepr: 'P' },
-      { prefijo: 'rl_s', idx: 1, datos: _TEST.RL_SUP,  tipRepr: 'S' },
-    ];
+    // Nota: representantes[1] (suplente) fue eliminado del estado inicial;
+    // solo existe el Principal en formData.representantes[0].
+    // Estado + DOM del Principal con cascada geo completa
+    Object.assign(formData.representantes[0], {
+      TIP_REPR: 'P', TIP_DOCU: codTpdoc, COD_PAIS: codPais,
+      COD_DEPT: null, COD_MPIO: null, ..._TEST.RL,
+    });
+    _setInput( 'rl_p_nom',    _TEST.RL.NOM_REPR);
+    _setInput( 'rl_p_ape',    _TEST.RL.APE_REPR);
+    _setInput( 'rl_p_numdoc', _TEST.RL.NUM_DOCU);
+    _setInput( 'rl_p_fec',    _TEST.RL.FEC_EXPE);
+    _setInput( 'rl_p_dir',    _TEST.RL.DIR_REPR);
+    _setInput( 'rl_p_cel',    _TEST.RL.CEL_REPR);
+    _setInput( 'rl_p_tel',    _TEST.RL.TEL_REPR);
+    _setInput( 'rl_p_mail',   _TEST.RL.MAIL_REPR);
+    _setSelect('rl_p_tipdoc', codTpdoc);
 
-    for (const { prefijo, idx, datos, tipRepr } of bloqueRL) {
-      // Actualizar formData
-      Object.assign(formData.representantes[idx], {
-        TIP_REPR: tipRepr,
-        TIP_DOCU: codTpdoc,
-        COD_PAIS: codPais,
-        COD_DEPT: null,
-        COD_MPIO: null,
-        ...datos,
-      });
-
-      // Sincronizar campos visuales
-      _setInput( `${prefijo}_nom`,    datos.NOM_REPR);
-      _setInput( `${prefijo}_ape`,    datos.APE_REPR);
-      _setInput( `${prefijo}_numdoc`, datos.NUM_DOCU);
-      _setInput( `${prefijo}_fec`,    datos.FEC_EXPE);
-      _setInput( `${prefijo}_dir`,    datos.DIR_REPR);
-      _setInput( `${prefijo}_cel`,    datos.CEL_REPR);
-      _setInput( `${prefijo}_tel`,    datos.TEL_REPR);
-      _setInput( `${prefijo}_mail`,   datos.MAIL_REPR);
-      _setSelect(`${prefijo}_tipdoc`, codTpdoc);
-      _setSelect(`${prefijo}_pais`,   codPais);
-    }
+    // Cascada País → Dept → Ciudad
+    await _fillGeoCascade(
+      'rl_p_pais', 'rl_p_dept', 'rl_p_mpio',
+      codPais, formData.representantes[0], 'COD_DEPT', 'COD_MPIO'
+    );
 
     if (btn) btn.textContent = '⏳ Sección 3 — Sociedad…';
 
@@ -342,10 +354,11 @@ async function rellenarPrueba() {
     formData.sociedad.TIP_SOCIE    = codTipSocie;
     formData.sociedad.COD_PAIS_SOC = null;
 
-    _setRadio('ubic_soc',  'N');
-    _setSelect('tip_empr',  _TEST.TIP_EMPR);
-    _setSelect('tip_socie', codTipSocie);
-    _setRadio('grup_empr', 'N');
+    // IDs correctos: soc_ubic (select), soc_tip_empr (select), soc_tip_socie (select), soc_grup_empr (select)
+    _setSelect('soc_ubic',      'N');
+    _setSelect('soc_tip_empr',  _TEST.TIP_EMPR);
+    _setSelect('soc_tip_socie', codTipSocie);
+    _setSelect('soc_grup_empr', 'N');
 
     if (btn) btn.textContent = '⏳ Sección 4 — Países…';
 
@@ -369,9 +382,10 @@ async function rellenarPrueba() {
     formData.cumplimiento.TIE_JUNTA = 'N';
     formData.cumplimiento.SIS_PREVE = null;
 
-    _setInput('desc_norm', _TEST.DESC_NORM);
-    _setInput('norm_laft', _TEST.NORM_LAFT);
-    _setRadio('cump_tie_junta', 'N');
+    // IDs correctos: cump_desc_norm (textarea), cump_norm_laft (input), cump_tie_sist (radio name)
+    _setInput('cump_desc_norm', _TEST.DESC_NORM);
+    _setInput('cump_norm_laft', _TEST.NORM_LAFT);
+    _setRadio('cump_tie_sist',  'N');
 
     if (btn) btn.textContent = '⏳ Sección 6 — Junta directiva…';
 
@@ -389,9 +403,10 @@ async function rellenarPrueba() {
     }
 
     if (formData.juntaDirectiva.miembros.length > 0) {
+      // Estructura PLANA: { _id, TIP_REPR, NOM_MIEM, APE_MIEM, ... } — sin .Principal
       const miem = formData.juntaDirectiva.miembros[0];
       const jdId = miem._id;
-      Object.assign(miem.Principal, {
+      Object.assign(miem, {
         TIP_MIEM:  _TEST.JD.TIP_MIEM,
         NOM_MIEM:  _TEST.JD.NOM_MIEM,
         APE_MIEM:  _TEST.JD.APE_MIEM,
@@ -403,17 +418,21 @@ async function rellenarPrueba() {
         TEL_MIEM:  _TEST.JD.TEL_MIEM,
         MAIL_MIEM: _TEST.JD.MAIL_MIEM,
       });
-      // IDs: jd_{id}_p_{campo}
-      _setInput( `jd_${jdId}_p_tipmiem`, _TEST.JD.TIP_MIEM);
-      _setInput( `jd_${jdId}_p_nom`,     _TEST.JD.NOM_MIEM);
-      _setInput( `jd_${jdId}_p_ape`,     _TEST.JD.APE_MIEM);
-      _setInput( `jd_${jdId}_p_numdoc`,  _TEST.JD.NUM_DOCU);
-      _setInput( `jd_${jdId}_p_fec`,     _TEST.JD.FEC_EXPE);
-      _setInput( `jd_${jdId}_p_dir`,     _TEST.JD.DIR_MIEM);
-      _setInput( `jd_${jdId}_p_tel`,     _TEST.JD.TEL_MIEM);
-      _setInput( `jd_${jdId}_p_mail`,    _TEST.JD.MAIL_MIEM);
-      _setSelect(`jd_${jdId}_p_tipdoc`,  codTpdoc);
-      _setSelect(`jd_${jdId}_p_pais`,    codPais);
+      // IDs reales: jd_{id}_tipmiem, jd_{id}_nom, jd_{id}_ape, etc.
+      _setInput( `jd_${jdId}_tipmiem`, _TEST.JD.TIP_MIEM);
+      _setInput( `jd_${jdId}_nom`,     _TEST.JD.NOM_MIEM);
+      _setInput( `jd_${jdId}_ape`,     _TEST.JD.APE_MIEM);
+      _setInput( `jd_${jdId}_numdoc`,  _TEST.JD.NUM_DOCU);
+      _setInput( `jd_${jdId}_fec`,     _TEST.JD.FEC_EXPE);
+      _setInput( `jd_${jdId}_dir`,     _TEST.JD.DIR_MIEM);
+      _setInput( `jd_${jdId}_tel`,     _TEST.JD.TEL_MIEM);
+      _setInput( `jd_${jdId}_mail`,    _TEST.JD.MAIL_MIEM);
+      _setSelect(`jd_${jdId}_tipdoc`,  codTpdoc);
+      // Cascada País → Dept → Ciudad
+      await _fillGeoCascade(
+        `jd_${jdId}_pais`, `jd_${jdId}_dept`, `jd_${jdId}_mpio`,
+        codPais, miem, 'COD_DEPT', 'COD_MPIO'
+      );
     }
 
     if (btn) btn.textContent = '⏳ Sección 7 — Revisores fiscales…';
@@ -432,40 +451,44 @@ async function rellenarPrueba() {
     }
 
     if (formData.revisores.revisores.length > 0) {
+      // Estructura PLANA: { _id, TIP_REPR, REVI_FIRMA, NOM_REVI, ... } — sin .Principal
       const rev  = formData.revisores.revisores[0];
       const rfId = rev._id;
-      Object.assign(rev.Principal, {
-        NOM_REVI:  _TEST.RF.NOM_REVI,
-        APE_REVI:  _TEST.RF.APE_REVI,
-        RAZ_REVI:  _TEST.RF.RAZ_REVI,
-        TIP_DOCU:  codTpdoc,
-        NUM_DOCU:  _TEST.RF.NUM_DOCU,
-        FEC_EXPE:  _TEST.RF.FEC_EXPE,
-        COD_PAIS:  codPais,
-        DIR_REVI:  _TEST.RF.DIR_REVI,
-        CEL_REVI:  _TEST.RF.CEL_REVI,
-        TEL_REVI:  _TEST.RF.TEL_REVI,
-        MAIL_REVI: _TEST.RF.MAIL_REVI,
-        OBS_REVI:  _TEST.RF.OBS_REVI,
+      Object.assign(rev, {
+        NOM_REVI:    _TEST.RF.NOM_REVI,
+        APE_REVI:    _TEST.RF.APE_REVI,
+        RAZ_REVI:    _TEST.RF.RAZ_REVI,
+        TIP_DOCU:    codTpdoc,
+        NUM_DOCU:    _TEST.RF.NUM_DOCU,
+        FEC_EXPE:    _TEST.RF.FEC_EXPE,
+        COD_PAIS:    codPais,
+        DIR_REVI:    _TEST.RF.DIR_REVI,
+        CEL_REVI:    _TEST.RF.CEL_REVI,
+        TEL_REVI:    _TEST.RF.TEL_REVI,
+        MAIL_REVI:   _TEST.RF.MAIL_REVI,
+        OBS_REVI:    _TEST.RF.OBS_REVI,
+        REVI_FIRMA:  'N',
+        RAZ_FIRMA:   null,
+        TIP_DOCU_FIR: null,
+        NUM_DOCU_FIR: null,
       });
-      rev.REVI_FIRMA   = 'N';
-      rev.RAZ_FIRMA    = null;
-      rev.TIP_DOCU_FIR = null;
-      rev.NUM_DOCU_FIR = null;
 
-      // IDs: rf_{id}_p_{campo}
-      _setInput( `rf_${rfId}_p_nom`,    _TEST.RF.NOM_REVI);
-      _setInput( `rf_${rfId}_p_ape`,    _TEST.RF.APE_REVI);
-      _setInput( `rf_${rfId}_p_numdoc`, _TEST.RF.NUM_DOCU);
-      _setInput( `rf_${rfId}_p_fec`,    _TEST.RF.FEC_EXPE);
-      _setInput( `rf_${rfId}_p_cel`,    _TEST.RF.CEL_REVI);
-      _setInput( `rf_${rfId}_p_tel`,    _TEST.RF.TEL_REVI);
-      _setInput( `rf_${rfId}_p_mail`,   _TEST.RF.MAIL_REVI);
-      _setInput( `rf_${rfId}_p_obs`,    _TEST.RF.OBS_REVI);
-      _setSelect(`rf_${rfId}_p_tipdoc`, codTpdoc);
-      _setSelect(`rf_${rfId}_p_pais`,   codPais);
-      // Radio de firma como persona
-      _setRadio(`rf_firma_${rfId}`, 'N');
+      // IDs reales: rf_{id}_nom, rf_{id}_ape, etc.
+      _setInput( `rf_${rfId}_nom`,    _TEST.RF.NOM_REVI);
+      _setInput( `rf_${rfId}_ape`,    _TEST.RF.APE_REVI);
+      _setInput( `rf_${rfId}_numdoc`, _TEST.RF.NUM_DOCU);
+      _setInput( `rf_${rfId}_fec`,    _TEST.RF.FEC_EXPE);
+      _setInput( `rf_${rfId}_cel`,    _TEST.RF.CEL_REVI);
+      _setInput( `rf_${rfId}_tel`,    _TEST.RF.TEL_REVI);
+      _setInput( `rf_${rfId}_mail`,   _TEST.RF.MAIL_REVI);
+      _setInput( `rf_${rfId}_obs`,    _TEST.RF.OBS_REVI);
+      _setSelect(`rf_${rfId}_tipdoc`, codTpdoc);
+      _setRadio( `rf_firma_${rfId}`,  'N');
+      // Cascada País → Dept → Ciudad
+      await _fillGeoCascade(
+        `rf_${rfId}_pais`, `rf_${rfId}_dept`, `rf_${rfId}_mpio`,
+        codPais, rev, 'COD_DEPT', 'COD_MPIO'
+      );
     }
 
     if (btn) btn.textContent = '⏳ Sección 8 — Accionistas…';
@@ -483,9 +506,9 @@ async function rellenarPrueba() {
       await agregarAC(); await _esperar(150);
     }
 
-    [_TEST.AC, _TEST.AC2].forEach((datos, idx) => {
+    for (const [idx, datos] of [_TEST.AC, _TEST.AC2].entries()) {
       const ac = formData.accionistas[idx];
-      if (!ac) return;
+      if (!ac) continue;
       const acId = ac._id;
       Object.assign(ac, {
         TIP_DOCU: codTpdoc,
@@ -505,8 +528,12 @@ async function rellenarPrueba() {
       _setInput( `ac_${acId}_mail`,   datos.MAIL_ACCI);
       _setInput( `ac_${acId}_pct`,    datos.PCT_PART);
       _setSelect(`ac_${acId}_tipdoc`, codTpdoc);
-      _setSelect(`ac_${acId}_pais`,   codPais);
-    });
+      // Cascada País → Dept → Ciudad
+      await _fillGeoCascade(
+        `ac_${acId}_pais`, `ac_${acId}_dept`, `ac_${acId}_mpio`,
+        codPais, ac, 'COD_DEPT', 'COD_MPIO'
+      );
+    }
 
     if (btn) btn.textContent = '⏳ Sección 9 — Financiera…';
 
@@ -562,8 +589,9 @@ async function rellenarPrueba() {
     ════════════════════════════════════════════════════════════════════════ */
     formData.pep.MAN_RPUB = _TEST.PEP.MAN_RPUB;
     formData.pep.CAR_PUBL = _TEST.PEP.CAR_PUBL;
-    _setRadio('man_rpub', _TEST.PEP.MAN_RPUB);
-    _setRadio('car_publ', _TEST.PEP.CAR_PUBL);
+    // Radio names correctos: pep_man_rpub, pep_car_publ
+    _setRadio('pep_man_rpub', _TEST.PEP.MAN_RPUB);
+    _setRadio('pep_car_publ', _TEST.PEP.CAR_PUBL);
 
     // Actividades virtuales: todas en 'N', CERT_INFO en 'S'
     if (formData.actividades) {
@@ -613,7 +641,11 @@ async function rellenarPrueba() {
       _setInput( `bf_${bfId}_tel`,    _TEST.BF.TEL_BENE);
       _setInput( `bf_${bfId}_mail`,   _TEST.BF.MAIL_BENE);
       _setSelect(`bf_${bfId}_tipdoc`, codTpdoc);
-      _setSelect(`bf_${bfId}_pais`,   codPais);
+      // Cascada País → Dept → Ciudad
+      await _fillGeoCascade(
+        `bf_${bfId}_pais`, `bf_${bfId}_dept`, `bf_${bfId}_mpio`,
+        codPais, bf, 'COD_DEPT', 'COD_MPIO'
+      );
     }
 
     if (btn) btn.textContent = '⏳ Sección 13 — Firma…';
@@ -660,8 +692,8 @@ async function rellenarPrueba() {
   btn.title       = 'Rellena todos los campos con datos ficticios de prueba (solo desarrollo)';
   Object.assign(btn.style, {
     position:     'fixed',
-    bottom:       '20px',
-    right:        '20px',
+    top:          '16px',
+    right:        '16px',
     zIndex:       '9999',
     padding:      '10px 16px',
     background:   '#ff6d00',

@@ -27,20 +27,21 @@ const formData = {
     TEL_TERC2:    '',
     DIR_MAIL:     '',
     COD_VINC:     null,
+    OTR_VINC:     '',   // texto libre cuando vinculación = "Otro"
     MAIL_SARL:    '',
     COD_CIIU:     null,
+    OTR_CIIU:     '',   // texto libre cuando CIIU = "Otro"
     URL_WEB:      '',
   },
 
-  // Sección 2 — Representantes legales (Principal + Suplente)
+  // Sección 2 — Representantes legales
+  // Solo el Principal en el estado inicial. Representantes adicionales se
+  // agregan dinámicamente con agregarRLExtra() y se mapean en _rlExtraMap.
+  // El suplente vacío fue eliminado: causaba que validarBloqueRL(1) siempre
+  // fallara aunque el usuario no hubiera agregado ningún representante extra.
   representantes: [
     {
       TIP_REPR: 'P', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null,
-      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null,
-      COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
-    },
-    {
-      TIP_REPR: 'S', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null,
       NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null,
       COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
     },
@@ -54,6 +55,7 @@ const formData = {
     GRUP_EMPR:    null,  // 'S' | 'N'
     REL_GRUPO:    '',    // Rol en el grupo: MATRIZ / FILIAL / SUCURSAL / etc. (GN_JURID_CUMP)
     TIP_SOCIE:    null,  // FK → MAE_TIP_SOCIE
+    OTR_SOCIE:    '',   // texto libre cuando tipo sociedad = "Otro"
   },
 
   // Sección 4 — Países de operación
@@ -69,6 +71,7 @@ const formData = {
 
     // Solo aplican cuando TIE_JUNTA = 'S':
     SIS_PREVE: null,  // FK → MAE_SIST_PREV
+    OTR_PREVE: '',   // texto libre cuando sistema prevención = "Otro"
 
     // Oficial de cumplimiento (Principal + Suplente)
     oficiales: [
@@ -195,7 +198,10 @@ function _borradorKey() {
  */
 function guardarBorrador() {
   try {
-    localStorage.setItem(_borradorKey(), JSON.stringify(formData));
+    // Incluir formDataNatur bajo _natur para que el borrador sobreviva recargas en modo Natural
+    const datos = { ...formData };
+    if (window.formDataNatur) datos._natur = window.formDataNatur;
+    localStorage.setItem(_borradorKey(), JSON.stringify(datos));
   } catch (err) {
     console.error('guardarBorrador():', err);
   }
@@ -243,12 +249,22 @@ function cargarBorrador() {
     const datos = JSON.parse(raw);
     if (!datos || typeof datos !== 'object') return false;
 
-    // Restaurar solamente las claves conocidas para evitar datos corruptos.
+    // Restaurar formData (jurídica y campos compartidos)
     Object.keys(formData).forEach(key => {
-      if (datos[key] !== undefined) {
-        formData[key] = datos[key];
-      }
+      if (datos[key] !== undefined) formData[key] = datos[key];
     });
+
+    // Restaurar formDataNatur si el borrador lo contiene (modo Persona Natural)
+    if (datos._natur && window.formDataNatur) {
+      Object.keys(formDataNatur).forEach(key => {
+        if (datos._natur[key] !== undefined) formDataNatur[key] = datos._natur[key];
+      });
+      // Restablecer el modo visual si el borrador era de persona natural
+      if (datos.basica && datos.basica.TIP_TERC === 'N' && typeof onTipTercChange === 'function') {
+        onTipTercChange('N');
+      }
+    }
+
     return true;
   } catch (err) {
     console.error('cargarBorrador():', err);

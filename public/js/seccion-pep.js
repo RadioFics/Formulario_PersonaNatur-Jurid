@@ -61,11 +61,13 @@ function validarYContinuarPEP() {
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 11 completa. Puede enviar el formulario.', 'success');
+  mostrarToast('Sección 11 completa. Continúe con la siguiente sección.', 'success');
   document.getElementById('accordion-pep').classList.add('collapsed');
-  // Llevar al botón de envío
-  const btnSubmit = document.getElementById('btn-submit');
-  if (btnSubmit) btnSubmit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const acc12 = document.getElementById('accordion-bf');
+  if (acc12) {
+    acc12.classList.remove('collapsed');
+    acc12.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   console.log('✅ formData.pep:', JSON.stringify(formData.pep, null, 2));
   console.log('✅ formData.actividades:', JSON.stringify(formData.actividades, null, 2));
 }

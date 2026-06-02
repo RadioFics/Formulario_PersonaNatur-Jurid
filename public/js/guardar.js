@@ -100,9 +100,7 @@ function validarTodo() {
   if (!formData.accionistas.length ||
       (!formData.accionistas[0].NOM_ACCI && !formData.accionistas[0].RAZ_ACCI))
     errores.push('Composición accionaria: Registre al menos un accionista');
-  const sumaAcc = formData.accionistas.reduce((s, a) => s + (parseFloat(a.PCT_PART) || 0), 0);
-  if (formData.accionistas.length > 0 && Math.abs(sumaAcc - 100) > 0.01)
-    errores.push(`Composición accionaria: La suma de participaciones es ${Math.round(sumaAcc * 100) / 100}% — debe ser 100%`);
+  // Sin restricción de suma al 100% — se acepta cualquier distribución.
 
   /* ── Sección 9: Financiera ───────────────────────────────────────────── */
   if (formData.financiera.ACT_TOTAL  === null) errores.push('Información financiera: Activos totales requeridos');
@@ -137,17 +135,22 @@ function validarTodo() {
       (!formData.beneficiarios[0].NOM_BENE && !formData.beneficiarios[0].RAZ_BENE))
     errores.push('Beneficiarios finales: Registre al menos un beneficiario final');
 
-  /* ── Sección 13: Firma ───────────────────────────────────────────────── */
-  if (!formData.firma.NOM_FIRM)
-    errores.push('Firma: Nombres del firmante requeridos');
-  if (!formData.firma.APE_FIRM)
-    errores.push('Firma: Apellidos del firmante requeridos');
-  if (!formData.firma.TIP_DOCU)
-    errores.push('Firma: Tipo de documento del firmante requerido');
-  if (!formData.firma.NUM_DOCU)
-    errores.push('Firma: Número de documento del firmante requerido');
-  if (!formData.firma.FEC_FIRMA)
-    errores.push('Firma: Fecha de firma requerida');
+  /* ── Sección 13: Documentos obligatorios ────────────────────────────── */
+  // La firma del representante fue eliminada del formulario (sección 13A removida).
+  // Los documentos son ahora obligatorios para enviar.
+  const _docReqs = [
+    ['RUT',       'RUT — Registro Único Tributario'],
+    ['CERT_BANC', 'Certificación bancaria'],
+    ['CERT_EXIS', 'Certificado de existencia y representación'],
+    ['DOC_ID_RL', 'Documento de identidad del Representante Legal'],
+    ['EST_FIN',   'Estados financieros del último año fiscal'],
+    ['CERT_ACCI', 'Certificado de composición accionaria'],
+    ['CART_ACEP', 'Carta de aceptación y autorización'],
+  ];
+  _docReqs.forEach(([clave, label]) => {
+    if (typeof _archivos !== 'undefined' && !_archivos.has(clave))
+      errores.push(`Documentos: Adjunte "${label}"`);
+  });
 
   return errores;
 }
@@ -157,9 +160,49 @@ function validarTodo() {
    ════════════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Mapea el prefijo de un mensaje de error al ID de su acordeón.
+ * @param {string} msg
+ * @returns {string|null}
+ */
+function _acordeonDeError(msg) {
+  // Modo Jurídica
+  if (msg.startsWith('Información básica'))        return 'accordion-basica';
+  if (msg.startsWith('Representante legal'))        return 'accordion-rl';
+  if (msg.startsWith('Información de la sociedad')) return 'accordion-sociedad';
+  if (msg.startsWith('Países de operación'))        return 'accordion-paises';
+  if (msg.startsWith('Sistema de cumplimiento'))    return 'accordion-cumplimiento';
+  if (msg.startsWith('Junta directiva'))            return 'accordion-jd';
+  if (msg.startsWith('Revisores fiscales'))         return 'accordion-rf';
+  if (msg.startsWith('Composición accionaria'))     return 'accordion-ac';
+  if (msg.startsWith('Beneficiarios'))              return 'accordion-bf';
+  // Modo Natural (usa "Sección 1:")
+  if (msg.startsWith('Sección 1'))                 return 'accordion-basica';
+  // Compartidos
+  if (msg.startsWith('Información financiera'))     return 'accordion-financiera';
+  if (msg.startsWith('Información bancaria'))       return 'accordion-bancaria';
+  if (msg.startsWith('PEP') || msg.startsWith('Certificación')) return 'accordion-pep';
+  if (msg.startsWith('Documentos') || msg.startsWith('Firma'))  return 'accordion-docs';
+  return null;
+}
+
+/**
+ * Abre el acordeón correspondiente a un error y hace scroll hacia él.
+ * @param {string} msg  Mensaje de error
+ */
+function _navegarAlError(msg) {
+  const accId = _acordeonDeError(msg);
+  if (!accId) return;
+  const acc = document.getElementById(accId);
+  if (acc) {
+    acc.classList.remove('collapsed');
+    acc.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+/**
  * Muestra el panel de errores de validación global.
- * Cada error es clicable: hace scroll al primer campo con clase .error
- * dentro del acordeón correspondiente.
+ * Cada error es clicable: abre el acordeón correspondiente y navega hacia él.
+ * Al mostrarse, navega automáticamente al primer error.
  *
  * @param {string[]} errores
  */
@@ -168,19 +211,22 @@ function mostrarErroresValidacion(errores) {
   const lista = document.getElementById('error-panel-list');
   lista.innerHTML = '';
 
-  errores.forEach(msg => {
+  errores.forEach((msg, idx) => {
     const li = document.createElement('li');
     li.textContent = msg;
-    li.addEventListener('click', () => {
-      // Intentar hacer scroll al primer campo con error en el acordeón correspondiente
-      const campo = document.querySelector('.field.error');
-      if (campo) campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    li.style.cursor = 'pointer';
+    li.title = 'Haga clic para ir a este campo';
+    li.addEventListener('click', () => _navegarAlError(msg));
     lista.appendChild(li);
   });
 
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Auto-navegar al primer error después de 400ms (permitir que el panel aparezca primero)
+  if (errores.length > 0) {
+    setTimeout(() => _navegarAlError(errores[0]), 400);
+  }
 }
 
 function ocultarErroresValidacion() {
@@ -329,6 +375,33 @@ function onSubmitClick() {
 }
 
 /**
+ * Sube archivos a /api/documentos/:numIden usando XHR para reportar
+ * progreso real en la barra de progreso del modal.
+ * @returns {Promise<{ok: boolean, status: number, responseText: string}>}
+ */
+function _subirArchivosConProgreso(fd, numIden) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/documentos/${encodeURIComponent(numIden)}`);
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        _actualizarProgreso(pct, 100, `Subiendo documentos (${pct}%)…`);
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, responseText: xhr.responseText });
+    });
+    xhr.addEventListener('error', () => reject(new Error('Error de red al subir documentos')));
+    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada')));
+
+    xhr.send(fd);
+  });
+}
+
+/**
  * Construye el payload completo y llama a POST /api/guardar-completo.
  * Todo el insert se realiza en una sola transacción en el backend.
  */
@@ -348,13 +421,11 @@ async function guardarFormulario() {
     });
 
     clearInterval(_progresoTimer);
-    _actualizarProgreso(14, 15, 'Completado ✓');
-
-    await new Promise(r => setTimeout(r, 500)); // pequeña pausa visual
-
-    _cerrarProgresoModal();
+    _actualizarProgreso(14, 15, 'Datos guardados ✓');
 
     if (!response.ok) {
+      await new Promise(r => setTimeout(r, 300));
+      _cerrarProgresoModal();
       const data = await response.json().catch(() => ({}));
       const msg  = data.error || `Error HTTP ${response.status}`;
       _mostrarErrorGuardado(msg);
@@ -364,23 +435,34 @@ async function guardarFormulario() {
     const data    = await response.json();
     const numIden = data.NUM_IDEN || payload.NUM_IDEN;
 
-    // ── Subir archivos adjuntos si hay alguno seleccionado ───────────────────
+    // ── Subir archivos adjuntos con progreso real ────────────────────────────
+    let docWarning = null;
     if (typeof hayArchivosSeleccionados === 'function' && hayArchivosSeleccionados()) {
       try {
-        _actualizarProgreso(15, 15, 'Subiendo documentos adjuntos…');
-        const fd = construirFormDataArchivos(numIden);
-        await fetch(`/api/documentos/${encodeURIComponent(numIden)}`, {
-          method: 'POST',
-          body:   fd,
-          // No establecer Content-Type: el navegador lo fija automáticamente con boundary
-        });
+        _actualizarProgreso(0, 100, 'Subiendo documentos (0%)…');
+        const fd     = construirFormDataArchivos(numIden);
+        const docRes = await _subirArchivosConProgreso(fd, numIden);
+        _actualizarProgreso(100, 100, 'Documentos subidos ✓');
+        if (!docRes.ok) {
+          const docData  = JSON.parse(docRes.responseText || '{}');
+          const detalles = Array.isArray(docData.detalles) ? docData.detalles.join(' | ') : '';
+          docWarning = detalles || docData.error || 'Archivos rechazados por el servidor';
+        }
       } catch (docErr) {
         console.warn('guardarFormulario() — subida de documentos falló:', docErr);
-        // No bloqueamos: los datos textuales ya están guardados en BD
-        mostrarToast('Datos guardados. Algunos documentos adjuntos no pudieron subirse.', 'warning');
+        docWarning = 'Error de red al subir documentos';
       }
     }
 
+    await new Promise(r => setTimeout(r, 400));
+    _cerrarProgresoModal();
+
+    if (docWarning) {
+      mostrarToast(`Datos guardados. Documentos rechazados: ${docWarning}`, 'warning');
+    }
+
+    // Limpiar _archivos para que beforeunload no bloquee la navegación post-envío
+    if (typeof _archivos !== 'undefined') _archivos.clear();
     borrarBorrador();
     _mostrarConfirmacion(numIden, data.COD_TERC || null);
 
@@ -473,8 +555,10 @@ function _construirPayload() {
     TEL_TERC2:    b.TEL_TERC2   || null,
     DIR_MAIL:     b.DIR_MAIL,
     COD_VINC:     b.COD_VINC    || null,
+    OTR_VINC:     b.OTR_VINC    || null,  // texto libre cuando vinculación = "Otro"
     MAIL_SARL:    b.MAIL_SARL   || null,
     COD_CIIU:     b.COD_CIIU    || null,
+    OTR_CIIU:     b.OTR_CIIU    || null,  // texto libre cuando CIIU = "Otro"
     URL_WEB:      b.URL_WEB     || null,
     ACE_POLI:     true,  // T&C aceptados
 
@@ -485,6 +569,7 @@ function _construirPayload() {
     GRUP_EMPR:    s.GRUP_EMPR   || null,
     REL_GRUPO:    s.REL_GRUPO   || null,
     TIP_SOCIE:    s.TIP_SOCIE   || null,
+    OTR_SOCIE:    s.OTR_SOCIE   || null,  // texto libre cuando tipo sociedad = "Otro"
 
     // ── Sección 2 — Representantes legales (GN_JURID_RL) ───────────────────
     representantes: formData.representantes.map(r => ({ ...r })),

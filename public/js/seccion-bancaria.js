@@ -21,7 +21,9 @@ let _bancoId = 0;
 function _bancoNuevo() {
   return {
     _id: _bancoId++,
-    COD_BANCO: null, TIP_CUEN: null, NUM_CUEN: '',
+    COD_BANCO: null, OTR_BANCO: '',
+    TIP_CUEN: null,  OTR_CUEN: '',
+    NUM_CUEN: '',
     CUEN_EXTR: 'N', NOM_ENT_EXT: '', TIP_CUE_EXT: '',
   };
 }
@@ -54,6 +56,18 @@ function _bancoRenumerarTodos() {
 function toggleGrupoBanco(id) {
   const body = document.getElementById(`banco_body_${id}`);
   if (body) body.classList.toggle('collapsed');
+}
+
+/* ── Condicional "Otros" en banco y tipo de cuenta ──────────────────────────── */
+function _bancoOtrosChange(id, tipo) {
+  const selId  = tipo === 'banco' ? `banco_${id}_banco`    : `banco_${id}_tipcuen`;
+  const wrapId = tipo === 'banco' ? `banco_${id}_otr_banco_wrap` : `banco_${id}_otr_cuen_wrap`;
+  const inpId  = tipo === 'banco' ? `banco_${id}_otr_banco` : `banco_${id}_otr_cuen`;
+  const campo  = tipo === 'banco' ? 'OTR_BANCO' : 'OTR_CUEN';
+  configurarOtros(selId, wrapId, () => {
+    actualizarBanco(id, campo, null);
+    const el = document.getElementById(inpId); if (el) el.value = '';
+  });
 }
 
 /* ── Condicional cuenta extranjera ──────────────────────────────────────────── */
@@ -108,18 +122,28 @@ function _crearGrupoBancoEl(cuenta) {
         <div class="field col-full" id="field-banco_${id}_banco">
           <label>Entidad bancaria <span class="req">*</span></label>
           <select id="banco_${id}_banco"
-                  onchange="actualizarBanco(${id},'COD_BANCO',this.value);actualizarTituloBanco(${id});limpiarError('field-banco_${id}_banco')">
+                  onchange="actualizarBanco(${id},'COD_BANCO',this.value);actualizarTituloBanco(${id});limpiarError('field-banco_${id}_banco');_bancoOtrosChange(${id},'banco')">
             ${bo}
           </select>
           <span class="error-msg">Campo requerido</span>
+          <div id="banco_${id}_otr_banco_wrap" class="otr-wrap">
+            <label class="otr-label">Especifique la entidad bancaria <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_otr_banco" maxlength="255" placeholder="Nombre de la entidad"
+                   oninput="actualizarBanco(${id},'OTR_BANCO',this.value)" />
+          </div>
         </div>
         <div class="field" id="field-banco_${id}_tipcuen">
           <label>Tipo de cuenta <span class="req">*</span></label>
           <select id="banco_${id}_tipcuen"
-                  onchange="actualizarBanco(${id},'TIP_CUEN',this.value);limpiarError('field-banco_${id}_tipcuen')">
+                  onchange="actualizarBanco(${id},'TIP_CUEN',this.value);limpiarError('field-banco_${id}_tipcuen');_bancoOtrosChange(${id},'cuen')">
             ${to}
           </select>
           <span class="error-msg">Campo requerido</span>
+          <div id="banco_${id}_otr_cuen_wrap" class="otr-wrap">
+            <label class="otr-label">Especifique el tipo de cuenta <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_otr_cuen" maxlength="255" placeholder="Ej: cuenta fiduciaria, CDT…"
+                   oninput="actualizarBanco(${id},'OTR_CUEN',this.value)" />
+          </div>
         </div>
         <div class="field" id="field-banco_${id}_numcuen">
           <label>Número de cuenta <span class="req">*</span></label>
@@ -173,6 +197,11 @@ function _hydrateBancoFields(cuenta, el) {
   set(`#banco_${id}_numcuen`, cuenta.NUM_CUEN);
   set(`#banco_${id}_ext_nom`, cuenta.NOM_ENT_EXT);
   set(`#banco_${id}_ext_tip`, cuenta.TIP_CUE_EXT);
+  set(`#banco_${id}_otr_banco`, cuenta.OTR_BANCO);
+  set(`#banco_${id}_otr_cuen`,  cuenta.OTR_CUEN);
+  // Evaluar condicionales "otros" con el valor hidratado
+  _bancoOtrosChange(id, 'banco');
+  _bancoOtrosChange(id, 'cuen');
 
   if (cuenta.CUEN_EXTR === 'S') {
     const yes = el.querySelector(`input[name="banco_extr_${id}"][value="S"]`);

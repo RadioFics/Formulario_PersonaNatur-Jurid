@@ -23,6 +23,14 @@
 /** Mapa local: clave de campo → File seleccionado */
 const _archivos = new Map();
 
+// Avisa al usuario si intenta salir con archivos seleccionados sin haber enviado
+window.addEventListener('beforeunload', (e) => {
+  if (_archivos.size > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
 /* ── Inicialización ─────────────────────────────────────────────────────────── */
 
 /**
@@ -96,6 +104,8 @@ function _actualizarIndicadorArchivo(clave, nombre) {
   if (nombre) {
     ind.textContent = `✓ ${nombre}`;
     ind.className   = 'doc-archivo-nombre doc-ok';
+    // Si estaba marcado como faltante, quitarlo al seleccionar archivo
+    ind.classList.remove('doc-faltante');
   } else {
     ind.textContent = 'Ningún archivo seleccionado';
     ind.className   = 'doc-archivo-nombre';
@@ -126,21 +136,44 @@ function hayArchivosSeleccionados() {
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 
 /**
- * Valida los campos obligatorios de la sección 13.
- * Solo los datos de texto de GN_JURID_FIRMA son requeridos para enviar;
- * los archivos son complementarios pero no bloquean el envío del formulario.
+ * Valida que todos los documentos requeridos (sección 13) estén adjuntos.
+ * La firma del representante legal fue eliminada del formulario.
  *
  * @returns {boolean}
  */
 function validarSeccionDocs() {
-  let ok = true;
-  const f = formData.firma;
+  // Documentos que DEBEN estar adjuntos antes de enviar
+  const requeridos = [
+    { clave: 'RUT',       indId: 'doc_ind_rut',        label: 'RUT' },
+    { clave: 'CERT_BANC', indId: 'doc_ind_cert_banc',  label: 'Certificación bancaria' },
+    { clave: 'CERT_EXIS', indId: 'doc_ind_cert_exis',  label: 'Certificado de existencia' },
+    { clave: 'DOC_ID_RL', indId: 'doc_ind_doc_id_rl',  label: 'Documento identidad RL' },
+    { clave: 'EST_FIN',   indId: 'doc_ind_est_fin',     label: 'Estados financieros' },
+    { clave: 'CERT_ACCI', indId: 'doc_ind_cert_acci',   label: 'Certificado accionario' },
+    { clave: 'CART_ACEP', indId: 'doc_ind_cart_acep',   label: 'Carta de aceptación' },
+  ];
 
-  if (!f.NOM_FIRM)  { mostrarError('field-firma_nom');    ok = false; }
-  if (!f.APE_FIRM)  { mostrarError('field-firma_ape');    ok = false; }
-  if (!f.TIP_DOCU)  { mostrarError('field-firma_tipdoc'); ok = false; }
-  if (!f.NUM_DOCU)  { mostrarError('field-firma_numdoc'); ok = false; }
-  if (!f.FEC_FIRMA) { mostrarError('field-firma_fec');    ok = false; }
+  let ok = true;
+  const faltantes = [];
+
+  requeridos.forEach(({ clave, indId, label }) => {
+    const tieneArchivo = _archivos.has(clave);
+    const ind = document.getElementById(indId);
+    if (!tieneArchivo) {
+      faltantes.push(label);
+      if (ind) ind.classList.add('doc-faltante');
+      ok = false;
+    } else {
+      if (ind) ind.classList.remove('doc-faltante');
+    }
+  });
+
+  if (!ok) {
+    mostrarToast(
+      `Faltan ${faltantes.length} documento(s) obligatorio(s): ${faltantes.join(', ')}.`,
+      'error'
+    );
+  }
 
   return ok;
 }
@@ -164,17 +197,11 @@ function validarYContinuarDocs() {
 
 /** Resetea todos los campos de la sección al estado inicial. */
 function limpiarSeccionDocs() {
-  // Texto de firma
-  formData.firma = { NOM_FIRM: null, APE_FIRM: null, TIP_DOCU: null, NUM_DOCU: null, FEC_FIRMA: null };
-  const setEmpty = id => { const el = document.getElementById(id); if (el) el.value = ''; };
-  setEmpty('firma_nom'); setEmpty('firma_ape'); setEmpty('firma_tipdoc');
-  setEmpty('firma_numdoc'); setEmpty('firma_fec');
-
   // Archivos
   _archivos.clear();
   formData.documentos = {
     RUT: null, CERT_BANC: null, CERT_EXIS: null, DOC_ID_RL: null,
-    EST_FIN: null, CERT_ACCI: null, CART_ACEP: null, ARCH_FIRMA: null,
+    EST_FIN: null, CERT_ACCI: null, CART_ACEP: null,
   };
   document.querySelectorAll('#accordion-docs input[type="file"]')
     .forEach(inp => { inp.value = ''; });

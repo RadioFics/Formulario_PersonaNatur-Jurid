@@ -30,17 +30,15 @@ async function inicializar() {
 
       // ── Sección 1: Información básica ──────────────────────────────────────
 
-      // Tipo de documento — solo NIT (COD_TPDOC = 8) para persona jurídica
+      // Tipo de documento — carga TODOS los tipos; se filtra según TIP_TERC (J/N)
+      // en _repoblarTipoDocumento() (seccion-natur-basica.js).
+      // Al arrancar siempre estamos en modo Jurídica → pre-seleccionar NIT (COD_TPDOC=8).
       cargarCatalogo(
-        '/api/catalogo/tipos-documento', 'cod_tpdoc',
+        '/api/catalogo/tipos-documento?todos=1', 'cod_tpdoc',
         'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
-      ).then(datos => {
-        // Si la API devuelve un único tipo, seleccionarlo automáticamente
-        if (datos.length === 1) {
-          const sel = document.getElementById('cod_tpdoc');
-          sel.value = datos[0].COD_TPDOC;
-          actualizarFormData('basica', 'COD_TPDOC', datos[0].COD_TPDOC);
-        }
+      ).then(() => {
+        // Modo inicial = Jurídica → mostrar solo NIT y auto-seleccionar
+        _repoblarTipoDocumento('J');
       }),
 
       // Tipos de vinculación
@@ -55,10 +53,11 @@ async function inicializar() {
         'COD_PAIS', 'NOM_PAIS', '— Seleccione país —'
       ),
 
-      // Actividades CIIU en datalist
-      cargarDatalist(
-        '/api/catalogo/ciiu', 'lista-ciiu',
-        'COD_CIIU', 'NOM_CIIU'
+      // Actividades CIIU — select buscable, muestra "COD — Nombre"
+      cargarCatalogo(
+        '/api/catalogo/ciiu', 'cod_ciiu',
+        'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
+        {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
       ),
 
       // ── Sección 2: Representante Legal ─────────────────────────────────────
@@ -134,9 +133,12 @@ async function inicializar() {
       // renderListaBancaria() los usa vía getOpcionesHTML() al crear grupos.
       preCargarCatalogo('/api/catalogo/bancos'),
       preCargarCatalogo('/api/catalogo/tipos-cuenta'),
+      // Tipos de documento SIN ?todos=1 → solo NIT; usado por los filtros
+      // de tipo persona en secciones 7 (RF), 8 (AC) y 12 (BF) al cambiar a Jurídica.
+      preCargarCatalogo('/api/catalogo/tipos-documento'),
 
       // ── Persona Natural: catálogos exclusivos ────────────────────────────
-      // Nacionalidad (cod_nacio_n) y datalist CIIU para Natural.
+      // Nacionalidad (cod_nacio_n) y CIIU select para Natural.
       // inicializarNaturBasica() está en seccion-natur-basica.js.
       inicializarNaturBasica(),
 
@@ -146,12 +148,97 @@ async function inicializar() {
     mostrarToast('Error al cargar los catálogos. Verifique la conexión.', 'error');
   } finally {
     showLoading(false);
+    // Detectar catálogos críticos que fallaron y ofrecer reintento
+    _verificarCatalogosCriticos();
   }
+}
+
+/**
+ * Revisa si algún select crítico quedó en estado de error tras la carga inicial.
+ * Si detecta fallos, inserta un banner prominente con botón de reintento.
+ */
+function _verificarCatalogosCriticos() {
+  const criticos = ['cod_tpdoc', 'cod_vinc', 'cod_pais_exp'];
+  const fallidos = criticos.filter(id => {
+    const sel = document.getElementById(id);
+    return sel && sel.options.length === 1 && sel.options[0].textContent.includes('Error');
+  });
+
+  if (!fallidos.length) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'banner-error-catalogo';
+  banner.style.cssText = [
+    'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+    'background:#dc3545', 'color:#fff', 'padding:12px 20px',
+    'display:flex', 'align-items:center', 'gap:16px',
+    'font-size:.9rem', 'font-weight:500', 'box-shadow:0 2px 8px rgba(0,0,0,.25)',
+  ].join(';');
+  banner.innerHTML = `
+    <span>⚠ No se pudieron cargar algunos campos del formulario. Verifique la conexión con el servidor.</span>
+    <button onclick="location.reload()" style="
+      background:#fff;color:#dc3545;border:none;padding:6px 14px;
+      border-radius:4px;font-weight:700;cursor:pointer;white-space:nowrap
+    ">↻ Reintentar</button>
+    <button onclick="document.getElementById('banner-error-catalogo').remove()" style="
+      background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);
+      padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:auto
+    ">✕</button>
+  `;
+  document.body.prepend(banner);
+}
+
+/* ── Campos "Otros" — activar después de hidratar ──────────────────────────── */
+function _activarCamposOtros() {
+  // Vinculación
+  configurarOtros('cod_vinc', 'otr_vinc_wrap', () => {
+    actualizarFormData('basica', 'OTR_VINC', null);
+    const el = document.getElementById('otr_vinc'); if (el) el.value = '';
+  });
+
+  // CIIU
+  configurarOtros('cod_ciiu', 'otr_ciiu_wrap', () => {
+    actualizarFormData('basica', 'OTR_CIIU', null);
+    const el = document.getElementById('otr_ciiu'); if (el) el.value = '';
+  });
+
+  // Tipo de sociedad
+  configurarOtros('soc_tip_socie', 'otr_socie_wrap', () => {
+    actualizarSociedad('OTR_SOCIE', null);
+    const el = document.getElementById('otr_socie'); if (el) el.value = '';
+  });
+
+  // Sistema de prevención
+  configurarOtros('cump_sis_preve', 'otr_preve_wrap', () => {
+    actualizarCump('OTR_PREVE', null);
+    const el = document.getElementById('otr_preve'); if (el) el.value = '';
+  });
+}
+
+/* ── Selects con buscador — activar después de cargar catálogos ─────────────── */
+function _activarBuscadores() {
+  // Sección 1 — Básica (geo + vinculación + tipo doc + CIIU)
+  ['cod_vinc', 'cod_tpdoc', 'cod_pais_exp', 'cod_dept_exp', 'cod_mpio_exp',
+   'cod_ciiu', 'cod_ciiu_n', 'cod_nacio_n'].forEach(convertirABuscable);
+
+  // Sección 2 — Representante Legal Principal
+  ['rl_p_tipdoc', 'rl_p_pais', 'rl_p_dept', 'rl_p_mpio'].forEach(convertirABuscable);
+
+  // Sección 3 — Sociedad
+  ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_tip_socie', 'soc_pais'].forEach(convertirABuscable);
+
+  // Sección 5 — Cumplimiento
+  ['cump_sis_preve', 'cump_p_tipdoc', 'cump_p_pais', 'cump_p_dept', 'cump_p_mpio'].forEach(convertirABuscable);
+
+  // Sección 13 — Firma
+  ['firma_tipdoc'].forEach(convertirABuscable);
 }
 
 /* ── Arranque ───────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   await inicializar();
+  _activarBuscadores();
+  inicializarTooltips();
 
   const _qp      = new URLSearchParams(window.location.search);
   const _modo    = _qp.get('modo');
@@ -178,6 +265,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Hidratación de campos estáticos a partir del estado global.
   await hidratarFormularioVisual();
+
+  // Activar campos "Otros" después de hidratar (evalúa el valor actual del select)
+  _activarCamposOtros();
+
+  // Hidrata los inputs "otros" si hay borrador o modo actualizar
+  const _otrMap = {
+    otr_vinc:  formData.basica?.OTR_VINC,
+    otr_ciiu:  formData.basica?.OTR_CIIU,
+    otr_socie: formData.sociedad?.OTR_SOCIE,
+    otr_preve: formData.cumplimiento?.OTR_PREVE,
+  };
+  Object.entries(_otrMap).forEach(([id, val]) => {
+    const el = document.getElementById(id); if (el && val) el.value = val;
+  });
+
+  // Sincronizar texto visible de todos los buscable selects después de hidratar.
+  // hidratarFormularioVisual() asigna .value directamente sin disparar 'change',
+  // por lo que los sb-input necesitan actualizarse manualmente.
+  document.querySelectorAll('select[data-buscable="1"]').forEach(sel => {
+    const cur = sel.options[sel.selectedIndex];
+    const inp = sel.parentElement && sel.parentElement.querySelector('.sb-input');
+    if (inp && cur && cur.value) inp.value = cur.textContent;
+  });
 
   // Guardado automático de borrador al interactuar con el formulario.
   document.body.addEventListener('input', guardarBorradorDebounced);
@@ -217,6 +327,37 @@ async function _cargarRegistroExistente(numIden) {
     }
     const datos = await resp.json();
 
+    // ── Persona Natural — cargar en el objeto de estado correcto ──────────────
+    if (datos.TIP_TERC === 'N' && window.formDataNatur) {
+      // Activar modo Natural en la UI
+      if (typeof onTipTercChange === 'function') onTipTercChange('N');
+
+      // Campos compartidos (GN_TERCE): NUM_IDEN, COD_TPDOC, contacto
+      if (datos.basica) Object.assign(formData.basica, {
+        TIP_TERC:    'N',
+        COD_TPDOC:   datos.basica.COD_TPDOC,
+        NUM_IDEN:    datos.basica.NUM_IDEN,
+        COD_VINC:    datos.basica.COD_VINC,
+        DIR_TERC:    datos.basica.DIR_TERC,
+        TEL_TERC:    datos.basica.TEL_TERC,
+        TEL_TERC2:   datos.basica.TEL_TERC2,
+        DIR_MAIL:    datos.basica.DIR_MAIL,
+      });
+
+      // Campos exclusivos de Natural (GN_NATUR + nombres de GN_TERCE)
+      if (datos.naturBasica) Object.assign(formDataNatur.basica, datos.naturBasica);
+
+      // Secciones compartidas
+      if (datos.financiera)  Object.assign(formData.financiera,  datos.financiera);
+      if (datos.pep)         Object.assign(formData.pep,         datos.pep);
+      if (datos.actividades) Object.assign(formData.actividades, datos.actividades);
+      if (Array.isArray(datos.bancaria)) formData.bancaria = datos.bancaria;
+
+      mostrarToast('Registro de Persona Natural cargado.', 'success');
+      return;
+    }
+
+    // ── Persona Jurídica — comportamiento original ────────────────────────────
     if (datos.basica)        Object.assign(formData.basica,      datos.basica);
     if (datos.sociedad)      Object.assign(formData.sociedad,    datos.sociedad);
     if (datos.financiera)    Object.assign(formData.financiera,  datos.financiera);

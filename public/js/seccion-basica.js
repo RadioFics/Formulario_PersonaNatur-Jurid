@@ -120,11 +120,8 @@ async function onDeptChange(codDept) {
  *
  * @param {string} valor  Texto actual del input
  */
-function onCiiuInput(valor) {
-  const opts  = Array.from(document.getElementById('lista-ciiu').options);
-  const match = opts.find(o => o.value === valor);
-  actualizarFormData('basica', 'COD_CIIU', match ? match.dataset.cod : null);
-}
+/* onCiiuInput ya no se usa — CIIU pasó de datalist a select buscable. */
+function onCiiuInput() { /* obsoleto — mantenido por compatibilidad */ }
 
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 
@@ -170,7 +167,8 @@ function validarSeccionBasica() {
 function validarYContinuar() {
   if (!validarSeccionBasica()) {
     document.getElementById('accordion-basica').classList.remove('collapsed');
-    mostrarToast('Corrija los campos marcados en rojo.', 'error');
+    const errCount = document.querySelectorAll('#accordion-basica .field.error').length;
+    mostrarToast(`Faltan ${errCount} campo(s) requerido(s) en la sección 1. Revise los campos en rojo.`, 'error');
     const primerError = document.querySelector('#accordion-basica .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;

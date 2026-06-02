@@ -52,8 +52,8 @@
 
     <div class="accordion-body">
 
-      <!-- Fila 1 — Tipo persona | Vinculación | Tipo doc | Número -->
-      <div class="grid-4">
+      <!-- Fila 1 — Tipo persona | Vinculación | Tipo doc | Número | Díg.Verif -->
+      <div class="grid-4-1">
 
         <div class="field">
           <label>Tipo de persona</label>
@@ -70,6 +70,11 @@
             <option value="">— Seleccione —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
+          <div id="otr_vinc_wrap" class="otr-wrap">
+            <label class="otr-label">Especifique el tipo de vinculación <span class="req">*</span></label>
+            <input type="text" id="otr_vinc" maxlength="255" placeholder="Describa el tipo de vinculación"
+                   oninput="actualizarFormData('basica','OTR_VINC',this.value)" />
+          </div>
         </div>
 
         <div class="field" id="field-cod_tpdoc">
@@ -82,43 +87,33 @@
         </div>
 
         <div class="field" id="field-num_iden">
-          <label for="num_iden">
-            Número de documento
-            <span class="req">*</span>
-          </label>
-          <div style="display:flex;gap:8px;align-items:flex-start">
-            <div style="flex:1">
-              <input type="text" id="num_iden" maxlength="20"
-                     placeholder="Ej: 900123456"
-                     inputmode="numeric" pattern="[0-9]*"
-                     style="width:100%"
-                     oninput="this.value=this.value.replace(/\D/g,'');
-                              actualizarFormData('basica','NUM_IDEN',this.value);
-                              limpiarError('field-num_iden');
-                              ocultarAviso('aviso-duplicado')"
-                     onblur="verificarDuplicado(this.value)" />
-            </div>
-            <div class="solo-juridica" style="width:68px;flex-shrink:0">
-              <label for="dig_veri" style="font-size:.72rem;font-weight:600;color:#424242;text-transform:uppercase;letter-spacing:.02em;display:block;margin-bottom:5px">
-                Díg. verif.
-              </label>
-              <input type="text" id="dig_veri" maxlength="1"
-                     placeholder="0"
-                     inputmode="numeric" pattern="[0-9]"
-                     style="width:100%;height:38px;padding:0 10px;border:1px solid var(--color-border);border-radius:var(--radius);font-size:.875rem;text-align:center"
-                     oninput="this.value=this.value.replace(/\D/g,'').slice(0,1);
-                              actualizarFormData('basica','DIG_VERI',this.value)" />
-            </div>
-          </div>
+          <label for="num_iden">Número de documento <span class="req">*</span></label>
+          <input type="text" id="num_iden" maxlength="20"
+                 placeholder="Ej: 900123456"
+                 inputmode="numeric" pattern="[0-9]*"
+                 oninput="this.value=this.value.replace(/\D/g,'');
+                          actualizarFormData('basica','NUM_IDEN',this.value);
+                          limpiarError('field-num_iden')"
+                 onblur="verificarDuplicado(this.value)" />
           <span class="error-msg">Campo requerido y solo numérico</span>
-          <!-- Aviso duplicado -->
-          <div id="aviso-duplicado" style="display:none;margin-top:8px;padding:10px 14px;
-               background:#fff3e0;border:1px solid #ffb300;border-radius:6px;font-size:.83rem;color:#e65100">
-            <strong>⚠ Número de identificación ya registrado.</strong><br>
-            <span id="aviso-duplicado-nombre"></span><br>
-            Este documento ya existe en el sistema. Si desea modificar la información,
-            utilice la opción <a href="index.html" style="color:#bf360c;font-weight:600">Actualizar registro</a>.
-          </div>
+        </div>
+
+        <!-- Dígito de verificación — columna propia (solo Jurídica) -->
+        <div class="field field-dig-veri solo-juridica">
+          <label for="dig_veri" style="font-size:.72rem;font-weight:600;color:#424242;
+                 text-transform:uppercase;letter-spacing:.02em;
+                 display:flex;align-items:center;gap:3px;white-space:nowrap">
+            Díg. verif.
+            <span class="ic-info"
+                  data-tip="Número después del guión en el NIT. Ej: en 900.123.456-7, el dígito es 7. Puede calcularlo con la fórmula DIAN o dejarlo en 0.">i</span>
+          </label>
+          <input type="text" id="dig_veri" maxlength="1"
+                 placeholder="0"
+                 inputmode="numeric" pattern="[0-9]"
+                 style="height:38px;padding:0 10px;border:1px solid var(--color-border);
+                        border-radius:var(--radius);font-size:.875rem;text-align:center;width:100%"
+                 oninput="this.value=this.value.replace(/\D/g,'').slice(0,1);
+                          actualizarFormData('basica','DIG_VERI',this.value)" />
         </div>
       </div>
 
@@ -255,12 +250,16 @@
 
         <div class="field" id="field-cod_ciiu">
           <label for="cod_ciiu">Actividad principal CIIU <span class="req">*</span></label>
-          <input type="text" id="cod_ciiu" list="lista-ciiu"
-                 placeholder="Escriba código o nombre de actividad…"
-                 autocomplete="off"
-                 oninput="onCiiuInput(this.value); limpiarError('field-cod_ciiu')" />
-          <datalist id="lista-ciiu"></datalist>
+          <select id="cod_ciiu"
+                  onchange="actualizarFormData('basica','COD_CIIU',this.value); limpiarError('field-cod_ciiu')">
+            <option value="">— Seleccione actividad —</option>
+          </select>
           <span class="error-msg">Seleccione una actividad válida</span>
+          <div id="otr_ciiu_wrap" class="otr-wrap">
+            <label class="otr-label">Describa la actividad <span class="req">*</span></label>
+            <input type="text" id="otr_ciiu" maxlength="255" placeholder="Describa la actividad económica"
+                   oninput="actualizarFormData('basica','OTR_CIIU',this.value)" />
+          </div>
         </div>
 
         <div class="field">
@@ -299,11 +298,10 @@
 
         <div class="field" id="field-cod_ciiu_n">
           <label for="cod_ciiu_n">Actividad CIIU <span class="req">*</span></label>
-          <input type="text" id="cod_ciiu_n" list="lista-ciiu-n"
-                 placeholder="Escriba código o nombre de actividad…"
-                 autocomplete="off"
-                 oninput="onCiiuInputNatur(this.value); limpiarError('field-cod_ciiu_n')" />
-          <datalist id="lista-ciiu-n"></datalist>
+          <select id="cod_ciiu_n"
+                  onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n')">
+            <option value="">— Seleccione actividad —</option>
+          </select>
           <span class="error-msg">Seleccione una actividad válida</span>
         </div>
       </div>
@@ -546,6 +544,11 @@
             <option value="">— Seleccione —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
+          <div id="otr_socie_wrap" class="otr-wrap">
+            <label class="otr-label">Especifique el tipo de sociedad <span class="req">*</span></label>
+            <input type="text" id="otr_socie" maxlength="255" placeholder="Describa el tipo de sociedad"
+                   oninput="actualizarSociedad('OTR_SOCIE',this.value)" />
+          </div>
         </div>
 
       </div>
@@ -681,6 +684,11 @@
               <option value="">— Seleccione —</option>
             </select>
             <span class="error-msg">Campo requerido</span>
+            <div id="otr_preve_wrap" class="otr-wrap">
+              <label class="otr-label">Especifique el sistema de prevención <span class="req">*</span></label>
+              <input type="text" id="otr_preve" maxlength="255" placeholder="Describa el sistema implementado"
+                     oninput="actualizarCump('OTR_PREVE',this.value)" />
+            </div>
           </div>
         </div>
 
@@ -833,14 +841,8 @@
     <div class="accordion-body">
 
       <p style="font-size:.82rem;color:#616161;margin-bottom:4px">
-        Registre todos los accionistas o socios. La suma de los porcentajes de
-        participación debe ser exactamente 100%.
+        Registre todos los accionistas o socios de la empresa con su porcentaje de participación.
       </p>
-
-      <!-- Indicador de suma de porcentajes -->
-      <div id="ac-pct-indicador" class="pct-indicador pct-neutro">
-        Sin accionistas registrados.
-      </div>
 
       <!-- Lista de accionistas — renderizada por seccion-ac.js -->
       <div id="ac-grupos-list" class="grupo-lista"></div>
@@ -855,7 +857,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionAC()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarAC()">Finalizar sección 8</button>
+                onclick="validarYContinuarAC()">Continuar &#x2192; Sección 9</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -873,6 +875,12 @@
     </div>
 
     <div class="accordion-body">
+
+      <p class="section-hint" style="background:#E5F5FA;border-left:3px solid var(--color-accent);padding:8px 12px;border-radius:4px;margin-bottom:4px">
+        <strong>Nota:</strong> Los valores de ingresos, egresos y demás campos financieros
+        corresponden a cifras <strong>mensuales</strong> en pesos colombianos (COP),
+        salvo los totales de activos, pasivos y patrimonio que son valores de balance.
+      </p>
 
       <!-- Fila 1 — Activos / Ingresos mensuales / Pasivos -->
       <div class="grid-3">
@@ -951,7 +959,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionFinanciera()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarFinanciera()">Finalizar sección 9</button>
+                onclick="validarYContinuarFinanciera()">Continuar &#x2192; Sección 10</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -984,7 +992,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="renderListaBancaria()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBancaria()">Finalizar sección 10</button>
+                onclick="validarYContinuarBancaria()">Continuar &#x2192; Sección 11</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1101,7 +1109,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionPEP()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarPEP()">Finalizar sección 11</button>
+                onclick="validarYContinuarPEP()">Continuar &#x2192; Sección 12</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1150,71 +1158,19 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-docs')">
       <span class="accordion-title">
         <span class="section-num">13</span>
-        Documentos Requeridos y Firma
+        Documentos Requeridos
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <!-- ── 13A: Firma del Representante Legal (GN_JURID_FIRMA) ──────────── -->
-      <div class="sub-seccion-titulo">A. Firma del Representante Legal</div>
-
-      <div class="grid-4">
-        <div class="field" id="field-firma_nom">
-          <label>Nombres <span class="req">*</span></label>
-          <input type="text" id="firma_nom" maxlength="100"
-                 oninput="actualizarFirma('NOM_FIRM',this.value);limpiarError('field-firma_nom')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-firma_ape">
-          <label>Apellidos <span class="req">*</span></label>
-          <input type="text" id="firma_ape" maxlength="100"
-                 oninput="actualizarFirma('APE_FIRM',this.value);limpiarError('field-firma_ape')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-firma_tipdoc">
-          <label>Tipo de documento <span class="req">*</span></label>
-          <select id="firma_tipdoc"
-                  onchange="actualizarFirma('TIP_DOCU',this.value);limpiarError('field-firma_tipdoc')">
-            <option value="">&#x2014; Seleccione &#x2014;</option>
-          </select>
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-firma_numdoc">
-          <label>N&#xFA;mero de documento <span class="req">*</span></label>
-          <input type="text" id="firma_numdoc" maxlength="20" inputmode="numeric"
-                 oninput="this.value=this.value.replace(/\D/g,'');actualizarFirma('NUM_DOCU',this.value);limpiarError('field-firma_numdoc')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-      </div>
-
-      <div class="grid-4">
-        <div class="field" id="field-firma_fec">
-          <label>Fecha de firma <span class="req">*</span></label>
-          <input type="date" id="firma_fec"
-                 onchange="actualizarFirma('FEC_FIRMA',this.value);limpiarError('field-firma_fec')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field col-full">
-          <label>Archivo de firma <small>(imagen o PDF)</small></label>
-          <div class="doc-upload-wrap">
-            <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
-              <input type="file" accept="image/*,.pdf" style="display:none"
-                     onchange="onArchivoSeleccionado('ARCH_FIRMA',this)" />
-            </label>
-            <span class="doc-archivo-nombre" id="doc_ind_arch_firma">Ningún archivo seleccionado</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── 13B: Documentos requeridos (GN_TERCE_DOC) ─────────────────────── -->
-      <div class="sub-seccion-titulo" style="margin-top:1.5rem">B. Documentos Requeridos</div>
+      <!-- ── 13: Documentos requeridos (GN_TERCE_DOC) ──────────────────────── -->
+      <div class="sub-seccion-titulo">Documentos Requeridos</div>
 
       <p class="section-hint">
         Adjunte los documentos solicitados. Los archivos se enviarán al confirmar el formulario.
-        Formatos aceptados: PDF, JPG, PNG (máx. 10&#xA0;MB por archivo).
+        Formato aceptado: PDF (máx. 10&#xA0;MB por archivo).
       </p>
 
       <div class="doc-lista">
@@ -1224,7 +1180,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('RUT',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_rut">Ningún archivo seleccionado</span>
@@ -1236,7 +1192,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_BANC',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_cert_banc">Ningún archivo seleccionado</span>
@@ -1248,7 +1204,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_EXIS',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_cert_exis">Ningún archivo seleccionado</span>
@@ -1260,7 +1216,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('DOC_ID_RL',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ningún archivo seleccionado</span>
@@ -1272,7 +1228,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('EST_FIN',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ningún archivo seleccionado</span>
@@ -1284,7 +1240,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_ACCI',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_cert_acci">Ningún archivo seleccionado</span>
@@ -1296,7 +1252,7 @@
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
-              <input type="file" accept=".pdf,image/*" style="display:none"
+              <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CART_ACEP',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_cart_acep">Ningún archivo seleccionado</span>
@@ -1378,6 +1334,27 @@
 <!--  Modal — Error al guardar                                              -->
 <!-- ════════════════════════════════════════════════════════════
 <!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Número de identificación ya registrado                        -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-duplicado">
+  <div class="modal-card" style="max-width:440px">
+    <div class="dup-modal-icon">&#9888;</div>
+    <p class="dup-modal-title">N&uacute;mero de identificaci&oacute;n ya registrado</p>
+    <div class="dup-modal-body" id="modal-duplicado-msg">
+      Este documento ya existe en el sistema.
+    </div>
+    <div class="dup-modal-actions">
+      <button class="btn btn-secondary" type="button" onclick="cerrarModalDuplicado()">
+        Cerrar
+      </button>
+      <button class="btn btn-primary" type="button" onclick="irAActualizarDuplicado()">
+        &#9998; Ir a Actualizar registro
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
 <!--  Modal — Error al guardar                                              -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="error-guardado-modal">
@@ -1440,46 +1417,75 @@ function descargarExcel() {
   window.open(endpoint + encodeURIComponent(codTerc), '_blank');
 }
 
-/* ── Ocultar aviso genérico por ID ──────────────────────────────────────── */
-function ocultarAviso(id) {
-  const el = document.getElementById(id);
-  if (el) el.style.display = 'none';
+/* ── Aviso de duplicado — modal flotante ─────────────────────────────────── */
+var _numIdenBloqueado  = false;   // var → window._numIdenBloqueado
+var _numIdenDuplicadoN = '';
+
+function ocultarAviso(/* id ignorado */) {
+  _numIdenBloqueado  = false;
+  _numIdenDuplicadoN = '';
 }
 
-/* ── Verificar duplicado en num_iden ────────────────────────────────────── */
-// var (no let) para que sea accesible como window._numIdenBloqueado
-var _numIdenBloqueado = false;
+function cerrarModalDuplicado() {
+  document.getElementById('modal-duplicado').classList.remove('show');
+}
+
+function irAActualizarDuplicado() {
+  cerrarModalDuplicado();
+  // Lleva a index.html con ?accion=actualizar para que el JS de index abra el modal
+  window.location.href = 'index.html?accion=actualizar&numIden=' + encodeURIComponent(_numIdenDuplicadoN);
+}
 
 async function verificarDuplicado(numIden) {
   if (!numIden || numIden.length < 3) return;
+
+  // En modo actualizar, el numIden ya existe por definición (es el registro
+  // que se está editando). Mostrar el modal de duplicado sería un falso positivo
+  // que genera un ciclo interminable. Se omite la verificación para ese NIT.
+  const _qpDup = new URLSearchParams(window.location.search);
+  if (_qpDup.get('modo') === 'actualizar' &&
+      _qpDup.get('numIden') === String(numIden)) {
+    _numIdenBloqueado  = false;
+    _numIdenDuplicadoN = '';
+    return;
+  }
+
   try {
     const resp = await fetch('/api/verificar-identidad/' + encodeURIComponent(numIden));
     const data = await resp.json();
-    const aviso   = document.getElementById('aviso-duplicado');
-    const avisoNm = document.getElementById('aviso-duplicado-nombre');
     if (data.existe) {
-      avisoNm.textContent = data.NOM_COMP ? ('Empresa registrada: ' + data.NOM_COMP) : '';
-      aviso.style.display = 'block';
-      _numIdenBloqueado = true;
+      _numIdenBloqueado  = true;
+      _numIdenDuplicadoN = numIden;
+      const nombre   = data.NOM_COMP || data.NOM_TERC || '';
+      const tipLabel = data.TIP_TERC === 'N' ? 'Persona Natural' : 'Persona Jur\xEDdica';
+      const pill = `<span class="dup-modal-pill">${tipLabel}</span>`;
+      document.getElementById('modal-duplicado-msg').innerHTML =
+        `${pill}` +
+        (nombre ? `<br><strong style="font-size:1rem;color:#212121">${nombre}</strong><br>` : '') +
+        `Documento: <code>${numIden}</code><br><br>` +
+        'Este n\xFAmero ya existe en el sistema.<br>Use el bot\xF3n de abajo para ir directamente a <strong>Actualizar registro</strong>.';
+      document.getElementById('modal-duplicado').classList.add('show');
     } else {
-      aviso.style.display = 'none';
-      _numIdenBloqueado = false;
+      _numIdenBloqueado  = false;
+      _numIdenDuplicadoN = '';
     }
-  } catch (_) { /* sin conexión — no bloquear */ }
+  } catch (_) { /* sin conexi\xF3n — no bloquear */ }
 }
 
-/* Parchar validarYContinuar para rechazar si hay duplicado */
-const _validarYContinuarOriginal = typeof validarYContinuar === 'function' ? validarYContinuar : null;
-function validarYContinuar() {
-  if (_numIdenBloqueado) {
-    document.getElementById('accordion-basica').classList.remove('collapsed');
-    mostrarToast('Este número de identificación ya existe. Use "Actualizar registro".', 'error');
-    const aviso = document.getElementById('aviso-duplicado');
-    if (aviso) aviso.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return;
-  }
-  if (_validarYContinuarOriginal) _validarYContinuarOriginal();
-}
+/* Parchar validarYContinuar para rechazar si hay duplicado.
+   IIFE para evitar hoisting que sobreescribiría el parche de seccion-natur-basica.js. */
+(function() {
+  const _orig = typeof window.validarYContinuar === 'function' ? window.validarYContinuar : null;
+  window.validarYContinuar = function () {
+    if (_numIdenBloqueado) {
+      document.getElementById('accordion-basica').classList.remove('collapsed');
+      mostrarToast('Este n\xFAmero de identificaci\xF3n ya existe. Use "Actualizar registro".', 'error');
+      document.getElementById('modal-duplicado').classList.add('show');
+      return;
+    }
+    if (_orig) _orig();
+  };
+})();
 
 /* ── Manejo de ?modo=actualizar&numIden=XXX ─────────────────────────────── */
 (function handleQueryParams() {

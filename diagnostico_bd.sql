@@ -74,6 +74,9 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_JURID — Datos jurídicos principales
+--  OTR_VINC: texto libre cuando TIP_VINC = opción "Otro" del catálogo
+--  OTR_CIIU: texto libre cuando COD_CIIU = opción "Otro" del catálogo
+--  OTR_SOCIE: texto libre cuando TIP_SOCIE = opción "Otro" del catálogo
 --  Columnas reales en la BD (confirmadas por diagnóstico):
 --    TIP_VINC varchar(40), MAIL_SARL, COD_CIIU, URL_WEB, TIP_SOCIE,
 --    COD_PAIS_ORI, UBIC_SOC, COD_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
@@ -82,6 +85,15 @@ GO
 -- ─────────────────────────────────────────────────────────────────────────────
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='TIP_VINC')
     ALTER TABLE GN_JURID ADD TIP_VINC VARCHAR(40) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='OTR_VINC')
+    ALTER TABLE GN_JURID ADD OTR_VINC VARCHAR(255) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='OTR_CIIU')
+    ALTER TABLE GN_JURID ADD OTR_CIIU VARCHAR(255) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='OTR_SOCIE')
+    ALTER TABLE GN_JURID ADD OTR_SOCIE VARCHAR(255) NULL;
 GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='MAIL_SARL')
     ALTER TABLE GN_JURID ADD MAIL_SARL VARCHAR(150) NULL;
@@ -156,7 +168,11 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_JURID_CUMP — Sistema de cumplimiento (cabecera + oficiales en misma tabla)
+--  OTR_PREVE: texto libre cuando SIS_PREVE = opción "Otro" del catálogo
 -- ─────────────────────────────────────────────────────────────────────────────
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_CUMP' AND COLUMN_NAME='OTR_PREVE')
+    ALTER TABLE GN_JURID_CUMP ADD OTR_PREVE VARCHAR(255) NULL;
+GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_CUMP' AND COLUMN_NAME='DESC_NORM')
     ALTER TABLE GN_JURID_CUMP ADD DESC_NORM VARCHAR(MAX) NULL;
 GO
@@ -228,7 +244,11 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_JURID_RF — Revisores fiscales
+--  TIP_PERS: 'N' = Persona Natural | 'J' = Persona Jurídica
 -- ─────────────────────────────────────────────────────────────────────────────
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_RF' AND COLUMN_NAME='TIP_PERS')
+    ALTER TABLE GN_JURID_RF ADD TIP_PERS CHAR(1) NULL DEFAULT 'N';
+GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_RF' AND COLUMN_NAME='TIE_REVIS')
     ALTER TABLE GN_JURID_RF ADD TIE_REVIS CHAR(1) NULL;
 GO
@@ -274,7 +294,11 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_JURID_AC — Composición accionaria
+--  TIP_PERS: 'N' = Persona Natural | 'J' = Persona Jurídica
 -- ─────────────────────────────────────────────────────────────────────────────
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_AC' AND COLUMN_NAME='TIP_PERS')
+    ALTER TABLE GN_JURID_AC ADD TIP_PERS CHAR(1) NULL DEFAULT 'N';
+GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_AC' AND COLUMN_NAME='NOM_ACCI')
     ALTER TABLE GN_JURID_AC ADD NOM_ACCI VARCHAR(100) NULL;
 GO
@@ -323,7 +347,15 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_TERCE_BANCO — Información bancaria
+--  OTR_BANCO: texto libre cuando COD_BANCO = opción "Otro" del catálogo
+--  OTR_CUEN:  texto libre cuando TIP_CUEN  = opción "Otro" del catálogo
 -- ─────────────────────────────────────────────────────────────────────────────
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_TERCE_BANCO' AND COLUMN_NAME='OTR_BANCO')
+    ALTER TABLE GN_TERCE_BANCO ADD OTR_BANCO VARCHAR(255) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_TERCE_BANCO' AND COLUMN_NAME='OTR_CUEN')
+    ALTER TABLE GN_TERCE_BANCO ADD OTR_CUEN VARCHAR(255) NULL;
+GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_TERCE_BANCO' AND COLUMN_NAME='COD_BANCO')
     ALTER TABLE GN_TERCE_BANCO ADD COD_BANCO VARCHAR(10) NULL;
 GO
@@ -380,9 +412,13 @@ GO
 
 -- ─────────────────────────────────────────────────────────────────────────────
 --  GN_JURID_BF — Beneficiarios finales
+--  TIP_BENE: 'N' = Persona Natural | 'J' = Persona Jurídica (antes 'P', ahora corregido)
 -- ─────────────────────────────────────────────────────────────────────────────
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_BF' AND COLUMN_NAME='TIP_BENE')
-    ALTER TABLE GN_JURID_BF ADD TIP_BENE CHAR(1) NULL DEFAULT 'P';
+    ALTER TABLE GN_JURID_BF ADD TIP_BENE CHAR(1) NULL DEFAULT 'N';
+GO
+-- Corregir valores históricos 'P' que quedaron del valor por defecto anterior
+UPDATE GN_JURID_BF SET TIP_BENE = 'N' WHERE TIP_BENE = 'P' OR TIP_BENE IS NULL;
 GO
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='GN_JURID_BF' AND COLUMN_NAME='NOM_BENE')
     ALTER TABLE GN_JURID_BF ADD NOM_BENE VARCHAR(100) NULL;

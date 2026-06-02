@@ -17,6 +17,52 @@
  */
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   Tipos de documento según TIP_TERC
+══════════════════════════════════════════════════════════════════════════════ */
+
+/** COD_TPDOC del NIT en la tabla MAE_TPDOC */
+const COD_NIT = 8;
+
+/**
+ * Repuebla el select #cod_tpdoc filtrando según el tipo de persona.
+ *  · Jurídica (J): muestra solo NIT (COD_TPDOC = 8) y lo auto-selecciona.
+ *  · Natural   (N): muestra todos los tipos disponibles.
+ *
+ * Depende de que '/api/catalogo/tipos-documento?todos=1' ya esté en catalogCache.
+ * @param {'J'|'N'} tipTerc
+ */
+function _repoblarTipoDocumento(tipTerc) {
+  const sel = document.getElementById('cod_tpdoc');
+  if (!sel) return;
+
+  // Obtener todos los tipos del cache
+  // Nota: catalogCache es const global (state.js), NO está en window — no usar window.catalogCache
+  const urlKey = new URL('/api/catalogo/tipos-documento?todos=1', window.location.origin).toString();
+  const todos  = catalogCache[urlKey] || [];
+
+  const filtrados = tipTerc === 'J'
+    ? todos.filter(d => d.COD_TPDOC === COD_NIT)
+    : todos;
+
+  sel.innerHTML = '<option value="">— Seleccione —</option>';
+  filtrados.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value       = d.COD_TPDOC;
+    opt.textContent = d.NOM_TPDOC;
+    sel.appendChild(opt);
+  });
+
+  if (tipTerc === 'J' && filtrados.length === 1) {
+    sel.value = filtrados[0].COD_TPDOC;
+    actualizarFormData('basica', 'COD_TPDOC', filtrados[0].COD_TPDOC);
+  } else {
+    // Limpiar selección al cambiar a Natural
+    actualizarFormData('basica', 'COD_TPDOC', null);
+    limpiarError('field-cod_tpdoc');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
    Escritura de estado
 ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -86,6 +132,9 @@ function onTipTercChange(val) {
   const aviso = document.getElementById('aviso-duplicado');
   if (aviso) aviso.style.display = 'none';
   window._numIdenBloqueado = false;
+
+  // ── Repoblar select de tipo de documento según persona ───────────────────
+  _repoblarTipoDocumento(val);
 
   // ── Colapsar secciones Jurídica que quedaron abiertas ─────────────────────
   if (esN) {
@@ -280,7 +329,8 @@ function validarYContinuarBasicaNatural() {
   }
   if (!validarNaturBasica()) {
     document.getElementById('accordion-basica').classList.remove('collapsed');
-    mostrarToast('Corrija los campos marcados en rojo.', 'error');
+    const errCount = document.querySelectorAll('#accordion-basica .field.error').length;
+    mostrarToast(`Faltan ${errCount} campo(s) requerido(s) en la sección 1. Revise los campos en rojo.`, 'error');
     const primerError = document.querySelector('#accordion-basica .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
@@ -310,10 +360,14 @@ async function inicializarNaturBasica() {
       '/api/catalogo/paises', 'cod_nacio_n',
       'COD_PAIS', 'NOM_PAIS', '— Seleccione —'
     ),
-    // CIIU para Natural — mismo catálogo, datalist diferente
-    cargarDatalist(
-      '/api/catalogo/ciiu', 'lista-ciiu-n',
-      'COD_CIIU', 'NOM_CIIU'
+    // CIIU para Natural — select buscable, mismo catálogo que Jurídica
+    cargarCatalogo(
+      '/api/catalogo/ciiu', 'cod_ciiu_n',
+      'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
+      {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
     ),
   ]);
 }
+
+/* Nota: onCiiuInputNatur() ya no se usa — CIIU pasó de datalist a select. */
+function onCiiuInputNatur() { /* obsoleto — mantenido por compatibilidad */ }

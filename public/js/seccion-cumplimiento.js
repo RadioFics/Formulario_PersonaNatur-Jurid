@@ -282,6 +282,112 @@ function renderListaCump() {
   _cumpSyncEliminar();
 }
 
+/* ── Validación y navegación ────────────────────────────────────────────────── */
+
+/**
+ * Valida la sección 5 (Cumplimiento).
+ * Requerido siempre: DESC_NORM.
+ * Si TIE_JUNTA = 'S', además se validan los oficiales de cumplimiento.
+ * @returns {boolean}
+ */
+function validarSeccionCumplimiento() {
+  let ok = true;
+  const c = formData.cumplimiento;
+
+  // Normatividad siempre requerida
+  if (!c.DESC_NORM || !String(c.DESC_NORM).trim()) {
+    mostrarError('field-cump_desc_norm');
+    ok = false;
+  } else {
+    limpiarError('field-cump_desc_norm');
+  }
+
+  // Validar radio de sistema (debe estar seleccionado)
+  if (!c.TIE_JUNTA) {
+    mostrarToast('Indique si la empresa tiene sistema de prevención implementado.', 'error');
+    ok = false;
+  }
+
+  // Si tiene sistema, validar oficiales
+  if (c.TIE_JUNTA === 'S') {
+    if (!c.SIS_PREVE) {
+      mostrarError('field-cump_sis_preve');
+      ok = false;
+    }
+    if (!Array.isArray(c.oficiales) || c.oficiales.length === 0) {
+      mostrarToast('Agregue al menos un oficial de cumplimiento.', 'error');
+      ok = false;
+    } else {
+      for (const o of c.oficiales) {
+        const req = [
+          [`field-cump_${o._id}_tipdoc`, o.TIP_DOCU],
+          [`field-cump_${o._id}_numdoc`, o.NUM_DOCU],
+          [`field-cump_${o._id}_fec`,    o.FEC_EXPE],
+          [`field-cump_${o._id}_nom`,    o.NOM_RESP],
+          [`field-cump_${o._id}_ape`,    o.APE_RESP],
+          [`field-cump_${o._id}_pais`,   o.COD_PAIS],
+          [`field-cump_${o._id}_dept`,   o.COD_DEPT],
+          [`field-cump_${o._id}_mpio`,   o.COD_MPIO],
+        ];
+        req.forEach(([fid, v]) => {
+          if (!v || !String(v).trim()) { mostrarError(fid); ok = false; }
+        });
+        if (o.MAIL_RESP && !esEmailValido(o.MAIL_RESP)) {
+          mostrarError(`field-cump_${o._id}_mail`); ok = false;
+        }
+      }
+    }
+  }
+
+  return ok;
+}
+
+/**
+ * Botón "Continuar → Sección 6".
+ * Valida la sección 5 y, si es correcta, abre la sección 6 (Junta Directiva).
+ */
+function validarYContinuarCumplimiento() {
+  if (!validarSeccionCumplimiento()) {
+    document.getElementById('accordion-cumplimiento').classList.remove('collapsed');
+    const errCount = document.querySelectorAll('#accordion-cumplimiento .field.error').length;
+    if (errCount > 0) {
+      mostrarToast(`Faltan ${errCount} campo(s) en la sección 5. Revise los campos en rojo.`, 'error');
+      const primerError = document.querySelector('#accordion-cumplimiento .field.error');
+      if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return;
+  }
+  mostrarToast('Sección 5 completa. Continúe con la siguiente sección.', 'success');
+  document.getElementById('accordion-cumplimiento').classList.add('collapsed');
+  const acc6 = document.getElementById('accordion-jd');
+  if (acc6) {
+    acc6.classList.remove('collapsed');
+    acc6.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  console.log('✅ formData.cumplimiento:', JSON.stringify(formData.cumplimiento, null, 2));
+}
+
+/** Limpia todos los campos de la sección 5. */
+function limpiarSeccionCumplimiento() {
+  formData.cumplimiento.DESC_NORM = '';
+  formData.cumplimiento.NORM_LAFT = '';
+  formData.cumplimiento.TIE_JUNTA = 'N';
+  formData.cumplimiento.SIS_PREVE = null;
+  formData.cumplimiento.oficiales = [];
+
+  const descEl = document.getElementById('cump_desc_norm');
+  if (descEl) descEl.value = '';
+  const normEl = document.getElementById('cump_norm_laft');
+  if (normEl) normEl.value = '';
+
+  const radioNo = document.querySelector('input[name="cump_tie_sist"][value="N"]');
+  if (radioNo) { radioNo.checked = true; onTieneSistemaChange('N'); }
+
+  document.querySelectorAll('#accordion-cumplimiento .field.error')
+    .forEach(f => f.classList.remove('error'));
+  mostrarToast('Sección limpiada.', 'success');
+}
+
 /* ── Agregar / Eliminar ──────────────────────────────────────────────────────── */
 function agregarCump(tipRepr) {
   if (!Array.isArray(formData.cumplimiento.oficiales)) {

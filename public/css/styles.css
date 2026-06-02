@@ -117,14 +117,86 @@ body {
 /* ── Grilla de campos ──────────────────────────────────────────────────────── */
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .col-full { grid-column: 1 / -1; }
+
+/* Fila especial 4+1: cuatro columnas iguales + columna angosta para dígito */
+.grid-4-1 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 72px;
+  gap: 14px;
+  align-items: end;
+}
 
 @media (max-width: 800px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-4-1 { grid-template-columns: repeat(2, 1fr); }
+  .grid-4-1 .field-dig-veri { grid-column: 2; }
 }
 @media (max-width: 500px) {
-  .grid-4, .grid-2 { grid-template-columns: 1fr; }
+  .grid-4, .grid-2, .grid-3, .grid-4-1 { grid-template-columns: 1fr; }
+  .grid-4-1 .field-dig-veri { grid-column: 1; }
 }
+
+/* ── Selects con buscador ──────────────────────────────────────────────────── */
+.sb-wrap { position: relative; display: block; }
+.sb-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-family: var(--font);
+  color: #212121;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M0 0l6 8 6-8z' fill='%23757575'/%3E%3C/svg%3E") no-repeat right 10px center;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color .15s, box-shadow .15s;
+  user-select: none;  /* evita selección de texto cuando está cerrado */
+}
+.sb-input:not([readonly]) {
+  /* estado de búsqueda: dropdown abierto */
+  cursor: text;
+  user-select: text;
+}
+.sb-input:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px rgba(32,167,201,.15);
+}
+.sb-input:disabled {
+  background-color: var(--color-disabled);
+  color: var(--color-disabled-txt);
+  cursor: not-allowed;
+}
+.sb-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  max-height: 210px;
+  overflow-y: auto;
+  z-index: 300;
+  box-shadow: 0 4px 16px rgba(0,0,0,.14);
+  scrollbar-width: thin;
+}
+.sb-item {
+  padding: 7px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: #212121;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-item:hover { background: #E5F5FA; }
+.sb-item.sb-selected { background: #C2E4EF; font-weight: 600; }
+.sb-item.sb-empty { color: #9e9e9e; font-style: italic; cursor: default; }
 
 /* ── Campo (label + control) ───────────────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 5px; }
@@ -175,6 +247,11 @@ body {
 /* ── Estado de error visual ────────────────────────────────────────────────── */
 .field.error input,
 .field.error select {
+  border-color: var(--color-error);
+  background: #fff8f8;
+}
+/* Buscable select dentro de campo con error */
+.field.error .sb-input {
   border-color: var(--color-error);
   background: #fff8f8;
 }
@@ -332,7 +409,9 @@ body {
 
 .pais-actions { padding-top: 6px; }
 
-.btn-agregar-pais {
+/* Botones de agregar ítems dinámicos — mismo estilo */
+.btn-agregar-pais,
+.btn-agregar-grupo {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -346,7 +425,8 @@ body {
   cursor: pointer;
   transition: background .15s;
 }
-.btn-agregar-pais:hover { background: #EAF5FA; }
+.btn-agregar-pais:hover,
+.btn-agregar-grupo:hover { background: #EAF5FA; }
 
 /* ── Textarea (campo de texto largo) ──────────────────────────────────────── */
 .field textarea {
@@ -522,6 +602,29 @@ body {
   transition: opacity .2s ease, max-height .2s ease;
 }
 
+/* ── Campo libre "Otros" (se expande bajo el select cuando aplica) ─────────── */
+.otr-wrap {
+  display: none;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity .2s ease, max-height .3s ease;
+  margin-top: 8px;
+}
+.otr-label {
+  display: block;
+  font-size: .75rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  margin-bottom: 4px;
+}
+.otr-wrap input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* ── Grilla de 3 columnas (Sección financiera) ────────────────────────────── */
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 @media (max-width: 800px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
@@ -578,6 +681,47 @@ body {
   font-style: italic;
   margin-top: 3px;
   line-height: 1.4;
+}
+
+/* ── Ícono de información (tooltip manejado por JS position:fixed) ───────────── */
+.ic-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 3px;
+  flex-shrink: 0;
+}
+
+/* Div tooltip global — creado por JS, position:fixed para no ser recortado */
+#_ic_tooltip_global {
+  position: fixed;
+  display: none;
+  max-width: 240px;
+  background: #37474f;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 7px 11px;
+  border-radius: 6px;
+  white-space: normal;
+  box-shadow: 0 3px 12px rgba(0,0,0,.28);
+  pointer-events: none;
+  z-index: 99999;
+  transition: opacity 0.12s;
 }
 
 /* ── Sub-título de sección PEP ────────────────────────────────────────────── */
@@ -710,6 +854,53 @@ body {
   padding: 20px;
 }
 .modal-overlay.visible { display: flex; }
+.modal-overlay.show    { display: flex; } /* alias usado por guardar.js y formulario.html */
+
+/* ── Modal de duplicado ─────────────────────────────────────────────────────── */
+.dup-modal-icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  margin-bottom: 8px;
+  color: #d84315;          /* naranja oscuro — aviso */
+}
+.dup-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 10px;
+}
+.dup-modal-body {
+  font-size: 0.875rem;
+  color: #424242;
+  line-height: 1.6;
+  margin-bottom: 18px;
+  text-align: left;
+}
+.dup-modal-body code {
+  background: #E5F5FA;
+  color: var(--color-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: monospace;
+}
+.dup-modal-pill {
+  display: inline-block;
+  background: #fff3e0;
+  color: #bf360c;
+  border: 1px solid #ffb74d;
+  border-radius: 99px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  margin-bottom: 14px;
+}
+.dup-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
 
 .modal-card {
   background: #fff;
@@ -822,6 +1013,15 @@ body {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   flex-wrap: wrap;
+}
+
+/* Indicador de documento faltante (obligatorio no adjunto) */
+.doc-faltante {
+  color: var(--color-error) !important;
+  font-weight: 600;
+}
+.doc-faltante::before {
+  content: '⚠ ';
 }
 
 .doc-label {

@@ -15,13 +15,117 @@
  */
 
 require('dotenv').config();
-const express = require('express');
-const sql     = require('mssql');
-const cors    = require('cors');
-const path    = require('path');
-const multer  = require('multer');
-const fs      = require('fs');
-const ExcelJS = require('exceljs');
+const express    = require('express');
+const sql        = require('mssql');
+const cors       = require('cors');
+const path       = require('path');
+const multer     = require('multer');
+const fs         = require('fs');
+const ExcelJS    = require('exceljs');
+const { S3Client, PutObjectCommand, GetObjectCommand,
+        ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const session        = require('express-session');
+const crypto         = require('crypto');
+
+// ─── Validación MIME de archivos ─────────────────────────────────────────────
+const TIPOS_DOC_PERMITIDOS = new Set([
+  'RUT', 'CERT_BANC', 'CERT_EXIS', 'DOC_ID_RL', 'EST_FIN', 'CERT_ACCI', 'CART_ACEP',
+]);
+
+const _EXTENSIONES_PERMITIDAS = new Set(['pdf']);
+
+// Magic bytes (primeros bytes) que identifican cada formato de forma inequívoca
+const _FIRMAS_MIME = [
+  { mime: 'application/pdf', extensiones: ['pdf'], firma: Buffer.from([0x25, 0x50, 0x44, 0x46]) }, // %PDF
+];
+const _MAX_FIRMA_BYTES = Math.max(..._FIRMAS_MIME.map(f => f.firma.length));
+
+function _detectarMimePorFirma(rutaArchivo) {
+  const fd  = fs.openSync(rutaArchivo, 'r');
+  const buf = Buffer.alloc(_MAX_FIRMA_BYTES);
+  fs.readSync(fd, buf, 0, _MAX_FIRMA_BYTES, 0);
+  fs.closeSync(fd);
+  for (const tipo of _FIRMAS_MIME) {
+    if (buf.subarray(0, tipo.firma.length).equals(tipo.firma)) return tipo;
+  }
+  return null;
+}
+
+function _validarArchivoMime(file) {
+  const extDeclarada = path.extname(file.originalname).replace('.', '').toLowerCase();
+  const tipoReal     = _detectarMimePorFirma(file.path);
+  if (!tipoReal) {
+    return `"${file.fieldname}": el contenido del archivo no es un PDF, JPG ni PNG válido`;
+  }
+  if (!tipoReal.extensiones.includes(extDeclarada)) {
+    return `"${file.fieldname}": la extensión .${extDeclarada} no corresponde al contenido real del archivo (${tipoReal.mime})`;
+  }
+  return null;
+}
+
+// Middleware post-multer: verifica magic bytes de cada archivo y elimina los inválidos
+function _mwValidarMime(req, res, next) {
+  if (!req.files || req.files.length === 0) return next();
+  const errores = req.files.map(_validarArchivoMime).filter(Boolean);
+  if (errores.length > 0) {
+    // Eliminar todos los archivos del request para no dejar huérfanos en disco
+    for (const f of req.files) { try { fs.unlinkSync(f.path); } catch (_) {} }
+    return res.status(400).json({ error: 'Archivos rechazados por tipo de contenido', detalles: errores });
+  }
+  next();
+}
+
+// ─── Cloudflare R2 (almacenamiento externo, S3-compatible) ───────────────────
+// Si R2_ENDPOINT no está en .env, el sistema cae a disco local automáticamente.
+//
+// Variables de entorno requeridas para activar R2:
+//   R2_ENDPOINT        = https://<account-id>.r2.cloudflarestorage.com
+//   R2_BUCKET          = nombre-del-bucket
+//   R2_ACCESS_KEY_ID   = clave de acceso (API token de R2)
+//   R2_SECRET_ACCESS_KEY = clave secreta
+const _r2Client = process.env.R2_ENDPOINT
+  ? new S3Client({
+      region:   'auto',
+      endpoint: process.env.R2_ENDPOINT,
+      credentials: {
+        accessKeyId:     process.env.R2_ACCESS_KEY_ID     || '',
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+      },
+    })
+  : null;
+
+const _R2_BUCKET  = process.env.R2_BUCKET || '';
+const _R2_URL_TTL = 3600; // Signed URL válida 1 hora
+
+async function _r2Subir(localPath, key) {
+  const stat   = fs.statSync(localPath);
+  const stream = fs.createReadStream(localPath);
+  await _r2Client.send(new PutObjectCommand({
+    Bucket:        _R2_BUCKET,
+    Key:           key,
+    Body:          stream,
+    ContentLength: stat.size,
+    ContentType:   'application/pdf',
+  }));
+}
+
+async function _r2UrlFirmada(key, nomArch) {
+  return getSignedUrl(
+    _r2Client,
+    new GetObjectCommand({
+      Bucket:                     _R2_BUCKET,
+      Key:                        key,
+      ResponseContentDisposition: `inline; filename="${encodeURIComponent(nomArch)}"`,
+    }),
+    { expiresIn: _R2_URL_TTL }
+  );
+}
+
+// Distingue claves R2 (relativas) de rutas locales (absolutas Windows o Unix)
+function _esRutaLocal(rutaDoc) {
+  return !rutaDoc || /^[A-Za-z]:[\\\/]/.test(rutaDoc) || rutaDoc.startsWith('/');
+}
 
 // ─── Configuración de multer para subida de documentos ──────────────────────
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
@@ -29,10 +133,10 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const _multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const numIden = req.params.numIden || req.body.NUM_IDEN || 'sin_id';
-    const dir = path.join(UPLOAD_DIR, String(numIden));
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
+    // Siempre aterriza en _tmp; el handler lo mueve a {AÑO}/{numIden}/
+    const tmpDir = path.join(UPLOAD_DIR, '_tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    cb(null, tmpDir);
   },
   filename: (req, file, cb) => {
     const ext  = path.extname(file.originalname);
@@ -40,9 +144,22 @@ const _multerStorage = multer.diskStorage({
     cb(null, `${base}${ext}`);
   },
 });
+// Capa 1 — rechazo rápido por fieldname o extensión antes de escribir en disco
+const _multerFileFilter = (req, file, cb) => {
+  if (!TIPOS_DOC_PERMITIDOS.has(file.fieldname)) {
+    return cb(Object.assign(new Error(`Campo no permitido: "${file.fieldname}"`), { status: 400 }));
+  }
+  const ext = path.extname(file.originalname).replace('.', '').toLowerCase();
+  if (!_EXTENSIONES_PERMITIDAS.has(ext)) {
+    return cb(Object.assign(new Error(`Tipo de archivo no permitido: .${ext}. Solo se aceptan archivos PDF.`), { status: 400 }));
+  }
+  cb(null, true);
+};
+
 const upload = multer({
-  storage: _multerStorage,
-  limits:  { fileSize: 10 * 1024 * 1024 }, // 10 MB por archivo
+  storage:    _multerStorage,
+  limits:     { fileSize: 10 * 1024 * 1024 }, // 10 MB por archivo
+  fileFilter: _multerFileFilter,
 });
 
 const app  = express();
@@ -74,7 +191,66 @@ const dbConfig = {
 };
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors());
+
+// CORS: solo orígenes explícitamente permitidos en .env (CORS_ORIGINS=http://...,http://...)
+// En desarrollo acepta localhost:3000 por defecto.
+app.use(cors({
+  origin: (origin, cb) => {
+    const lista = (process.env.CORS_ORIGINS || `http://localhost:${PORT}`)
+      .split(',').map(s => s.trim());
+    if (!origin || lista.includes(origin)) return cb(null, true);
+    cb(Object.assign(new Error('Origen no permitido por CORS'), { status: 403 }));
+  },
+  credentials: true,
+}));
+
+// Cabeceras de seguridad HTTP
+app.use((req, res, next) => {
+  // Bloquear embedding en iframes (clickjacking)
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Impedir sniffing de tipo MIME
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Limitar referrer para no filtrar URLs internas
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // CSP: solo recursos del mismo origen.
+  // 'unsafe-inline' requerido por los atributos onchange/onclick del HTML actual.
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join('; '));
+  // HSTS: solo en producción (requiere HTTPS)
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
+// Sesión de admin — secreto aleatorio si no está en .env (no persiste entre reinicios)
+const _sessionSecret = process.env.SESSION_SECRET
+  || (() => {
+    const s = crypto.randomBytes(32).toString('hex');
+    console.warn('⚠️  SESSION_SECRET no definido — usando valor aleatorio. Las sesiones no sobrevivirán reinicios.');
+    return s;
+  })();
+
+app.use(session({
+  secret:            _sessionSecret,
+  resave:            false,
+  saveUninitialized: false,
+  name:              'sarlaft.sid',   // evitar el identificador por defecto 'connect.sid'
+  cookie: {
+    httpOnly: true,                                         // inaccesible desde JS del cliente
+    secure:   process.env.NODE_ENV === 'production',        // solo HTTPS en producción
+    sameSite: 'strict',                                     // bloquea CSRF cross-origin
+    maxAge:   8 * 60 * 60 * 1000,                          // 8 horas
+  },
+}));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));   // sirve index.html
 
@@ -83,9 +259,146 @@ let pool;
 async function getPool() {
   if (!pool) {
     pool = await sql.connect(dbConfig);
+    // Resetear el pool cuando SQL Server cae para permitir reconexión
+    // en el siguiente request sin necesitar reiniciar el servidor.
+    pool.on('error', err => {
+      console.error(`[Pool] Conexión perdida — se reconectará en el próximo request: ${err.message}`);
+      pool = null;
+    });
     console.log('✅  Conectado a SQL Server — MineDax');
   }
   return pool;
+}
+
+// ─── Validadores server-side ──────────────────────────────────────────────────
+
+/**
+ * Valida que una fecha sea parseable y razonable.
+ * @param {string} valor  - Valor del campo (ISO string o similar)
+ * @param {string} label  - Nombre legible del campo para el mensaje de error
+ * @param {object} opts
+ *   noFutura {boolean} - Si true, rechaza fechas posteriores a hoy (default: true)
+ *   noPasada {boolean} - Si true, rechaza fechas anteriores a hoy (default: false)
+ * @returns {string|null} Mensaje de error o null si es válida
+ */
+function _validarFecha(valor, label, { noFutura = true, noPasada = false } = {}) {
+  if (!valor || valor === '') return null;
+  const d = new Date(valor);
+  if (isNaN(d.getTime()))          return `${label}: formato de fecha inválido`;
+  if (d.getFullYear() < 1900)      return `${label}: año fuera de rango (mínimo 1900)`;
+  if (d.getFullYear() > 2100)      return `${label}: año fuera de rango (máximo 2100)`;
+  const hoy = new Date(); hoy.setHours(23, 59, 59, 999);
+  if (noFutura  && d > hoy)        return `${label}: no puede ser una fecha futura`;
+  if (noPasada  && d < new Date()) return `${label}: debe ser una fecha futura`;
+  return null;
+}
+
+/**
+ * Valida que un campo de texto no supere la longitud máxima.
+ * @param {*}      valor - Valor del campo
+ * @param {string} label - Nombre legible del campo
+ * @param {number} max   - Máximo de caracteres (default 500)
+ * @returns {string|null}
+ */
+function _validarTexto(valor, label, max = 500) {
+  if (valor != null && String(valor).length > max)
+    return `${label}: supera el máximo de ${max} caracteres`;
+  return null;
+}
+
+/**
+ * Ejecuta un array de funciones de validación y acumula los errores.
+ * @param {Array<Function>} reglas - Cada función retorna string|null
+ * @returns {string[]} Array de mensajes de error (vacío si todo es válido)
+ */
+function _validarCampos(reglas) {
+  return reglas.map(fn => fn()).filter(Boolean);
+}
+
+// ─── Bloqueo de envíos duplicados concurrentes ────────────────────────────────
+// Evita que dos peticiones simultáneas con el mismo NUM_IDEN abran
+// transacciones en paralelo y generen violaciones de clave primaria.
+// El Map guarda el timestamp de inicio para auto-liberar bloqueos colgados (+30 s).
+const _enviosEnProceso = new Map();
+const _ENVIO_TIMEOUT_MS = 30_000;
+
+function _bloquearEnvio(numIden) {
+  const ahora = Date.now();
+  if (_enviosEnProceso.has(numIden)) {
+    const inicio = _enviosEnProceso.get(numIden);
+    if (ahora - inicio < _ENVIO_TIMEOUT_MS) return false; // bloqueado activamente
+    console.warn(`[DUPLICADO] Liberando bloqueo caducado para NUM_IDEN=${numIden}`);
+  }
+  _enviosEnProceso.set(numIden, ahora);
+  return true;
+}
+
+function _liberarEnvio(numIden) {
+  _enviosEnProceso.delete(numIden);
+}
+
+// ─── Autenticación de administrador ──────────────────────────────────────────
+// Variables de entorno requeridas: ADMIN_USUARIO, ADMIN_CLAVE
+// Opcional:                        SESSION_SECRET (cadena aleatoria larga)
+//
+// Rutas públicas:  POST /api/admin/login
+//                  POST /api/admin/logout
+//                  GET  /api/admin/me  (verificar sesión activa)
+// Rutas protegidas (requireAuth): descargas, consolidados, purga
+
+function requireAuth(req, res, next) {
+  if (req.session && req.session.isAdmin) return next();
+  return res.status(401).json({ error: 'Acceso no autorizado. Inicie sesión en /admin.' });
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { usuario, clave } = req.body || {};
+  const envUsuario = process.env.ADMIN_USUARIO;
+  const envClave   = process.env.ADMIN_CLAVE;
+
+  if (!envUsuario || !envClave) {
+    return res.status(503).json({
+      error: 'Autenticación no configurada. Defina ADMIN_USUARIO y ADMIN_CLAVE en .env',
+    });
+  }
+  if (usuario === envUsuario && clave === envClave) {
+    req.session.isAdmin  = true;
+    req.session.loginAt  = new Date().toISOString();
+    req.session.usuario  = usuario;
+    console.log(`[AUTH] Login — usuario: ${usuario} — ${req.session.loginAt}`);
+    return res.json({ success: true });
+  }
+  console.warn(`[AUTH] Intento fallido — usuario: "${usuario}" — ${new Date().toISOString()}`);
+  return res.status(401).json({ error: 'Credenciales incorrectas' });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  const usuario = req.session.usuario || '—';
+  req.session.destroy(() => {
+    console.log(`[AUTH] Logout — usuario: ${usuario} — ${new Date().toISOString()}`);
+    res.clearCookie('sarlaft.sid');
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/admin/me', (req, res) => {
+  if (req.session && req.session.isAdmin) {
+    return res.json({ autenticado: true, usuario: req.session.usuario, loginAt: req.session.loginAt });
+  }
+  res.json({ autenticado: false });
+});
+
+// ─── Manejo centralizado de errores internos ──────────────────────────────────
+// Registra el error real en consola y devuelve un mensaje genérico al cliente.
+// Nunca exponer err.message ni stack traces a la red.
+function _responderError(res, err, req, contexto) {
+  const ts   = new Date().toISOString();
+  const ruta = req ? `${req.method} ${req.path}` : '—';
+  console.error(`[${ts}] ERROR ${ruta} [${contexto || 'servidor'}]: ${err.message}`);
+  if (err.stack) console.error(err.stack);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Error interno del servidor. Intente nuevamente.' });
+  }
 }
 
 // ─── Helper: ejecutar query con parámetros ────────────────────────────────────
@@ -161,7 +474,7 @@ app.get('/api/catalogo/tipos-documento', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('tipos-documento:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -179,7 +492,7 @@ app.get('/api/catalogo/paises', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('paises:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -201,7 +514,7 @@ app.get('/api/catalogo/departamentos', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('departamentos:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -238,7 +551,7 @@ app.get('/api/catalogo/ciudades', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('ciudades:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -253,7 +566,7 @@ app.get('/api/catalogo/vinculaciones', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('vinculaciones:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -269,7 +582,7 @@ app.get('/api/catalogo/ciiu', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('ciiu:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -295,7 +608,7 @@ app.get('/api/catalogo/tipos-sociedad', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('tipos-sociedad:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -313,7 +626,7 @@ app.get('/api/catalogo/sistemas-prevencion', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('sistemas-prevencion:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -403,7 +716,7 @@ app.post('/api/juridica', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/juridica:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -485,7 +798,7 @@ app.post('/api/representante-legal', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/representante-legal:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -533,7 +846,7 @@ app.post('/api/paises-operacion', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/paises-operacion:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -621,7 +934,7 @@ app.post('/api/cumplimiento', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/cumplimiento:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -682,7 +995,7 @@ app.post('/api/junta-directiva', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/junta-directiva:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -757,7 +1070,7 @@ app.post('/api/revisores-fiscales', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/revisores-fiscales:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -811,7 +1124,7 @@ app.post('/api/accionistas', async (req, res) => {
   } catch (err) {
     if (transaction) await transaction.rollback().catch(() => {});
     console.error('POST /api/accionistas:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -834,7 +1147,7 @@ app.get('/api/catalogo/bancos', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('bancos:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -850,7 +1163,7 @@ app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('tipos-cuenta:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -867,7 +1180,7 @@ app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
 app.get('/api/verificar-identidad/:numIden', async (req, res) => {
   const { numIden } = req.params;
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
     const r    = pool.request();
     r.input('NUM_IDEN', sql.VarChar(20), numIden);
     r.input('COD_EMPR', sql.SmallInt, COD_EMPR);
@@ -893,7 +1206,7 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
     }
   } catch (err) {
     console.error('GET /api/verificar-identidad:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -914,7 +1227,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
   if (!codTerc) return res.status(400).json({ error: 'codTerc inválido' });
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
 
     const q = async (query) => {
       const rq = pool.request();
@@ -1042,6 +1355,8 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
       q(`SELECT
           CASE TIP_REPR WHEN 'P' THEN 'Principal' WHEN 'S' THEN 'Suplente' ELSE TIP_REPR END
                                                         AS [Rol],
+          CASE ISNULL(TIP_PERS,'N') WHEN 'J' THEN 'Jurídica' ELSE 'Natural' END
+                                                        AS [Tipo de persona],
           CASE TIE_REVIS WHEN 'S' THEN 'Sí' ELSE 'No' END AS [Tiene revisor fiscal],
           NOM_REVI                                      AS [Nombre],
           APE_REVI                                      AS [Apellido],
@@ -1059,6 +1374,8 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
 
       // ── Accionistas ───────────────────────────────────────────────────────
       q(`SELECT
+          CASE ISNULL(TIP_PERS,'N') WHEN 'J' THEN 'Jurídica' ELSE 'Natural' END
+                                                        AS [Tipo de persona],
           NOM_ACCI                                      AS [Nombre],
           APE_ACCI                                      AS [Apellido],
           RAZ_ACCI                                      AS [Razón social],
@@ -1315,7 +1632,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
 
   } catch (err) {
     console.error('GET /api/exportar-excel:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message || 'Error generando Excel' });
+    _responderError(res, err, req, 'exportar-excel');
   }
 });
 
@@ -1335,16 +1652,19 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
 app.get('/api/cargar-completo/:numIden', async (req, res) => {
   const { numIden } = req.params;
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
     const r    = () => pool.request()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('NUM_IDEN',  sql.VarChar(20), numIden);
 
     const basica = await r().query(`
-      SELECT t.COD_TERC, t.COD_TPDOC, t.NUM_IDEN, t.DIG_VERI, t.NOM_COMP,
+      SELECT t.COD_TERC, t.TIP_TERC, t.COD_TPDOC, t.NUM_IDEN, t.DIG_VERI,
+             t.NOM_COMP, t.NOM_TERC, t.SEG_NOMB, t.APE_TERC, t.SEG_APEL,
              t.DIR_TERC, t.TEL_TERC, t.TEL_TERC2, t.DIR_MAIL,
-             j.TIP_VINC AS COD_VINC, j.MAIL_SARL, j.COD_CIIU, j.URL_WEB,
-             j.UBIC_SOC, j.COD_PAIS_SOC, j.TIP_EMPR, j.GRUP_EMPR, j.TIP_SOCIE,
+             j.TIP_VINC AS COD_VINC, j.OTR_VINC, j.MAIL_SARL,
+             j.COD_CIIU, j.OTR_CIIU, j.URL_WEB,
+             j.UBIC_SOC, j.COD_PAIS_SOC, j.TIP_EMPR, j.GRUP_EMPR,
+             j.TIP_SOCIE, j.OTR_SOCIE,
              j.COD_PAIS_EXP, j.COD_DEPT_EXP, j.COD_MPIO_EXP
       FROM GN_TERCE t
       LEFT JOIN GN_JURID j ON j.COD_EMPR=t.COD_EMPR AND j.COD_TERC=t.COD_TERC
@@ -1356,6 +1676,50 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     const rC       = () => pool.request()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('COD_TERC', sql.BigInt, COD_TERC);
+
+    // ── Rama Persona Natural — tablas GN_NATUR y relacionadas ────────────────
+    if (row.TIP_TERC === 'N') {
+      const [naturRes, naturFinRes, banRes, pepRes, actRes] = await Promise.all([
+        rC().query(`SELECT TIP_VINC AS COD_VINC, MAIL_SARL, COD_NACIO, ACT_PRINC,
+                          COD_CIIU, CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
+                          COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP
+                   FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
+        rC().query(`SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
+                   FROM GN_NATUR_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
+        rC().query(`SELECT COD_BANCO, TIP_CUEN, NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT
+                   FROM GN_TERCE_BANCO WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
+        rC().query(`SELECT MAN_RPUB, CAR_PUBL
+                   FROM GN_NATUR_PEP WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
+        rC().query(`SELECT ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
+                          ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO
+                   FROM GN_NATUR_ACT WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
+      ]);
+
+      const nRow = naturRes.recordset[0] || {};
+      return res.json({
+        TIP_TERC: 'N',
+        COD_TERC,
+        basica: {
+          COD_TPDOC: row.COD_TPDOC, NUM_IDEN: row.NUM_IDEN,
+          DIR_TERC: row.DIR_TERC,   TEL_TERC: row.TEL_TERC,
+          TEL_TERC2: row.TEL_TERC2, DIR_MAIL: row.DIR_MAIL,
+          COD_VINC: nRow.COD_VINC,  // se lee desde GN_NATUR
+        },
+        naturBasica: {
+          NOM_TERC:    row.NOM_TERC,     SEG_NOMB:    row.SEG_NOMB,
+          APE_TERC:    row.APE_TERC,     SEG_APEL:    row.SEG_APEL,
+          MAIL_SARL:   nRow.MAIL_SARL,   COD_NACIO:   nRow.COD_NACIO,
+          ACT_PRINC:   nRow.ACT_PRINC,   COD_CIIU:    nRow.COD_CIIU,
+          FEC_EXPE:    nRow.FEC_EXPE,    COD_PAIS_EXP: nRow.COD_PAIS_EXP,
+          COD_DEPT_EXP: nRow.COD_DEPT_EXP, COD_MPIO_EXP: nRow.COD_MPIO_EXP,
+        },
+        financiera:  naturFinRes.recordset[0] || {},
+        bancaria:    banRes.recordset,
+        pep:         pepRes.recordset[0]  || { MAN_RPUB: null, CAR_PUBL: null },
+        actividades: actRes.recordset[0]  || {},
+      });
+    }
+    // ── Rama Persona Jurídica (comportamiento existente) ─────────────────────
 
     const rlRes  = await rC().query(`
       SELECT TIP_REPR, NOM_REPR, APE_REPR, TIP_DOCU, NUM_DOCU,
@@ -1432,18 +1796,21 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     const rfTieRevis = rfRes.recordset[0]?.TIE_REVIS || 'N';
 
     res.json({
+      TIP_TERC: row.TIP_TERC || 'J',
       COD_TERC,
       basica: {
-        COD_TPDOC: row.COD_TPDOC, NUM_IDEN: row.NUM_IDEN, DIG_VERI: row.DIG_VERI,
-        NOM_COMP: row.NOM_COMP, DIR_TERC: row.DIR_TERC, TEL_TERC: row.TEL_TERC,
-        TEL_TERC2: row.TEL_TERC2, DIR_MAIL: row.DIR_MAIL, COD_VINC: row.COD_VINC,
-        MAIL_SARL: row.MAIL_SARL, COD_CIIU: row.COD_CIIU, URL_WEB: row.URL_WEB,
+        COD_TPDOC: row.COD_TPDOC, NUM_IDEN: row.NUM_IDEN,    DIG_VERI: row.DIG_VERI,
+        NOM_COMP:  row.NOM_COMP,  DIR_TERC:  row.DIR_TERC,   TEL_TERC:  row.TEL_TERC,
+        TEL_TERC2: row.TEL_TERC2, DIR_MAIL:  row.DIR_MAIL,   COD_VINC:  row.COD_VINC,
+        OTR_VINC:  row.OTR_VINC,  MAIL_SARL: row.MAIL_SARL,
+        COD_CIIU:  row.COD_CIIU,  OTR_CIIU:  row.OTR_CIIU,   URL_WEB:  row.URL_WEB,
         COD_PAIS_EXP: row.COD_PAIS_EXP, COD_DEPT_EXP: row.COD_DEPT_EXP,
         COD_MPIO_EXP: row.COD_MPIO_EXP,
       },
       sociedad: {
         UBIC_SOC: row.UBIC_SOC, COD_PAIS_SOC: row.COD_PAIS_SOC,
-        TIP_EMPR: row.TIP_EMPR, GRUP_EMPR: row.GRUP_EMPR, TIP_SOCIE: row.TIP_SOCIE,
+        TIP_EMPR: row.TIP_EMPR, GRUP_EMPR: row.GRUP_EMPR,
+        TIP_SOCIE: row.TIP_SOCIE, OTR_SOCIE: row.OTR_SOCIE,
         REL_GRUPO: cumpMain.REL_GRUPO || '',
       },
       representantes: rlRes.recordset,
@@ -1466,7 +1833,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
 
   } catch (err) {
     console.error('GET /api/cargar-completo:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -1485,6 +1852,20 @@ app.put('/api/actualizar-completo', async (req, res) => {
   if (!d.NUM_IDEN || !d.NOM_COMP) {
     return res.status(400).json({ error: 'Campos obligatorios faltantes: NUM_IDEN, NOM_COMP' });
   }
+
+  // Validación server-side (idéntica al POST de creación)
+  const errVal = _validarCampos([
+    () => _validarTexto(d.NUM_IDEN,   'Número de identificación', 20),
+    () => _validarTexto(d.NOM_COMP,   'Razón social',            240),
+    () => _validarTexto(d.DIR_TERC,   'Dirección',               120),
+    () => _validarTexto(d.DIR_MAIL,   'Email corporativo',       150),
+    () => _validarTexto(d.MAIL_SARL,  'Email SARLAFT',           150),
+    () => _validarTexto(d.URL_WEB,    'Sitio web',               200),
+    () => d.firma?.FEC_FIRMA ? _validarFecha(d.firma.FEC_FIRMA, 'Fecha de firma') : null,
+  ]);
+  if (errVal.length)
+    return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
+
   const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
   const toDec  = v => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
   const toDate = v => v ? new Date(v) : null;
@@ -1492,7 +1873,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
 
   let pool, transaction;
   try {
-    pool = await sql.connect(dbConfig);
+    pool = await getPool();
     const lookup = await pool.request()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('NUM_IDEN',  sql.VarChar(20), d.NUM_IDEN)
@@ -1524,22 +1905,27 @@ app.put('/api/actualizar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
-      .input('TIP_VINC',    sql.VarChar(40), toChar(d.COD_VINC))
-      .input('MAIL_SARL',   sql.VarChar(150),toChar(d.MAIL_SARL))
-      .input('COD_CIIU',    sql.VarChar(10), toChar(d.COD_CIIU))
-      .input('URL_WEB',     sql.VarChar(200),toChar(d.URL_WEB))
-      .input('TIP_SOCIE',   sql.VarChar(10), toChar(d.TIP_SOCIE))
-      .input('COD_PAIS_ORI',sql.Int,         toInt(d.COD_PAIS_EXP))
-      .input('UBIC_SOC',    sql.Char(1),     toChar(d.UBIC_SOC))
-      .input('COD_PAIS_SOC',sql.Int,         toInt(d.COD_PAIS_SOC))
-      .input('TIP_EMPR',    sql.VarChar(10), toChar(d.TIP_EMPR))
-      .input('GRUP_EMPR',   sql.Char(1),     toChar(d.GRUP_EMPR))
-      .input('COD_PAIS_EXP',sql.Int,         toInt(d.COD_PAIS_EXP))
-      .input('COD_DEPT_EXP',sql.Int,         toInt(d.COD_DEPT_EXP))
-      .input('COD_MPIO_EXP',sql.Int,         toInt(d.COD_MPIO_EXP))
-      .query(`UPDATE GN_JURID SET TIP_VINC=@TIP_VINC,MAIL_SARL=@MAIL_SARL,COD_CIIU=@COD_CIIU,
-              URL_WEB=@URL_WEB,TIP_SOCIE=@TIP_SOCIE,COD_PAIS_ORI=@COD_PAIS_ORI,UBIC_SOC=@UBIC_SOC,
-              COD_PAIS_SOC=@COD_PAIS_SOC,TIP_EMPR=@TIP_EMPR,GRUP_EMPR=@GRUP_EMPR,
+      .input('TIP_VINC',    sql.VarChar(40),  toChar(d.COD_VINC))
+      .input('OTR_VINC',    sql.VarChar(255), toChar(d.OTR_VINC))
+      .input('MAIL_SARL',   sql.VarChar(150), toChar(d.MAIL_SARL))
+      .input('COD_CIIU',    sql.VarChar(10),  toChar(d.COD_CIIU))
+      .input('OTR_CIIU',    sql.VarChar(255), toChar(d.OTR_CIIU))
+      .input('URL_WEB',     sql.VarChar(200), toChar(d.URL_WEB))
+      .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
+      .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
+      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
+      .input('COD_PAIS_SOC',sql.Int,          toInt(d.COD_PAIS_SOC))
+      .input('TIP_EMPR',    sql.VarChar(10),  toChar(d.TIP_EMPR))
+      .input('GRUP_EMPR',   sql.Char(1),      toChar(d.GRUP_EMPR))
+      .input('COD_PAIS_EXP',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('COD_DEPT_EXP',sql.Int,          toInt(d.COD_DEPT_EXP))
+      .input('COD_MPIO_EXP',sql.Int,          toInt(d.COD_MPIO_EXP))
+      .query(`UPDATE GN_JURID SET TIP_VINC=@TIP_VINC,OTR_VINC=@OTR_VINC,
+              MAIL_SARL=@MAIL_SARL,COD_CIIU=@COD_CIIU,OTR_CIIU=@OTR_CIIU,
+              URL_WEB=@URL_WEB,TIP_SOCIE=@TIP_SOCIE,OTR_SOCIE=@OTR_SOCIE,
+              COD_PAIS_ORI=@COD_PAIS_ORI,UBIC_SOC=@UBIC_SOC,COD_PAIS_SOC=@COD_PAIS_SOC,
+              TIP_EMPR=@TIP_EMPR,GRUP_EMPR=@GRUP_EMPR,
               COD_PAIS_EXP=@COD_PAIS_EXP,COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
@@ -1592,10 +1978,11 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('REL_GRUPO',sql.VarChar(200),toChar(d.REL_GRUPO))
       .input('NORM_LAFT',sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',sql.VarChar(200),toChar(d.SIS_PREVE))
+      .input('OTR_PREVE',sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',sql.VarChar(500),toChar(d.DESC_NORM))
       .input('TIE_JUNTA',sql.Char(1),    tieCump)
-      .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,REL_GRUPO,NORM_LAFT,SIS_PREVE,DESC_NORM,TIE_JUNTA)
-              VALUES(@COD_EMPR,@COD_TERC,@REL_GRUPO,@NORM_LAFT,@SIS_PREVE,@DESC_NORM,@TIE_JUNTA)`);
+      .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,REL_GRUPO,NORM_LAFT,SIS_PREVE,OTR_PREVE,DESC_NORM,TIE_JUNTA)
+              VALUES(@COD_EMPR,@COD_TERC,@REL_GRUPO,@NORM_LAFT,@SIS_PREVE,@OTR_PREVE,@DESC_NORM,@TIE_JUNTA)`);
     for (const of_ of (Array.isArray(d.oficiales)?d.oficiales:[])) {
       // Flat format: TIP_REPR is directly on the object
       const p = of_;
@@ -1658,6 +2045,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       await r()
           .input('COD_EMPR',    sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
           .input('TIP_REPR',    sql.Char(1),     rv.TIP_REPR || 'P')
+          .input('TIP_PERS',    sql.Char(1),     toChar(rv.TIP_PERS) || 'N')
           .input('TIE_REVIS',   sql.Char(1),     tieRevis)
           .input('NOM_REVI',    sql.VarChar(60), toChar(rv.NOM_REVI))
           .input('APE_REVI',    sql.VarChar(60), toChar(rv.APE_REVI))
@@ -1676,10 +2064,10 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('RAZ_FIRMA',   sql.VarChar(120),toChar(rv.RAZ_FIRMA))
           .input('TIP_DOCU_FIR',sql.Int,         toInt(rv.TIP_DOCU_FIR))
           .input('NUM_DOCU_FIR',sql.VarChar(20), toChar(rv.NUM_DOCU_FIR))
-          .query(`INSERT INTO GN_JURID_RF(COD_EMPR,COD_TERC,TIP_REPR,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,
+          .query(`INSERT INTO GN_JURID_RF(COD_EMPR,COD_TERC,TIP_REPR,TIP_PERS,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,
                   TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
                   REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR)
-                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,
+                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_PERS,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,
                   @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
                   @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR)`);
     }
@@ -1690,6 +2078,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!ac.NOM_ACCI && !ac.RAZ_ACCI) continue;
       await r()
         .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
+        .input('TIP_PERS', sql.Char(1),     toChar(ac.TIP_PERS) || 'N')
         .input('NOM_ACCI', sql.VarChar(60), toChar(ac.NOM_ACCI))
         .input('APE_ACCI', sql.VarChar(60), toChar(ac.APE_ACCI))
         .input('RAZ_ACCI', sql.VarChar(120),toChar(ac.RAZ_ACCI))
@@ -1704,9 +2093,9 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('TEL_ACCI', sql.VarChar(30), toChar(ac.TEL_ACCI))
         .input('MAIL_ACCI',sql.VarChar(100),toChar(ac.MAIL_ACCI))
         .input('PCT_PART', sql.Decimal(5,2),toDec(ac.PCT_PART))
-        .query(`INSERT INTO GN_JURID_AC(COD_EMPR,COD_TERC,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,
+        .query(`INSERT INTO GN_JURID_AC(COD_EMPR,COD_TERC,TIP_PERS,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,
                 FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART)
-                VALUES(@COD_EMPR,@COD_TERC,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,
+                VALUES(@COD_EMPR,@COD_TERC,@TIP_PERS,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,
                 @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART)`);
     }
 
@@ -1730,14 +2119,16 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!b.COD_BANCO) continue;
       await r()
         .input('COD_EMPR',    sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-        .input('COD_BANCO',   sql.Int,         toInt(b.COD_BANCO))
-        .input('TIP_CUEN',    sql.Int,         toInt(b.TIP_CUEN))
-        .input('NUM_CUEN',    sql.VarChar(30), toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',   sql.Char(1),     toChar(b.CUEN_EXTR)||'N')
-        .input('NOM_ENT_EXT', sql.VarChar(120),toChar(b.NOM_ENT_EXT))
-        .input('TIP_CUE_EXT', sql.VarChar(40), toChar(b.TIP_CUE_EXT))
-        .query(`INSERT INTO GN_TERCE_BANCO(COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT)
-                VALUES(@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT)`);
+        .input('COD_BANCO',   sql.Int,          toInt(b.COD_BANCO))
+        .input('OTR_BANCO',   sql.VarChar(255), toChar(b.OTR_BANCO))
+        .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
+        .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
+        .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
+        .input('CUEN_EXTR',   sql.Char(1),      toChar(b.CUEN_EXTR)||'N')
+        .input('NOM_ENT_EXT', sql.VarChar(120), toChar(b.NOM_ENT_EXT))
+        .input('TIP_CUE_EXT', sql.VarChar(40),  toChar(b.TIP_CUE_EXT))
+        .query(`INSERT INTO GN_TERCE_BANCO(COD_EMPR,COD_TERC,COD_BANCO,OTR_BANCO,TIP_CUEN,OTR_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT)
+                VALUES(@COD_EMPR,@COD_TERC,@COD_BANCO,@OTR_BANCO,@TIP_CUEN,@OTR_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT)`);
     }
 
     // 11. GN_JURID_PEP
@@ -1809,7 +2200,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
   } catch (err) {
     try { if (transaction) await transaction.rollback(); } catch (_) {}
     console.error('PUT /api/actualizar-completo:', err);
-    res.status(500).json({ error: err.message || 'Error interno del servidor' });
+    _responderError(res, err, req);
   }
 });
 
@@ -1846,6 +2237,26 @@ app.post('/api/guardar-completo', async (req, res) => {
     return res.status(400).json({ error: 'Campos obligatorios faltantes: NUM_IDEN, NOM_COMP' });
   }
 
+  // ── Validación server-side de longitudes y fechas ─────────────────────────
+  const errVal = _validarCampos([
+    () => _validarTexto(d.NUM_IDEN,   'Número de identificación', 20),
+    () => _validarTexto(d.NOM_COMP,   'Razón social',            240),
+    () => _validarTexto(d.DIR_TERC,   'Dirección',               120),
+    () => _validarTexto(d.DIR_MAIL,   'Email corporativo',       150),
+    () => _validarTexto(d.MAIL_SARL,  'Email SARLAFT',           150),
+    () => _validarTexto(d.URL_WEB,    'Sitio web',               200),
+    () => d.firma?.FEC_FIRMA ? _validarFecha(d.firma.FEC_FIRMA, 'Fecha de firma') : null,
+  ]);
+  if (errVal.length)
+    return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
+
+  // ── Bloqueo de envíos concurrentes ────────────────────────────────────────
+  if (!_bloquearEnvio(d.NUM_IDEN)) {
+    return res.status(409).json({
+      error: `Ya hay un envío en proceso para el documento ${d.NUM_IDEN}. Espere unos segundos e intente nuevamente.`,
+    });
+  }
+
   const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
   const toDec  = v => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
   const toDate = v => v ? new Date(v) : null;
@@ -1853,7 +2264,17 @@ app.post('/api/guardar-completo', async (req, res) => {
 
   let pool, transaction;
   try {
-    pool        = await sql.connect(dbConfig);
+    pool        = await getPool();
+
+    // ── Verificar duplicado en BD (antes de abrir transacción) ───────────────
+    const dupCheck = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), d.NUM_IDEN)
+      .query(`SELECT 1 FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (dupCheck.recordset.length) {
+      _liberarEnvio(d.NUM_IDEN);
+      return res.status(409).json({ error: `El documento ${d.NUM_IDEN} ya está registrado. Use la opción de actualización.` });
+    }
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const r = () => new sql.Request(transaction);
@@ -1886,28 +2307,31 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
-      .input('TIP_VINC',    sql.VarChar(40), toChar(d.COD_VINC))
-      .input('MAIL_SARL',   sql.VarChar(150),toChar(d.MAIL_SARL))
-      .input('COD_CIIU',    sql.VarChar(10), toChar(d.COD_CIIU))
-      .input('URL_WEB',     sql.VarChar(200),toChar(d.URL_WEB))
-      .input('TIP_SOCIE',   sql.VarChar(10), toChar(d.TIP_SOCIE))
-      .input('COD_PAIS_ORI',sql.Int,         toInt(d.COD_PAIS_EXP))   // país de constitución
-      .input('UBIC_SOC',    sql.Char(1),     toChar(d.UBIC_SOC))
-      .input('COD_PAIS_SOC',sql.Int,         toInt(d.COD_PAIS_SOC))
-      .input('TIP_EMPR',    sql.VarChar(10), toChar(d.TIP_EMPR))
-      .input('GRUP_EMPR',   sql.Char(1),     toChar(d.GRUP_EMPR))
-      .input('COD_PAIS_EXP',sql.Int,         toInt(d.COD_PAIS_EXP))
-      .input('COD_DEPT_EXP',sql.Int,         toInt(d.COD_DEPT_EXP))
-      .input('COD_MPIO_EXP',sql.Int,         toInt(d.COD_MPIO_EXP))
+      .input('TIP_VINC',    sql.VarChar(40),  toChar(d.COD_VINC))
+      .input('OTR_VINC',    sql.VarChar(255), toChar(d.OTR_VINC))
+      .input('MAIL_SARL',   sql.VarChar(150), toChar(d.MAIL_SARL))
+      .input('COD_CIIU',    sql.VarChar(10),  toChar(d.COD_CIIU))
+      .input('OTR_CIIU',    sql.VarChar(255), toChar(d.OTR_CIIU))
+      .input('URL_WEB',     sql.VarChar(200), toChar(d.URL_WEB))
+      .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
+      .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
+      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
+      .input('COD_PAIS_SOC',sql.Int,          toInt(d.COD_PAIS_SOC))
+      .input('TIP_EMPR',    sql.VarChar(10),  toChar(d.TIP_EMPR))
+      .input('GRUP_EMPR',   sql.Char(1),      toChar(d.GRUP_EMPR))
+      .input('COD_PAIS_EXP',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('COD_DEPT_EXP',sql.Int,          toInt(d.COD_DEPT_EXP))
+      .input('COD_MPIO_EXP',sql.Int,          toInt(d.COD_MPIO_EXP))
       .query(`
         INSERT INTO GN_JURID
-          (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_CIIU, URL_WEB,
-           TIP_SOCIE, COD_PAIS_ORI, UBIC_SOC, COD_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
-           COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
+          (COD_EMPR, COD_TERC, TIP_VINC, OTR_VINC, MAIL_SARL, COD_CIIU, OTR_CIIU,
+           URL_WEB, TIP_SOCIE, OTR_SOCIE, COD_PAIS_ORI, UBIC_SOC, COD_PAIS_SOC,
+           TIP_EMPR, GRUP_EMPR, COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
         VALUES
-          (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_CIIU, @URL_WEB,
-           @TIP_SOCIE, @COD_PAIS_ORI, @UBIC_SOC, @COD_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
-           @COD_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
+          (@COD_EMPR, @COD_TERC, @TIP_VINC, @OTR_VINC, @MAIL_SARL, @COD_CIIU, @OTR_CIIU,
+           @URL_WEB, @TIP_SOCIE, @OTR_SOCIE, @COD_PAIS_ORI, @UBIC_SOC, @COD_PAIS_SOC,
+           @TIP_EMPR, @GRUP_EMPR, @COD_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
       `);
 
     // ── 3. GN_JURID_RL — Representantes legales ───────────────────────────────
@@ -1968,11 +2392,12 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('REL_GRUPO',  sql.VarChar(200),toChar(d.REL_GRUPO))
       .input('NORM_LAFT',  sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',  sql.VarChar(200),toChar(d.SIS_PREVE))
+      .input('OTR_PREVE',  sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',  sql.VarChar(500),toChar(d.DESC_NORM))
       .input('TIE_JUNTA',  sql.Char(1),     tieCump)
       .query(`
-        INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, REL_GRUPO, NORM_LAFT, SIS_PREVE, DESC_NORM, TIE_JUNTA)
-        VALUES (@COD_EMPR, @COD_TERC, @REL_GRUPO, @NORM_LAFT, @SIS_PREVE, @DESC_NORM, @TIE_JUNTA)
+        INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, REL_GRUPO, NORM_LAFT, SIS_PREVE, OTR_PREVE, DESC_NORM, TIE_JUNTA)
+        VALUES (@COD_EMPR, @COD_TERC, @REL_GRUPO, @NORM_LAFT, @SIS_PREVE, @OTR_PREVE, @DESC_NORM, @TIE_JUNTA)
       `);
 
     // Oficiales de cumplimiento
@@ -2070,6 +2495,7 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('COD_EMPR',      sql.SmallInt,    COD_EMPR)
           .input('COD_TERC',      sql.BigInt,      COD_TERC)
           .input('TIP_REPR',      sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIP_PERS',      sql.Char(1),     toChar(rv.TIP_PERS) || 'N')
           .input('TIE_REVIS',     sql.Char(1),     tieRevis)
           .input('NOM_REVI',      sql.VarChar(60), toChar(rv.NOM_REVI))
           .input('APE_REVI',      sql.VarChar(60), toChar(rv.APE_REVI))
@@ -2090,13 +2516,13 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('NUM_DOCU_FIR',  sql.VarChar(20), toChar(rf.NUM_DOCU_FIR))
           .query(`
             INSERT INTO GN_JURID_RF
-              (COD_EMPR, COD_TERC, TIP_REPR, TIE_REVIS,
+              (COD_EMPR, COD_TERC, TIP_REPR, TIP_PERS, TIE_REVIS,
                NOM_REVI, APE_REVI, RAZ_REVI,
                TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
                DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
                REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR)
             VALUES
-              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIE_REVIS,
+              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_PERS, @TIE_REVIS,
                @NOM_REVI, @APE_REVI, @RAZ_REVI,
                @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
                @DIR_REVI, @CEL_REVI, @TEL_REVI, @MAIL_REVI,
@@ -2112,6 +2538,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt,      COD_EMPR)
         .input('COD_TERC',  sql.BigInt,        COD_TERC)
+        .input('TIP_PERS',  sql.Char(1),       toChar(ac.TIP_PERS) || 'N')
         .input('NOM_ACCI',  sql.VarChar(60),   toChar(ac.NOM_ACCI))
         .input('APE_ACCI',  sql.VarChar(60),   toChar(ac.APE_ACCI))
         .input('RAZ_ACCI',  sql.VarChar(120),  toChar(ac.RAZ_ACCI))
@@ -2128,11 +2555,11 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('PCT_PART',  sql.Decimal(5,2),  toDec(ac.PCT_PART))
         .query(`
           INSERT INTO GN_JURID_AC
-            (COD_EMPR, COD_TERC, NOM_ACCI, APE_ACCI, RAZ_ACCI,
+            (COD_EMPR, COD_TERC, TIP_PERS, NOM_ACCI, APE_ACCI, RAZ_ACCI,
              TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
              DIR_ACCI, CEL_ACCI, TEL_ACCI, MAIL_ACCI, PCT_PART)
           VALUES
-            (@COD_EMPR, @COD_TERC, @NOM_ACCI, @APE_ACCI, @RAZ_ACCI,
+            (@COD_EMPR, @COD_TERC, @TIP_PERS, @NOM_ACCI, @APE_ACCI, @RAZ_ACCI,
              @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
              @DIR_ACCI, @CEL_ACCI, @TEL_ACCI, @MAIL_ACCI, @PCT_PART)
         `);
@@ -2163,17 +2590,21 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',    sql.BigInt,      COD_TERC)
-        .input('COD_BANCO',   sql.Int,         toInt(b.COD_BANCO))
-        .input('TIP_CUEN',    sql.Int,         toInt(b.TIP_CUEN))
-        .input('NUM_CUEN',    sql.VarChar(30), toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',   sql.Char(1),     toChar(b.CUEN_EXTR) || 'N')
-        .input('NOM_ENT_EXT', sql.VarChar(120),toChar(b.NOM_ENT_EXT))
-        .input('TIP_CUE_EXT', sql.VarChar(40), toChar(b.TIP_CUE_EXT))
+        .input('COD_BANCO',   sql.Int,          toInt(b.COD_BANCO))
+        .input('OTR_BANCO',   sql.VarChar(255), toChar(b.OTR_BANCO))
+        .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
+        .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
+        .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
+        .input('CUEN_EXTR',   sql.Char(1),      toChar(b.CUEN_EXTR) || 'N')
+        .input('NOM_ENT_EXT', sql.VarChar(120), toChar(b.NOM_ENT_EXT))
+        .input('TIP_CUE_EXT', sql.VarChar(40),  toChar(b.TIP_CUE_EXT))
         .query(`
           INSERT INTO GN_TERCE_BANCO
-            (COD_EMPR, COD_TERC, COD_BANCO, TIP_CUEN, NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT)
+            (COD_EMPR, COD_TERC, COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN,
+             NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT)
           VALUES
-            (@COD_EMPR, @COD_TERC, @COD_BANCO, @TIP_CUEN, @NUM_CUEN, @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT)
+            (@COD_EMPR, @COD_TERC, @COD_BANCO, @OTR_BANCO, @TIP_CUEN, @OTR_CUEN,
+             @NUM_CUEN, @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT)
         `);
     }
 
@@ -2265,7 +2696,9 @@ app.post('/api/guardar-completo', async (req, res) => {
   } catch (err) {
     try { await transaction.rollback(); } catch (_) {}
     console.error('POST /api/guardar-completo:', err);
-    res.status(500).json({ error: err.message || 'Error interno del servidor' });
+    _responderError(res, err, req);
+  } finally {
+    _liberarEnvio(d.NUM_IDEN); // liberar bloqueo siempre, con éxito o error
   }
 });
 
@@ -2295,13 +2728,44 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     return res.status(400).json({ error: 'Faltan campos obligatorios (NUM_IDEN, NOM_TERC, APE_TERC).' });
   }
 
+  // ── Validación server-side de longitudes y fechas ─────────────────────────
+  const errVal = _validarCampos([
+    () => _validarTexto(b.NUM_IDEN,  'Número de identificación', 20),
+    () => _validarTexto(b.NOM_TERC,  'Primer nombre',            40),
+    () => _validarTexto(b.APE_TERC,  'Primer apellido',          40),
+    () => _validarTexto(b.DIR_TERC,  'Dirección',               120),
+    () => _validarTexto(b.DIR_MAIL,  'Email corporativo',       150),
+    () => _validarTexto(b.MAIL_SARL, 'Email SARLAFT',           150),
+    () => b.FEC_EXPE ? _validarFecha(b.FEC_EXPE, 'Fecha de expedición del documento') : null,
+    () => b.FEC_NACI ? _validarFecha(b.FEC_NACI, 'Fecha de nacimiento') : null,
+  ]);
+  if (errVal.length)
+    return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
+
+  // ── Bloqueo de envíos concurrentes ────────────────────────────────────────
+  if (!_bloquearEnvio(b.NUM_IDEN)) {
+    return res.status(409).json({
+      error: `Ya hay un envío en proceso para el documento ${b.NUM_IDEN}. Espere unos segundos e intente nuevamente.`,
+    });
+  }
+
   // Helpers de conversión
   const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10)   : null;
   const toChar = v => v || null;
 
   let pool, transaction;
   try {
-    pool        = await sql.connect(dbConfig);
+    pool = await getPool();
+
+    // ── Verificar duplicado en BD ─────────────────────────────────────────────
+    const dupCheck = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), b.NUM_IDEN)
+      .query(`SELECT 1 FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (dupCheck.recordset.length) {
+      _liberarEnvio(b.NUM_IDEN);
+      return res.status(409).json({ error: `El documento ${b.NUM_IDEN} ya está registrado. Use la opción de actualización.` });
+    }
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const r = () => new sql.Request(transaction);
@@ -2479,7 +2943,9 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
   } catch (err) {
     try { await transaction.rollback(); } catch (_) {}
     console.error('POST /api/guardar-completo-natural:', err);
-    res.status(500).json({ error: err.message || 'Error interno del servidor' });
+    _responderError(res, err, req);
+  } finally {
+    _liberarEnvio(b.NUM_IDEN); // liberar bloqueo siempre, con éxito o error
   }
 });
 
@@ -2499,7 +2965,7 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
   if (!codTerc) return res.status(400).json({ error: 'codTerc inválido' });
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
 
     const q = async (query) => {
       const rq = pool.request();
@@ -2783,7 +3249,7 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
 
   } catch (err) {
     console.error('GET /api/exportar-excel-natural:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message || 'Error generando Excel' });
+    _responderError(res, err, req, 'exportar-excel');
   }
 });
 
@@ -2801,7 +3267,8 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
  * Inserta o actualiza filas en GN_TERCE_DOC.
  */
 app.post('/api/documentos/:numIden',
-  upload.any(),   // acepta cualquier cantidad de campos de archivo
+  upload.any(),      // Capa 1: multer (tamaño + fieldname + extensión)
+  _mwValidarMime,    // Capa 2: magic bytes — verifica contenido real del archivo
   async (req, res) => {
     const numIden = req.params.numIden;
 
@@ -2810,7 +3277,7 @@ app.post('/api/documentos/:numIden',
       return res.status(400).json({ error: 'No se recibieron archivos' });
 
     try {
-      const pool = await sql.connect(dbConfig);
+      const pool = await getPool();
 
       // Buscar el COD_TERC correspondiente al NUM_IDEN
       const tercResult = await pool.request()
@@ -2827,10 +3294,33 @@ app.post('/api/documentos/:numIden',
       // Insertar o actualizar cada archivo en GN_TERCE_DOC
       const guardados = [];
       for (const file of req.files) {
-        const tipDoc  = file.fieldname;                       // clave del campo
+        const tipDoc  = file.fieldname;
         const nomArch = file.originalname;
-        const rutDoc  = file.path;                            // ruta absoluta en servidor
-        const extArch = path.extname(nomArch).replace('.','').toLowerCase();
+        const extArch = path.extname(nomArch).replace('.', '').toLowerCase();
+        const anio    = new Date().getFullYear();
+
+        // Clave canónica — usada como ruta relativa local y como key en R2
+        const clave   = `${anio}/${numIden}/${tipDoc}.pdf`;
+        const dirDst  = path.join(UPLOAD_DIR, String(anio), String(numIden));
+        const pathDst = path.join(dirDst, `${tipDoc}.pdf`);
+
+        // 1. Almacenamiento local principal (organizado por año para purga anual)
+        if (!fs.existsSync(dirDst)) fs.mkdirSync(dirDst, { recursive: true });
+        try {
+          fs.renameSync(file.path, pathDst);           // atómico si mismo disco
+        } catch {
+          fs.copyFileSync(file.path, pathDst);
+          try { fs.unlinkSync(file.path); } catch (_) {}
+        }
+
+        // 2. Backup en R2 (opcional — fallo no bloquea el guardado)
+        if (_r2Client) {
+          _r2Subir(pathDst, clave).catch(r2Err =>
+            console.warn(`⚠️ R2 backup falló para ${clave}:`, r2Err.message)
+          );
+        }
+
+        const rutDoc = clave; // clave relativa guardada en BD
 
         // Verificar si ya existe un registro para este TIP_DOC + COD_TERC
         const exists = await pool.request()
@@ -2879,7 +3369,7 @@ app.post('/api/documentos/:numIden',
 
     } catch (err) {
       console.error('POST /api/documentos:', err);
-      res.status(500).json({ error: err.message || 'Error al guardar documentos' });
+      _responderError(res, err, req, 'documentos');
     }
   }
 );
@@ -2891,17 +3381,17 @@ app.post('/api/documentos/:numIden',
  * El campo tipDoc identifica el documento dentro de la carpeta del tercero
  * (ej. 'RUT', 'CERT_BANC', 'DOC_ID').
  */
-app.get('/api/documentos/:numIden/:tipDoc', async (req, res) => {
+app.get('/api/documentos/:numIden/:tipDoc', requireAuth, async (req, res) => {
   const { numIden, tipDoc } = req.params;
 
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
 
     const result = await pool.request()
       .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
       .input('NUM_IDEN', sql.VarChar(20), numIden)
       .input('TIP_DOC',  sql.VarChar(20), tipDoc)
-      .query(`SELECT d.RUT_DOC, d.NOM_ARCH, d.EXT_ARCH
+      .query(`SELECT d.RUT_DOC, d.NOM_ARCH, d.EXT_ARCH, d.FEC_CARG
               FROM GN_TERCE_DOC d
                 JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
               WHERE t.COD_EMPR = @COD_EMPR
@@ -2911,17 +3401,44 @@ app.get('/api/documentos/:numIden/:tipDoc', async (req, res) => {
     if (!result.recordset.length)
       return res.status(404).json({ error: 'Documento no encontrado' });
 
-    const { RUT_DOC, NOM_ARCH } = result.recordset[0];
+    const { RUT_DOC, NOM_ARCH, FEC_CARG } = result.recordset[0];
 
-    if (!fs.existsSync(RUT_DOC))
-      return res.status(404).json({ error: 'Archivo no encontrado en el servidor' });
+    // ── Registros legacy con ruta absoluta (anteriores al sistema de claves) ──
+    if (_esRutaLocal(RUT_DOC)) {
+      if (!fs.existsSync(RUT_DOC))
+        return res.status(404).json({ error: 'Archivo no encontrado en el servidor' });
+      res.setHeader('Content-Disposition', `inline; filename="${NOM_ARCH}"`);
+      return res.sendFile(RUT_DOC);
+    }
 
-    res.setHeader('Content-Disposition', `inline; filename="${NOM_ARCH}"`);
-    res.sendFile(RUT_DOC);
+    // ── Nuevos registros: clave relativa ({AÑO}/{numIden}/{TIPODOC}.pdf) ──────
+    // 1. Intentar local primero (fuente de verdad)
+    const localPath = path.join(UPLOAD_DIR, RUT_DOC);
+    if (fs.existsSync(localPath)) {
+      res.setHeader('Content-Disposition', `inline; filename="${NOM_ARCH}"`);
+      return res.sendFile(localPath);
+    }
+
+    // 2. Fallback a R2 si está configurado (archivo purgado localmente pero backup disponible)
+    if (_r2Client) {
+      try {
+        const url = await _r2UrlFirmada(RUT_DOC, NOM_ARCH);
+        return res.redirect(302, url);
+      } catch (r2Err) {
+        console.warn(`R2 fallback falló para ${RUT_DOC}:`, r2Err.message);
+      }
+    }
+
+    // 3. Archivo no disponible en ningún almacenamiento (fue purgado)
+    const fecStr = FEC_CARG ? new Date(FEC_CARG).toLocaleDateString('es-CO') : 'fecha desconocida';
+    return res.status(410).json({
+      error: 'Archivo eliminado del almacenamiento provisional',
+      detalle: `El documento fue cargado el ${fecStr} y ya no está disponible. El registro en base de datos se conserva.`,
+    });
 
   } catch (err) {
     console.error('GET /api/documentos:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -2935,9 +3452,9 @@ app.get('/api/documentos/:numIden/:tipDoc', async (req, res) => {
  * Genera un Excel con TODOS los registros de Persona Natural (TIP_TERC='N').
  * Hoja "Datos personales" con una fila por persona.
  */
-app.get('/api/exportar-consolidado-natural', async (req, res) => {
+app.get('/api/exportar-consolidado-natural', requireAuth, async (req, res) => {
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
     const rq = pool.request();
     rq.input('COD_EMPR',  sql.SmallInt, COD_EMPR);
     rq.input('TIP_TERC',  sql.Char(1),  TIP_TERC_NATUR);
@@ -3029,7 +3546,7 @@ app.get('/api/exportar-consolidado-natural', async (req, res) => {
 
   } catch (err) {
     console.error('GET /api/exportar-consolidado-natural:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
 });
 
@@ -3037,9 +3554,9 @@ app.get('/api/exportar-consolidado-natural', async (req, res) => {
  * GET /api/exportar-consolidado-juridica
  * Genera un Excel con TODOS los registros de Persona Jurídica (TIP_TERC='E').
  */
-app.get('/api/exportar-consolidado-juridica', async (req, res) => {
+app.get('/api/exportar-consolidado-juridica', requireAuth, async (req, res) => {
   try {
-    const pool = await sql.connect(dbConfig);
+    const pool = await getPool();
 
     const [empresas, financiera, bancaria] = await Promise.all([
       pool.request()
@@ -3123,8 +3640,261 @@ app.get('/api/exportar-consolidado-juridica', async (req, res) => {
 
   } catch (err) {
     console.error('GET /api/exportar-consolidado-juridica:', err);
-    res.status(500).json({ error: err.message });
+    _responderError(res, err, req);
   }
+});
+
+// ─── Purga anual de archivos ──────────────────────────────────────────────────
+/**
+ * DELETE /api/admin/purgar-archivos/:anio
+ *
+ * Elimina los archivos físicos del año indicado (disco local y R2 si aplica).
+ * Los registros en GN_TERCE_DOC se mantienen intactos — solo se borran binarios.
+ * Requiere la cabecera: x-admin-token: <ADMIN_TOKEN del .env>
+ *
+ * Ejemplo: DELETE /api/admin/purgar-archivos/2024
+ */
+app.delete('/api/admin/purgar-archivos/:anio', async (req, res) => {
+  const token = req.headers['x-admin-token'];
+  if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN)
+    return res.status(401).json({ error: 'Token de administración inválido o no configurado' });
+
+  const anio = parseInt(req.params.anio, 10);
+  if (isNaN(anio) || anio < 2020 || anio > 2100)
+    return res.status(400).json({ error: 'Año fuera de rango válido (2020–2100)' });
+
+  const resultado = { anio, disco: null, r2: null, errores: [] };
+
+  // 1. Eliminar carpeta local del año
+  const dirAnio = path.join(UPLOAD_DIR, String(anio));
+  if (fs.existsSync(dirAnio)) {
+    try {
+      fs.rmSync(dirAnio, { recursive: true, force: true });
+      resultado.disco = `Carpeta ${dirAnio} eliminada`;
+      console.log(`🗑️ Purga anual — carpeta local eliminada: ${dirAnio}`);
+    } catch (err) {
+      resultado.errores.push(`Disco: ${err.message}`);
+    }
+  } else {
+    resultado.disco = 'Sin archivos locales para ese año';
+  }
+
+  // 2. Eliminar objetos del año en R2 (si está configurado)
+  if (_r2Client) {
+    let totalPurgados = 0;
+    try {
+      let ContinuationToken;
+      do {
+        const listRes = await _r2Client.send(new ListObjectsV2Command({
+          Bucket: _R2_BUCKET, Prefix: `${anio}/`, ContinuationToken,
+        }));
+        if (listRes.Contents && listRes.Contents.length > 0) {
+          await _r2Client.send(new DeleteObjectsCommand({
+            Bucket: _R2_BUCKET,
+            Delete: { Objects: listRes.Contents.map(o => ({ Key: o.Key })) },
+          }));
+          totalPurgados += listRes.Contents.length;
+        }
+        ContinuationToken = listRes.NextContinuationToken;
+      } while (ContinuationToken);
+      resultado.r2 = `${totalPurgados} objeto(s) eliminado(s) de R2`;
+    } catch (r2Err) {
+      resultado.errores.push(`R2: ${r2Err.message}`);
+    }
+  } else {
+    resultado.r2 = 'R2 no configurado';
+  }
+
+  resultado.nota = 'Los registros en GN_TERCE_DOC no fueron modificados.';
+  res.json({ success: resultado.errores.length === 0, ...resultado });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PERSONA NATURAL — Actualizar registro existente
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * PUT /api/actualizar-completo-natural
+ * Actualiza GN_TERCE, GN_NATUR y re-inserta las tablas hijas de persona natural.
+ * Acepta el mismo payload que POST /api/guardar-completo-natural.
+ */
+app.put('/api/actualizar-completo-natural', async (req, res) => {
+  const b = req.body;
+  if (!b.NUM_IDEN || !b.NOM_TERC || !b.APE_TERC)
+    return res.status(400).json({ error: 'Faltan campos obligatorios (NUM_IDEN, NOM_TERC, APE_TERC).' });
+
+  const errVal = _validarCampos([
+    () => _validarTexto(b.NUM_IDEN,  'Número de identificación', 20),
+    () => _validarTexto(b.NOM_TERC,  'Primer nombre',            40),
+    () => _validarTexto(b.APE_TERC,  'Primer apellido',          40),
+    () => _validarTexto(b.DIR_TERC,  'Dirección',               120),
+    () => _validarTexto(b.DIR_MAIL,  'Email corporativo',       150),
+    () => _validarTexto(b.MAIL_SARL, 'Email SARLAFT',           150),
+    () => b.FEC_EXPE ? _validarFecha(b.FEC_EXPE, 'Fecha de expedición') : null,
+    () => b.FEC_NACI ? _validarFecha(b.FEC_NACI, 'Fecha de nacimiento') : null,
+  ]);
+  if (errVal.length)
+    return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
+
+  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
+  const toDec  = v => (v !== null && v !== undefined && v !== '')               ? parseFloat(v)   : null;
+  const toChar = v => v || null;
+  const fin    = b.financiera || {};
+  const pep    = b.pep        || {};
+  const act    = b.actividades || {};
+
+  let pool, transaction;
+  try {
+    pool = await getPool();
+
+    const lookup = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), b.NUM_IDEN)
+      .query(`SELECT COD_TERC FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN AND TIP_TERC='N'`);
+    if (!lookup.recordset.length)
+      return res.status(404).json({ error: `No se encontró persona natural con documento ${b.NUM_IDEN}` });
+    const COD_TERC = lookup.recordset[0].COD_TERC;
+
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const r = () => new sql.Request(transaction);
+
+    // 1. UPDATE GN_TERCE
+    const nomComp = [b.NOM_TERC, b.SEG_NOMB, b.APE_TERC, b.SEG_APEL].filter(Boolean).join(' ');
+    await r()
+      .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
+      .input('COD_TERC',   sql.BigInt,      COD_TERC)
+      .input('COD_TPDOC',  sql.Int,         toInt(b.COD_TPDOC) || 8)
+      .input('NOM_TERC',   sql.Char(40),    (b.NOM_TERC || '').substring(0, 40))
+      .input('SEG_NOMB',   sql.VarChar(40), b.SEG_NOMB || null)
+      .input('APE_TERC',   sql.Char(40),    (b.APE_TERC || '').substring(0, 40))
+      .input('SEG_APEL',   sql.VarChar(40), b.SEG_APEL || null)
+      .input('NOM_COMP',   sql.VarChar(240),nomComp.substring(0, 240))
+      .input('DIR_TERC',   sql.Char(120),   b.DIR_TERC  || null)
+      .input('TEL_TERC',   sql.Char(30),    b.TEL_TERC  || null)
+      .input('TEL_TERC2',  sql.Char(40),    b.TEL_TERC2 || null)
+      .input('DIR_MAIL',   sql.VarChar(150),b.DIR_MAIL  || null)
+      .query(`UPDATE GN_TERCE
+              SET COD_TPDOC=@COD_TPDOC, NOM_TERC=@NOM_TERC, SEG_NOMB=@SEG_NOMB,
+                  APE_TERC=@APE_TERC, SEG_APEL=@SEG_APEL, NOM_COMP=@NOM_COMP,
+                  DIR_TERC=@DIR_TERC, TEL_TERC=@TEL_TERC, TEL_TERC2=@TEL_TERC2, DIR_MAIL=@DIR_MAIL
+              WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
+
+    // 2. UPDATE GN_NATUR
+    await r()
+      .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
+      .input('COD_TERC',    sql.BigInt,      COD_TERC)
+      .input('TIP_VINC',    sql.VarChar(40), toChar(b.COD_VINC))
+      .input('MAIL_SARL',   sql.VarChar(150),b.MAIL_SARL   || null)
+      .input('COD_NACIO',   sql.Int,         toInt(b.COD_NACIO))
+      .input('ACT_PRINC',   sql.VarChar(100),b.ACT_PRINC   || null)
+      .input('COD_CIIU',    sql.VarChar(10), b.COD_CIIU    || null)
+      .input('FEC_EXPE',    sql.Date,        b.FEC_EXPE ? new Date(b.FEC_EXPE) : null)
+      .input('COD_PAIS_EXP',sql.Int,         toInt(b.COD_PAIS_EXP))
+      .input('COD_DEPT_EXP',sql.Int,         toInt(b.COD_DEPT_EXP))
+      .input('COD_MPIO_EXP',sql.Int,         toInt(b.COD_MPIO_EXP))
+      .query(`UPDATE GN_NATUR
+              SET TIP_VINC=@TIP_VINC, MAIL_SARL=@MAIL_SARL, COD_NACIO=@COD_NACIO,
+                  ACT_PRINC=@ACT_PRINC, COD_CIIU=@COD_CIIU, FEC_EXPE=@FEC_EXPE,
+                  COD_PAIS_EXP=@COD_PAIS_EXP, COD_DEPT_EXP=@COD_DEPT_EXP, COD_MPIO_EXP=@COD_MPIO_EXP
+              WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
+
+    const del = async tabla => r()
+      .input('COD_EMPR', sql.SmallInt, COD_EMPR).input('COD_TERC', sql.BigInt, COD_TERC)
+      .query(`DELETE FROM ${tabla} WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
+
+    // 3. GN_NATUR_FIN — reemplazar
+    await del('GN_NATUR_FIN');
+    await r()
+      .input('COD_EMPR',   sql.SmallInt,       COD_EMPR)
+      .input('COD_TERC',   sql.BigInt,          COD_TERC)
+      .input('ACT_TOTAL',  sql.Decimal(18,2),   fin.ACT_TOTAL  ?? null)
+      .input('ING_MENS',   sql.Decimal(18,2),   fin.ING_MENS   ?? null)
+      .input('PAS_TOTAL',  sql.Decimal(18,2),   fin.PAS_TOTAL  ?? null)
+      .input('EGR_MENS',   sql.Decimal(18,2),   fin.EGR_MENS   ?? null)
+      .input('PATRIMONIO', sql.Decimal(18,2),   fin.PATRIMONIO ?? null)
+      .input('OTR_ING',    sql.Decimal(18,2),   fin.OTR_ING    ?? null)
+      .query(`INSERT INTO GN_NATUR_FIN (COD_EMPR,COD_TERC,ACT_TOTAL,ING_MENS,
+              PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING)
+              VALUES (@COD_EMPR,@COD_TERC,@ACT_TOTAL,@ING_MENS,
+              @PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING)`);
+
+    // 4. GN_TERCE_BANCO — reemplazar
+    await del('GN_TERCE_BANCO');
+    for (const ban of (Array.isArray(b.bancaria) ? b.bancaria : [])) {
+      if (!ban.COD_BANCO) continue;
+      await r()
+        .input('COD_EMPR',    sql.SmallInt,   COD_EMPR)
+        .input('COD_TERC',    sql.BigInt,     COD_TERC)
+        .input('COD_BANCO',   sql.Int,        toInt(ban.COD_BANCO))
+        .input('TIP_CUEN',    sql.VarChar(20),toChar(ban.TIP_CUEN))
+        .input('NUM_CUEN',    sql.VarChar(30),toChar(ban.NUM_CUEN))
+        .input('CUEN_EXTR',   sql.Char(1),    ban.CUEN_EXTR || 'N')
+        .input('NOM_ENT_EXT', sql.VarChar(120),ban.NOM_ENT_EXT || null)
+        .input('TIP_CUE_EXT', sql.VarChar(20), ban.TIP_CUE_EXT || null)
+        .query(`INSERT INTO GN_TERCE_BANCO (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,
+                NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT)
+                VALUES (@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,
+                @NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT)`);
+    }
+
+    // 5. GN_NATUR_PEP — reemplazar
+    await del('GN_NATUR_PEP');
+    if (pep.MAN_RPUB || pep.CAR_PUBL) {
+      await r()
+        .input('COD_EMPR',  sql.SmallInt, COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,   COD_TERC)
+        .input('MAN_RPUB',  sql.Char(1),  toChar(pep.MAN_RPUB))
+        .input('CAR_PUBL',  sql.Char(1),  toChar(pep.CAR_PUBL))
+        .query(`INSERT INTO GN_NATUR_PEP (COD_EMPR,COD_TERC,MAN_RPUB,CAR_PUBL)
+                VALUES (@COD_EMPR,@COD_TERC,@MAN_RPUB,@CAR_PUBL)`);
+    }
+
+    // 6. GN_NATUR_ACT — reemplazar
+    await del('GN_NATUR_ACT');
+    await r()
+      .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
+      .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .query(`INSERT INTO GN_NATUR_ACT (COD_EMPR,COD_TERC,ACT_VA_FIAT,ACT_VA_VA,
+              ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
+              VALUES (@COD_EMPR,@COD_TERC,@ACT_VA_FIAT,@ACT_VA_VA,
+              @ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
+
+    await transaction.commit();
+    console.log(`✅ Natural actualizado. COD_TERC=${COD_TERC}, NUM_IDEN=${b.NUM_IDEN}`);
+    res.json({ success: true, NUM_IDEN: b.NUM_IDEN, COD_TERC });
+
+  } catch (err) {
+    try { await transaction.rollback(); } catch (_) {}
+    console.error('PUT /api/actualizar-completo-natural:', err);
+    _responderError(res, err, req);
+  } finally {
+    _liberarEnvio(b.NUM_IDEN);
+  }
+});
+
+/* ── Manejador de errores global ─────────────────────────────────────────────── */
+// Captura errores de multer (tamaño, fileFilter) y cualquier otro error no manejado.
+// Los errores de negocio con status 400 se reenvían al cliente tal cual.
+// Los errores internos se enmascaran: el mensaje real solo va a los logs.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err && (err.code === 'LIMIT_FILE_SIZE' || err.name === 'MulterError' || err.status === 400)) {
+    // Estos mensajes son seguros: vienen de validaciones propias, no del stack interno
+    return res.status(400).json({ error: err.message });
+  }
+  if (err && err.status === 403) {
+    return res.status(403).json({ error: err.message });
+  }
+  // Cualquier otro error: log real, respuesta genérica
+  _responderError(res, err, req, 'global');
 });
 
 /* ── Puerto ──────────────────────────────────────────────────────────────────── */

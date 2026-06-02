@@ -151,15 +151,50 @@ async function guardarFormularioNatural() {
     });
 
     clearInterval(_progresoTimer);
-    _actualizarProgreso(8, 9, 'Completado ✓');
-    await new Promise(r => setTimeout(r, 500));
+    _actualizarProgreso(8, 9, 'Datos guardados ✓');
 
+    if (!resp.ok) {
+      await new Promise(r => setTimeout(r, 300));
+      _cerrarProgresoModal();
+      const errData = await resp.json().catch(() => ({}));
+      _mostrarErrorGuardado(errData.error || `Error HTTP ${resp.status}`);
+      return;
+    }
+
+    const data    = await resp.json();
+    const numIden = data.NUM_IDEN || formData.basica.NUM_IDEN;
+
+    // ── Subir archivos adjuntos con progreso real ──────────────────────────
+    let docWarning = null;
+    if (typeof hayArchivosSeleccionados === 'function' && hayArchivosSeleccionados()) {
+      try {
+        _actualizarProgreso(0, 100, 'Subiendo documentos (0%)…');
+        const fd     = construirFormDataArchivos(numIden);
+        const docRes = await _subirArchivosConProgreso(fd, numIden);
+        _actualizarProgreso(100, 100, 'Documentos subidos ✓');
+        if (!docRes.ok) {
+          const docData  = JSON.parse(docRes.responseText || '{}');
+          const detalles = Array.isArray(docData.detalles) ? docData.detalles.join(' | ') : '';
+          docWarning = detalles || docData.error || 'Archivos rechazados por el servidor';
+        }
+      } catch (docErr) {
+        console.warn('guardarFormularioNatural() — subida de documentos falló:', docErr);
+        docWarning = 'Error de red al subir documentos';
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 400));
     _cerrarProgresoModal();
 
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    if (docWarning) {
+      mostrarToast(`Datos guardados. Documentos rechazados: ${docWarning}`, 'warning');
+    }
 
-    // ── Pantalla de confirmación ─────────────────────────────────────────────
+    // Limpiar estado post-envío
+    if (typeof _archivos !== 'undefined') _archivos.clear();
+    borrarBorrador();
+
+    // ── Pantalla de confirmación ───────────────────────────────────────────
     const nombreCompleto = [
       formDataNatur.basica.NOM_TERC,
       formDataNatur.basica.SEG_NOMB,
@@ -167,9 +202,8 @@ async function guardarFormularioNatural() {
       formDataNatur.basica.SEG_APEL,
     ].filter(Boolean).join(' ');
 
-    _mostrarConfirmacion(nombreCompleto || formData.basica.NUM_IDEN, data.COD_TERC);
+    _mostrarConfirmacion(nombreCompleto || numIden, data.COD_TERC);
 
-    // Habilitar descarga Excel Natural
     const btnExcel = document.getElementById('btn-descargar-excel');
     if (btnExcel) {
       btnExcel.dataset.codTerc  = data.COD_TERC;
@@ -184,6 +218,81 @@ async function guardarFormularioNatural() {
     _cerrarProgresoModal();
     _mostrarErrorGuardado(err.message || 'Error al conectar con el servidor.');
     console.error('guardarFormularioNatural:', err);
+  } finally {
+    if (btnSubmit) btnSubmit.disabled = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Actualización de registro existente — modo Natural
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Actualiza un registro de Persona Natural existente — PUT /api/actualizar-completo-natural.
+ * Usa el mismo payload que guardarFormularioNatural() pero método PUT.
+ */
+async function actualizarFormularioNatural() {
+  const btnSubmit = document.getElementById('btn-submit');
+  if (btnSubmit) btnSubmit.disabled = true;
+
+  _mostrarProgresoModal();
+
+  try {
+    const payload = _construirPayloadNatural();
+
+    const resp = await fetch('/api/actualizar-completo-natural', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    clearInterval(_progresoTimer);
+    _actualizarProgreso(8, 9, 'Cambios guardados ✓');
+
+    if (!resp.ok) {
+      await new Promise(r => setTimeout(r, 300));
+      _cerrarProgresoModal();
+      const errData = await resp.json().catch(() => ({}));
+      _mostrarErrorGuardado(errData.error || `Error HTTP ${resp.status}`);
+      return;
+    }
+
+    const data = await resp.json();
+
+    // Subir archivos si hay nuevos seleccionados
+    let docWarning = null;
+    if (typeof hayArchivosSeleccionados === 'function' && hayArchivosSeleccionados()) {
+      try {
+        _actualizarProgreso(0, 100, 'Subiendo documentos (0%)…');
+        const fd     = construirFormDataArchivos(payload.NUM_IDEN);
+        const docRes = await _subirArchivosConProgreso(fd, payload.NUM_IDEN);
+        _actualizarProgreso(100, 100, 'Documentos subidos ✓');
+        if (!docRes.ok) {
+          const docData  = JSON.parse(docRes.responseText || '{}');
+          const detalles = Array.isArray(docData.detalles) ? docData.detalles.join(' | ') : '';
+          docWarning = detalles || docData.error || 'Archivos rechazados por el servidor';
+        }
+      } catch (docErr) {
+        docWarning = 'Error de red al subir documentos';
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 400));
+    _cerrarProgresoModal();
+
+    if (docWarning) mostrarToast(`Cambios guardados. Documentos rechazados: ${docWarning}`, 'warning');
+    if (typeof _archivos !== 'undefined') _archivos.clear();
+    borrarBorrador();
+
+    _mostrarConfirmacion(payload.NUM_IDEN, data.COD_TERC, true);
+    console.log('✅ Persona Natural actualizada. COD_TERC:', data.COD_TERC);
+
+  } catch (err) {
+    clearInterval(_progresoTimer);
+    _cerrarProgresoModal();
+    _mostrarErrorGuardado(err.message || 'Error al conectar con el servidor.');
+    console.error('actualizarFormularioNatural:', err);
+  } finally {
     if (btnSubmit) btnSubmit.disabled = false;
   }
 }
@@ -193,7 +302,7 @@ async function guardarFormularioNatural() {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Parcha onSubmitClick() para bifurcar según modoPersona.
+ * Parcha onSubmitClick() para bifurcar según modoPersona y modo actualizar.
  */
 (function patchOnSubmitClick() {
   const _orig = window.onSubmitClick;
@@ -209,7 +318,11 @@ async function guardarFormularioNatural() {
       mostrarToast(`Hay ${errores.length} campo(s) por completar.`, 'error');
       return;
     }
-    guardarFormularioNatural();
+    if (typeof _esModoActualizar !== 'undefined' && _esModoActualizar) {
+      actualizarFormularioNatural();
+    } else {
+      guardarFormularioNatural();
+    }
   };
 })();
 
