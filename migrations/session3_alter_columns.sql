@@ -1,0 +1,64 @@
+-- ============================================================
+-- Migración Session 3: Agregar columnas "Otro país" y COD_PAIS_EXT
+-- Base de datos: MineDax
+-- Ejecutar en orden. Cada bloque es idempotente.
+-- ============================================================
+
+-- ── 1. GN_JURID — país de expedición libre (jurídica) ────────────────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_JURID' AND COLUMN_NAME = 'OTR_PAIS_EXP'
+)
+    ALTER TABLE GN_JURID ADD OTR_PAIS_EXP VARCHAR(100) NULL;
+
+-- ── 2. GN_NATUR — país de expedición libre (natural) ─────────────────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_NATUR' AND COLUMN_NAME = 'OTR_PAIS_EXP'
+)
+    ALTER TABLE GN_NATUR ADD OTR_PAIS_EXP VARCHAR(100) NULL;
+
+-- ── 3. GN_TERCE_BANCO — país y texto libre de cuenta extranjera ──────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_TERCE_BANCO' AND COLUMN_NAME = 'COD_PAIS_EXT'
+)
+    ALTER TABLE GN_TERCE_BANCO ADD COD_PAIS_EXT VARCHAR(10) NULL;
+
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_TERCE_BANCO' AND COLUMN_NAME = 'OTR_PAIS_EXT'
+)
+    ALTER TABLE GN_TERCE_BANCO ADD OTR_PAIS_EXT VARCHAR(100) NULL;
+
+-- ── 4. GN_JURID_BF — país libre del beneficiario final ───────────────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_JURID_BF' AND COLUMN_NAME = 'OTR_PAIS'
+)
+    ALTER TABLE GN_JURID_BF ADD OTR_PAIS VARCHAR(100) NULL;
+
+-- ── 5. GN_JURID_RL — país libre del representante legal ──────────────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_JURID_RL' AND COLUMN_NAME = 'OTR_PAIS'
+)
+    ALTER TABLE GN_JURID_RL ADD OTR_PAIS VARCHAR(100) NULL;
+
+-- ── 6. GN_JURID_CUMP — país libre del oficial de cumplimiento ────────────────
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_JURID_CUMP' AND COLUMN_NAME = 'OTR_PAIS'
+)
+    ALTER TABLE GN_JURID_CUMP ADD OTR_PAIS VARCHAR(100) NULL;
+
+-- ── Verificación ──────────────────────────────────────────────────────────────
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE (TABLE_NAME = 'GN_JURID'        AND COLUMN_NAME = 'OTR_PAIS_EXP')
+   OR (TABLE_NAME = 'GN_NATUR'        AND COLUMN_NAME = 'OTR_PAIS_EXP')
+   OR (TABLE_NAME = 'GN_TERCE_BANCO'  AND COLUMN_NAME IN ('COD_PAIS_EXT','OTR_PAIS_EXT'))
+   OR (TABLE_NAME = 'GN_JURID_BF'     AND COLUMN_NAME = 'OTR_PAIS')
+   OR (TABLE_NAME = 'GN_JURID_RL'     AND COLUMN_NAME = 'OTR_PAIS')
+   OR (TABLE_NAME = 'GN_JURID_CUMP'   AND COLUMN_NAME = 'OTR_PAIS')
+ORDER BY TABLE_NAME, COLUMN_NAME;

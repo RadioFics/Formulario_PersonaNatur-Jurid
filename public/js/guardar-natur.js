@@ -45,8 +45,6 @@ function validarTodoNatural() {
   if (!db.TEL_TERC)   errores.push('Sección 1: Teléfono celular requerido');
   if (!db.DIR_MAIL || !esEmailValido(db.DIR_MAIL))
     errores.push('Sección 1: Email corporativo inválido o vacío');
-  if (!n.MAIL_SARL || !esEmailValido(n.MAIL_SARL))
-    errores.push('Sección 1: Email SARLAFT inválido o vacío');
   if (!n.FEC_EXPE)    errores.push('Sección 1: Fecha de expedición requerida');
   if (!n.COD_NACIO)   errores.push('Sección 1: Nacionalidad requerida');
   if (!n.COD_CIIU)    errores.push('Sección 1: Actividad CIIU requerida');

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Formulario SARLAFT</title>
+  <title>Formulario SAGRILAFT</title>
   <link rel="stylesheet" href="css/styles.css" />
   <script>
     /* Gate: redirigir al inicio si no se aceptaron los T&C */
     (function() {
-      if (!sessionStorage.getItem('sarlaft_terms_accepted')) {
+      if (!sessionStorage.getItem('SAGRILAFT_terms_accepted')) {
         window.location.replace('index.html');
       }
     })();
@@ -28,7 +28,7 @@
 <!--  Encabezado de página                                                  -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <header class="page-header">
-  <h1 id="page-title">Registro SARLAFT — Persona Jurídica</h1>
+  <h1 id="page-title">Registro SAGRILAFT — Persona Jurídica</h1>
   <p>Complete todos los campos obligatorios marcados con
      <span style="color:#c62828">*</span>.
      Los datos se guardarán al finalizar el formulario completo.</p>
@@ -45,7 +45,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-basica')">
       <span class="accordion-title">
         <span class="section-num">1</span>
-        Información básica de la empresa
+        <span id="section1-label">Información básica de la empresa</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -70,11 +70,6 @@
             <option value="">— Seleccione —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
-          <div id="otr_vinc_wrap" class="otr-wrap">
-            <label class="otr-label">Especifique el tipo de vinculación <span class="req">*</span></label>
-            <input type="text" id="otr_vinc" maxlength="255" placeholder="Describa el tipo de vinculación"
-                   oninput="actualizarFormData('basica','OTR_VINC',this.value)" />
-          </div>
         </div>
 
         <div class="field" id="field-cod_tpdoc">
@@ -114,6 +109,26 @@
                         border-radius:var(--radius);font-size:.875rem;text-align:center;width:100%"
                  oninput="this.value=this.value.replace(/\D/g,'').slice(0,1);
                           actualizarFormData('basica','DIG_VERI',this.value)" />
+        </div>
+      </div>
+
+      <!-- Fila 1.3 — Otro tipo de vinculación (sibling row, sin animación) -->
+      <div class="grid-4" id="row-vinc-otro" style="display:none">
+        <div class="field" id="field-cod_vinc_otro" style="grid-column: span 2">
+          <label>Especifique el tipo de vinculación <span class="req">*</span></label>
+          <input type="text" id="otr_vinc" maxlength="255" placeholder="Describa el tipo de vinculación"
+                 oninput="actualizarFormData('basica','OTR_VINC',this.value)" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <!-- Fila 1.5N — Fecha de expedición del documento (solo Natural) -->
+      <div class="grid-4 solo-natural" style="display:none">
+        <div class="field" id="field-fec_expe_n">
+          <label for="fec_expe_n">Fecha de expedición del documento <span class="req">*</span></label>
+          <input type="date" id="fec_expe_n"
+                 oninput="actualizarNatur('FEC_EXPE',this.value); limpiarError('field-fec_expe_n')" />
+          <span class="error-msg">Campo requerido</span>
         </div>
       </div>
 
@@ -158,7 +173,7 @@
         </div>
       </div>
 
-      <div class="section-divider" id="divider-geo">Lugar de constitución / expedición</div>
+      <div class="section-divider" id="divider-geo">Lugar de domicilio principal</div>
 
       <!-- Fila 3 — Cascada geográfica -->
       <div class="grid-4">
@@ -166,10 +181,16 @@
         <div class="field" id="field-cod_pais_exp">
           <label for="cod_pais_exp">País <span class="req">*</span></label>
           <select id="cod_pais_exp"
-                  onchange="onPaisChange(this.value); limpiarError('field-cod_pais_exp')">
+                  onchange="_handlePaisExpChange(this.value); limpiarError('field-cod_pais_exp')">
             <option value="">— Seleccione —</option>
           </select>
           <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-pais_exp_otro" style="display:none">
+          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+          <input type="text" id="pais_exp_otro_txt" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                 oninput="actualizarFormData('basica','OTR_PAIS_EXP',this.value); actualizarNatur('OTR_PAIS_EXP',this.value)" />
         </div>
 
         <div class="field" id="field-cod_dept_exp">
@@ -191,7 +212,7 @@
         </div>
 
         <div class="field" id="field-dir_terc">
-          <label for="dir_terc">Dirección <span class="req">*</span></label>
+          <label for="dir_terc"><span id="dir_terc_label">Dirección oficina principal (Registrada la sociedad)</span> <span class="req">*</span></label>
           <input type="text" id="dir_terc" maxlength="255"
                  placeholder="Ej: Cra 7 # 45-12 Of. 301"
                  oninput="actualizarFormData('basica','DIR_TERC',this.value); limpiarError('field-dir_terc')" />
@@ -220,27 +241,21 @@
         </div>
 
         <div class="field" id="field-dir_mail">
-          <label for="dir_mail">Email corporativo <span class="req">*</span></label>
+          <label for="dir_mail">Email
+            <span class="ic-info" data-tip="Puede ser correo corporativo o personal.">i</span>
+            <span class="req">*</span></label>
           <input type="email" id="dir_mail" maxlength="100"
                  placeholder="contacto@empresa.com"
                  oninput="actualizarFormData('basica','DIR_MAIL',this.value); limpiarError('field-dir_mail')" />
           <span class="error-msg">Email inválido o vacío</span>
         </div>
 
-        <!-- Jurídica: email SARLAFT va en GN_JURID -->
+        <!-- Jurídica: email SAGRILAFT va en GN_JURID -->
         <div class="field solo-juridica" id="field-mail_sarl">
-          <label for="mail_sarl">Email gestión SARLAFT <span class="req">*</span></label>
+          <label for="mail_sarl">Email gestión SAGRILAFT <span class="req">*</span></label>
           <input type="email" id="mail_sarl" maxlength="100"
-                 placeholder="sarlaft@empresa.com"
+                 placeholder="SAGRILAFT@empresa.com"
                  oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
-          <span class="error-msg">Email inválido o vacío</span>
-        </div>
-        <!-- Natural: email SARLAFT va en GN_NATUR -->
-        <div class="field solo-natural" id="field-mail_sarl_n" style="display:none">
-          <label for="mail_sarl_n">Email gestión SARLAFT <span class="req">*</span></label>
-          <input type="email" id="mail_sarl_n" maxlength="100"
-                 placeholder="sarlaft@persona.com"
-                 oninput="actualizarNatur('MAIL_SARL',this.value); limpiarError('field-mail_sarl_n')" />
           <span class="error-msg">Email inválido o vacío</span>
         </div>
       </div>
@@ -255,15 +270,18 @@
             <option value="">— Seleccione actividad —</option>
           </select>
           <span class="error-msg">Seleccione una actividad válida</span>
-          <div id="otr_ciiu_wrap" class="otr-wrap">
-            <label class="otr-label">Describa la actividad <span class="req">*</span></label>
-            <input type="text" id="otr_ciiu" maxlength="255" placeholder="Describa la actividad económica"
-                   oninput="actualizarFormData('basica','OTR_CIIU',this.value)" />
-          </div>
+        </div>
+
+        <!-- Sibling CIIU — visible solo cuando se elige una actividad "Otros..." -->
+        <div class="field" id="field-cod_ciiu_otro" style="display:none">
+          <label>Describa la actividad <span class="req">*</span></label>
+          <input type="text" id="otr_ciiu" maxlength="255" placeholder="Describa la actividad econ&#xF3;mica"
+                 oninput="actualizarFormData('basica','OTR_CIIU',this.value)" />
+          <span class="error-msg">Campo requerido</span>
         </div>
 
         <div class="field">
-          <label for="url_web">Página web</label>
+          <label for="url_web">P&#xE1;gina web</label>
           <input type="url" id="url_web" maxlength="255"
                  placeholder="https://www.empresa.com"
                  oninput="actualizarFormData('basica','URL_WEB',this.value)" />
@@ -272,13 +290,6 @@
 
       <!-- Fila 5N — Datos adicionales (solo Natural) -->
       <div class="grid-4 solo-natural" style="display:none">
-
-        <div class="field" id="field-fec_expe_n">
-          <label for="fec_expe_n">Fecha de expedición del documento <span class="req">*</span></label>
-          <input type="date" id="fec_expe_n"
-                 oninput="actualizarNatur('FEC_EXPE',this.value); limpiarError('field-fec_expe_n')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
 
         <div class="field" id="field-cod_nacio_n">
           <label for="cod_nacio_n">Nacionalidad <span class="req">*</span></label>
@@ -396,6 +407,12 @@
             <span class="error-msg">Campo requerido</span>
           </div>
 
+          <div class="field" id="field-rl_p_pais_otro" style="display:none">
+            <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+            <input type="text" id="rl_p_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                   oninput="actualizarRL(0,'OTR_PAIS',this.value)" />
+          </div>
+
           <div class="field" id="field-rl_p_dept">
             <label for="rl_p_dept">Departamento <span class="req">*</span></label>
             <select id="rl_p_dept" disabled
@@ -419,7 +436,7 @@
         <div class="grid-4">
 
           <div class="field" id="field-rl_p_dir">
-            <label for="rl_p_dir">Dirección <span class="req">*</span></label>
+            <label for="rl_p_dir">Direcci&#xF3;n domicilio <span class="req">*</span></label>
             <input type="text" id="rl_p_dir" maxlength="255"
                    placeholder="Ej: Cra 7 # 45-12"
                    oninput="actualizarRL(0,'DIR_REPR',this.value); limpiarError('field-rl_p_dir')" />
@@ -485,27 +502,35 @@
 
     <div class="accordion-body">
 
-      <!-- Fila 1 — Ubicación | País (condicional) | Tipo empresa -->
-      <div class="grid-4">
+      <!-- Grid único — Ubicación | País (E) | OtroPaís (OTRO) | Tipo empresa | Grupo empresarial -->
+      <div class="grid-4" id="soc-campos-grid">
 
         <div class="field" id="field-soc_ubic">
           <label for="soc_ubic">Ubicación de la sociedad <span class="req">*</span></label>
           <select id="soc_ubic"
                   onchange="onUbicacionChange(this.value); limpiarError('field-soc_ubic')">
             <option value="N" selected>Nacional</option>
+            <option value="SC">Sucursal en Colombia</option>
             <option value="E">Extranjera</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
 
-        <!-- Campo condicional: solo visible cuando Ubicación = Extranjera -->
-        <div class="field campo-condicional" id="campo-soc_pais"
-             style="display:none; opacity:0; max-height:0">
+        <!-- País — visible solo cuando Ubicación = Extranjera -->
+        <div class="field" id="campo-soc_pais" style="display:none">
           <label for="soc_pais">País <span class="req">*</span></label>
           <select id="soc_pais"
-                  onchange="actualizarSociedad('COD_PAIS_SOC',this.value); limpiarError('campo-soc_pais')">
+                  onchange="onSocPaisChange(this.value); limpiarError('campo-soc_pais')">
             <option value="">— Seleccione país —</option>
           </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <!-- Especifique el país — visible solo cuando soc_pais = OTRO -->
+        <div class="field" id="field-soc_pais_otro" style="display:none">
+          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+          <input type="text" id="soc_pais_otro_txt" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                 oninput="actualizarSociedad('OTR_PAIS_SOC',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
 
@@ -521,12 +546,7 @@
           <span class="error-msg">Campo requerido</span>
         </div>
 
-      </div>
-
-      <!-- Fila 2 — Grupo empresarial | Tipo de sociedad -->
-      <div class="grid-2">
-
-        <div class="field" id="field-soc_grup_empr">
+        <div class="field" id="field-soc_grup_empr" style="grid-column: span 2">
           <label for="soc_grup_empr">¿Pertenece a grupo empresarial? <span class="req">*</span></label>
           <select id="soc_grup_empr"
                   onchange="actualizarSociedad('GRUP_EMPR',this.value); onGrupEmprChange(this.value); limpiarError('field-soc_grup_empr')">
@@ -535,20 +555,6 @@
             <option value="N">No</option>
           </select>
           <span class="error-msg">Campo requerido</span>
-        </div>
-
-        <div class="field" id="field-soc_tip_socie">
-          <label for="soc_tip_socie">Tipo de sociedad <span class="req">*</span></label>
-          <select id="soc_tip_socie"
-                  onchange="actualizarSociedad('TIP_SOCIE',this.value); limpiarError('field-soc_tip_socie')">
-            <option value="">— Seleccione —</option>
-          </select>
-          <span class="error-msg">Campo requerido</span>
-          <div id="otr_socie_wrap" class="otr-wrap">
-            <label class="otr-label">Especifique el tipo de sociedad <span class="req">*</span></label>
-            <input type="text" id="otr_socie" maxlength="255" placeholder="Describa el tipo de sociedad"
-                   oninput="actualizarSociedad('OTR_SOCIE',this.value)" />
-          </div>
         </div>
 
       </div>
@@ -684,11 +690,14 @@
               <option value="">— Seleccione —</option>
             </select>
             <span class="error-msg">Campo requerido</span>
-            <div id="otr_preve_wrap" class="otr-wrap">
-              <label class="otr-label">Especifique el sistema de prevención <span class="req">*</span></label>
-              <input type="text" id="otr_preve" maxlength="255" placeholder="Describa el sistema implementado"
-                     oninput="actualizarCump('OTR_PREVE',this.value)" />
-            </div>
+          </div>
+
+          <!-- Sibling sistema — visible solo cuando se elige "Otro" -->
+          <div class="field" id="field-cump_sis_preve_otro" style="display:none">
+            <label>Especifique el sistema de prevenci&#xF3;n <span class="req">*</span></label>
+            <input type="text" id="otr_preve" maxlength="255" placeholder="Describa el sistema implementado"
+                   oninput="actualizarCump('OTR_PREVE',this.value)" />
+            <span class="error-msg">Campo requerido</span>
           </div>
         </div>
 
@@ -981,8 +990,8 @@
       <!-- Lista dinámica de cuentas bancarias -->
       <div class="grupo-lista" id="banco-grupos-list"></div>
 
-      <!-- Botón agregar cuenta -->
-      <div class="pais-actions">
+      <!-- Botón agregar cuenta — solo Jurídica -->
+      <div class="pais-actions solo-juridica">
         <button class="btn-agregar-pais" type="button" onclick="agregarBanco()">
           &#65291; Agregar cuenta bancaria
         </button>
@@ -998,30 +1007,28 @@
     </div><!-- /accordion-body -->
   </section>
 
-  <!-- ─── SECCIÓN 11: PEP y Actividades con activos virtuales ──────────────── -->
+  <!-- ─── SECCIÓN 11: PEP — Exposición política ──────────────────────────── -->
   <section class="accordion collapsed" id="accordion-pep">
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-pep')">
       <span class="accordion-title">
         <span class="section-num">11</span>
-        PEP y Actividades con activos virtuales
+        PEP &#x2014; Exposici&#xF3;n pol&#xED;tica
+        <span class="ic-info" data-tip="PEP (Persona Expuesta Políticamente): persona que ejerce o ha ejercido cargos o funciones públicas prominentes en el país o en el exterior, como jefes de Estado, políticos, funcionarios judiciales, militares de alto rango, directivos de empresas públicas, o que tiene vínculos cercanos con dichas personas (familiares directos, asociados).">i</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <!-- ── 11A: Exposición política ──────────────────────────────────────── -->
-      <div class="sub-seccion-titulo">A. Exposición política (PEP)</div>
-
       <!-- MAN_RPUB -->
       <div class="field field-radio" id="field-pep_man_rpub">
-        <label>&#191;Ha manejado o maneja recursos públicos? <span class="req">*</span></label>
+        <label>&#191;Ha manejado o maneja recursos p&#xFA;blicos? <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="pep_man_rpub" value="S"
                    onchange="actualizarPEP('MAN_RPUB', this.value)" />
-            Sí
+            S&#xED;
           </label>
           <label class="radio-option">
             <input type="radio" name="pep_man_rpub" value="N"
@@ -1033,12 +1040,12 @@
 
       <!-- CAR_PUBL -->
       <div class="field field-radio" id="field-pep_car_publ">
-        <label>&#191;Ejerce o ha ejercido cargo público? <span class="req">*</span></label>
+        <label>¿Ejerce o ha ejercido un cargo p&#xFA;blico en los &#xFA;ltimos dos a&#xF1;os? <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="pep_car_publ" value="S"
                    onchange="actualizarPEP('CAR_PUBL', this.value)" />
-            Sí
+            S&#xED;
           </label>
           <label class="radio-option">
             <input type="radio" name="pep_car_publ" value="N"
@@ -1048,8 +1055,29 @@
         </div>
       </div>
 
-      <!-- ── 11B: Actividades con activos virtuales ─────────────────────────── -->
-      <div class="sub-seccion-titulo">B. Actividades con activos virtuales</div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionPEP()">Limpiar secci&#xF3;n</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarPEP()">Continuar &#x2192; Secci&#xF3;n 12</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 12: Actividades con activos virtuales ────────────────────── -->
+  <section class="accordion collapsed" id="accordion-va">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-va')">
+      <span class="accordion-title">
+        <span class="section-num">12</span>
+        Actividades con activos virtuales
+        <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado.">i</span>
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
 
       <div class="checkbox-lista">
 
@@ -1062,7 +1090,7 @@
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_va_va"
                  onchange="actualizarActividad('ACT_VA_VA', this.checked ? 'S' : 'N')" />
-          Intercambio entre una o más formas de activos virtuales
+          Intercambio entre una o m&#xE1;s formas de activos virtuales
         </label>
 
         <label class="checkbox-opcion">
@@ -1074,13 +1102,13 @@
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_custo"
                  onchange="actualizarActividad('ACT_CUSTO', this.checked ? 'S' : 'N')" />
-          Custodia y/o administración de activos virtuales o instrumentos que permitan su control
+          Custodia y/o administraci&#xF3;n de activos virtuales o instrumentos que permitan su control
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_serv_fin"
                  onchange="actualizarActividad('ACT_SERV_FIN', this.checked ? 'S' : 'N')" />
-          Participación y prestación de servicios financieros relacionados con la oferta de un emisor
+          Participaci&#xF3;n y prestaci&#xF3;n de servicios financieros relacionados con la oferta de un emisor
         </label>
 
         <label class="checkbox-opcion">
@@ -1097,30 +1125,29 @@
           <label class="checkbox-opcion">
             <input type="checkbox" id="cert_info"
                    onchange="actualizarActividad('CERT_INFO', this.checked ? 'S' : 'N')" />
-            Certifico que la información suministrada en el presente formulario es veraz, completa
-            y corresponde a la realidad de la empresa. Me comprometo a notificar cualquier cambio
-            de manera oportuna.
+            Certifico que la informaci&#xF3;n suministrada en el presente formulario es veraz, completa
+            y corresponde a la realidad. Me comprometo a notificar cualquier cambio de manera oportuna.
           </label>
         </div>
-        <span class="error-msg">Debe certificar la veracidad de la información para enviar.</span>
+        <span class="error-msg">Debe certificar la veracidad de la informaci&#xF3;n para enviar.</span>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionPEP()">Limpiar sección</button>
-        <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarPEP()">Continuar &#x2192; Sección 12</button>
+                onclick="limpiarSeccionVA()">Limpiar secci&#xF3;n</button>
+        <button class="btn btn-primary" type="button" id="btn-continuar-va"
+                onclick="validarYContinuarVA()">Continuar &#x2192; Secci&#xF3;n 13</button>
       </div>
 
     </div><!-- /accordion-body -->
   </section>
 
-  <!-- ─── SECCIÓN 12: Beneficiarios Finales ───────────────────────────────── -->
+  <!-- ─── SECCIÓN 13: Beneficiarios Finales ───────────────────────────────── -->
   <section class="accordion collapsed" id="accordion-bf">
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-bf')">
       <span class="accordion-title">
-        <span class="section-num">12</span>
+        <span class="section-num">13</span>
         Beneficiarios Finales
       </span>
       <span class="chevron">&#8964;</span>
@@ -1146,7 +1173,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionBF()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBF()">Continuar &#x2192; Sección&#xA0;13</button>
+                onclick="validarYContinuarBF()">Continuar &#x2192; Secci&#xF3;n&#xA0;14</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1157,7 +1184,7 @@
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-docs')">
       <span class="accordion-title">
-        <span class="section-num">13</span>
+        <span class="section-num">14</span>
         Documentos Requeridos
       </span>
       <span class="chevron">&#8964;</span>
@@ -1175,87 +1202,129 @@
 
       <div class="doc-lista">
 
+        <!-- RUT — aplica a ambos modos -->
         <div class="doc-item">
-          <div class="doc-label">RUT &#x2014; Registro Único Tributario</div>
+          <div class="doc-label">
+            RUT &#x2014; Registro &#xDA;nico Tributario
+            <span class="ic-info" data-tip="Registro Único Tributario actualizado. Puede descargarlo desde el portal de la DIAN (www.dian.gov.co) o solicitarlo en cualquier punto de atención.">i</span>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('RUT',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_rut">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_rut">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
+        <!-- Certificación bancaria — aplica a ambos modos -->
         <div class="doc-item">
-          <div class="doc-label">Certificación bancaria <small>(vigencia menor a 30 días)</small></div>
+          <div class="doc-label">
+            Certificaci&#xF3;n bancaria
+            <span class="ic-info" data-tip="Documento oficial emitido por la entidad bancaria que confirma la existencia y titularidad de la cuenta. Debe estar firmado y sellado por el banco, con fecha de expedición no mayor a 30 días.">i</span>
+            <small>(vigencia menor a 30 d&#xED;as)</small>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_BANC',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_banc">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_banc">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
-        <div class="doc-item">
-          <div class="doc-label">Certificado de existencia y representación <small>(máx. 30 días de expedición)</small></div>
+        <!-- Certificado de existencia — solo Jurídica -->
+        <div class="doc-item solo-juridica">
+          <div class="doc-label">
+            Certificado de existencia y representaci&#xF3;n
+            <span class="ic-info" data-tip="Emitido por la Cámara de Comercio del domicilio principal. Acredita la existencia legal de la empresa, objeto social, representante legal y fecha de constitución. Expedición no mayor a 30 días.">i</span>
+            <small>(m&#xE1;x. 30 d&#xED;as de expedici&#xF3;n)</small>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_EXIS',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_exis">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_exis">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
+        <!-- Documento de identidad — etiqueta diferente según modo, mismo archivo -->
         <div class="doc-item">
-          <div class="doc-label">Copia del documento de identidad del Representante Legal</div>
+          <div class="doc-label solo-juridica">
+            Copia del documento de identidad del Representante Legal
+            <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
+          </div>
+          <div class="doc-label solo-natural" style="display:none">
+            Copia del documento de identidad de la persona natural
+            <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('DOC_ID_RL',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
+        <!-- Estados financieros / Declaración de renta — etiqueta diferente según modo -->
         <div class="doc-item">
-          <div class="doc-label">Estados financieros del último año fiscal</div>
+          <div class="doc-label solo-juridica">
+            Estados financieros <small>(&#xFA;ltimos dos a&#xF1;os)</small>
+            <span class="ic-info" data-tip="Balance general y estado de resultados (pérdidas y ganancias) de los últimos dos años fiscales, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
+          </div>
+          <div class="doc-label solo-natural" style="display:none">
+            Declaraci&#xF3;n de renta o juramentada
+            <span class="ic-info" data-tip="Declaración de renta del último año fiscal o declaración juramentada de ingresos si no está obligado a declarar renta.">i</span>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('EST_FIN',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
-        <div class="doc-item">
-          <div class="doc-label">Certificado de composición accionaria</div>
+        <!-- Certificado accionario — solo Jurídica -->
+        <div class="doc-item solo-juridica">
+          <div class="doc-label">
+            Certificado de composici&#xF3;n accionaria
+            <span class="ic-info" data-tip="Documento que refleja la estructura de capital: nombre, identificación y porcentaje de participación de cada socio o accionista. Puede emitirlo el Revisor Fiscal, Contador o el Representante Legal bajo su responsabilidad.">i</span>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_ACCI',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_acci">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_acci">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
+        <!-- Carta de aceptación / Carta de declaración — etiqueta diferente según modo -->
         <div class="doc-item">
-          <div class="doc-label">Carta de aceptación y autorización del Representante Legal</div>
+          <div class="doc-label solo-juridica">
+            Carta de aceptaci&#xF3;n y autorizaci&#xF3;n del Representante Legal
+            <span class="ic-info" data-tip="Carta firmada por el Representante Legal en la que autoriza el tratamiento de los datos suministrados, acepta las políticas SAGRILAFT de la empresa y confirma la veracidad de la información diligenciada en este formulario.">i</span>
+          </div>
+          <div class="doc-label solo-natural" style="display:none">
+            Carta declaraci&#xF3;n origen de fondos y autorizaci&#xF3;n de tratamiento de datos
+            <span class="ic-info" data-tip="Carta firmada por la persona natural en la que declara el origen de los fondos y autoriza el tratamiento de los datos personales suministrados en este formulario.">i</span>
+          </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
               Seleccionar archivo
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CART_ACEP',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cart_acep">Ningún archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cart_acep">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 
@@ -1265,7 +1334,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionDocs()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarDocs()">Finalizar sección&#xA0;13</button>
+                onclick="validarYContinuarDocs()">Finalizar secci&#xF3;n&#xA0;14</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1312,7 +1381,7 @@
     <div class="confirm-icon">&#9989;</div>
     <p class="confirm-title">&#161;Registro enviado con éxito!</p>
     <p class="confirm-body">
-      Su información SARLAFT ha sido registrada correctamente.<br>
+      Su información SAGRILAFT ha sido registrada correctamente.<br>
       Guarde el siguiente número de identificación para sus registros:
     </p>
     <div class="confirm-id" id="confirm-num-iden">&#8212;</div>
@@ -1391,6 +1460,7 @@
 <script src="js/seccion-financiera.js"></script>
 <script src="js/seccion-bancaria.js"></script>
 <script src="js/seccion-pep.js"></script>
+<script src="js/seccion-va.js"></script>
 <script src="js/seccion-bf.js"></script>
 <script src="js/seccion-docs.js"></script>
 <script src="js/guardar.js"></script>

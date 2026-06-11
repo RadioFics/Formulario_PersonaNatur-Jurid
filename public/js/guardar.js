@@ -48,7 +48,7 @@ function validarTodo() {
   if (!formData.basica.DIR_MAIL || !esEmailValido(formData.basica.DIR_MAIL))
     errores.push('Información básica: Email corporativo inválido o vacío');
   if (!formData.basica.MAIL_SARL || !esEmailValido(formData.basica.MAIL_SARL))
-    errores.push('Información básica: Email SARLAFT inválido o vacío');
+    errores.push('Información básica: Email SAGRILAFT inválido o vacío');
   if (!formData.basica.COD_VINC)
     errores.push('Información básica: Tipo de vinculación requerido');
   if (!formData.basica.COD_CIIU)
@@ -69,8 +69,6 @@ function validarTodo() {
     errores.push('Información de la sociedad: Tipo de empresa requerido');
   if (!formData.sociedad.GRUP_EMPR)
     errores.push('Información de la sociedad: Grupo empresarial requerido');
-  if (!formData.sociedad.TIP_SOCIE)
-    errores.push('Información de la sociedad: Tipo de sociedad requerido');
   if (formData.sociedad.UBIC_SOC === 'E' && !formData.sociedad.COD_PAIS_SOC)
     errores.push('Información de la sociedad: País requerido para empresa extranjera');
   if (formData.sociedad.GRUP_EMPR === 'S' && !formData.sociedad.REL_GRUPO)
@@ -304,7 +302,7 @@ function _mostrarConfirmacion(numIden, codTerc, esActualizacion) {
   if (titleEl) titleEl.textContent = esActualizacion ? '¡Registro actualizado!' : '¡Registro enviado con éxito!';
   if (bodyEl)  bodyEl.innerHTML    = esActualizacion
     ? 'Los cambios han sido guardados correctamente en la base de datos.<br>Número de identificación:'
-    : 'Su información SARLAFT ha sido registrada correctamente.<br>Guarde el siguiente número de identificación para sus registros:';
+    : 'Su información SAGRILAFT ha sido registrada correctamente.<br>Guarde el siguiente número de identificación para sus registros:';
 
   const btnExcel = document.getElementById('btn-descargar-excel');
   if (btnExcel) {
@@ -563,13 +561,12 @@ function _construirPayload() {
     ACE_POLI:     true,  // T&C aceptados
 
     // ── Sección 3 — GN_JURID (sociedad) ────────────────────────────────────
-    UBIC_SOC:     s.UBIC_SOC    || null,
-    COD_PAIS_SOC: s.COD_PAIS_SOC|| null,
-    TIP_EMPR:     s.TIP_EMPR    || null,
-    GRUP_EMPR:    s.GRUP_EMPR   || null,
-    REL_GRUPO:    s.REL_GRUPO   || null,
-    TIP_SOCIE:    s.TIP_SOCIE   || null,
-    OTR_SOCIE:    s.OTR_SOCIE   || null,  // texto libre cuando tipo sociedad = "Otro"
+    UBIC_SOC:     s.UBIC_SOC     || null,
+    COD_PAIS_SOC: s.COD_PAIS_SOC || null,
+    OTR_PAIS_SOC: s.OTR_PAIS_SOC || null,
+    TIP_EMPR:     s.TIP_EMPR     || null,
+    GRUP_EMPR:    s.GRUP_EMPR    || null,
+    REL_GRUPO:    s.REL_GRUPO    || null,
 
     // ── Sección 2 — Representantes legales (GN_JURID_RL) ───────────────────
     representantes: formData.representantes.map(r => ({ ...r })),

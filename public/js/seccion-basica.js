@@ -75,10 +75,14 @@ async function onPaisChange(codPais) {
       'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
       { cod_pais: codPais }
     );
-    selMpio.onchange = (e) => {
-      actualizarFormData('basica', 'COD_MPIO_EXP', e.target.value);
-      limpiarError('field-cod_mpio_exp');
-    };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      actualizarFormData('basica', 'COD_MPIO_EXP', 'NA');
+    } else {
+      selMpio.onchange = (e) => {
+        actualizarFormData('basica', 'COD_MPIO_EXP', e.target.value);
+        limpiarError('field-cod_mpio_exp');
+      };
+    }
   }
 }
 

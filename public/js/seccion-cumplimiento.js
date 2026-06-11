@@ -24,7 +24,7 @@ function _cumpCampos(tipRepr) {
     TIP_REPR: tipRepr || 'P',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
     NOM_RESP: '', APE_RESP: '', RAZ_RESP: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_RESP: '', TEL_RESP: '', MAIL_RESP: '',
   };
 }
@@ -180,6 +180,11 @@ function _cumpOficialHTML(o) {
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
+        <div class="field" id="field-cump_${id}_pais_otro" style="display:none">
+          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+          <input type="text" id="cump_${id}_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                 oninput="actualizarOficial(${id},'OTR_PAIS',this.value)" />
+        </div>
         <div class="field" id="field-cump_${id}_dept">
           <label>Departamento <span class="req">*</span></label>
           <select id="cump_${id}_dept" disabled
@@ -233,14 +238,23 @@ function _hydrateCumpFields(o, el) {
   if (o.COD_PAIS) {
     onCumpPaisChange(id, o.COD_PAIS)
       .then(() => {
+        if (o.COD_PAIS === 'OTRO') {
+          const otrInp = el.querySelector(`#cump_${id}_pais_otro`);
+          if (otrInp) otrInp.value = o.OTR_PAIS || '';
+          const fo = el.querySelector(`#field-cump_${id}_pais_otro`);
+          if (fo) { fo.style.display = ''; fo.style.gridColumn = 'span 2'; }
+          return Promise.resolve();
+        }
         const deptEl = el.querySelector(`#cump_${id}_dept`);
         if (deptEl) deptEl.value = o.COD_DEPT || '';
         if (o.COD_DEPT && o.COD_DEPT !== 'NA') return onCumpDeptChange(id, o.COD_DEPT);
         return Promise.resolve();
       })
       .then(() => {
-        const mpioEl = el.querySelector(`#cump_${id}_mpio`);
-        if (mpioEl) mpioEl.value = o.COD_MPIO || '';
+        if (o.COD_PAIS !== 'OTRO') {
+          const mpioEl = el.querySelector(`#cump_${id}_mpio`);
+          if (mpioEl) mpioEl.value = o.COD_MPIO || '';
+        }
       })
       .catch(err => console.error('hydrateCump:', err));
   }
@@ -386,6 +400,84 @@ function limpiarSeccionCumplimiento() {
   document.querySelectorAll('#accordion-cumplimiento .field.error')
     .forEach(f => f.classList.remove('error'));
   mostrarToast('Sección limpiada.', 'success');
+}
+
+/* ── Cascadas ────────────────────────────────────────────────────────────────── */
+async function onCumpPaisChange(id, codPais) {
+  const o = _cumpGet(id);
+  if (!o) return;
+  o.COD_PAIS = codPais || null;
+  o.COD_DEPT = null;
+  o.COD_MPIO = null;
+
+  const selDept    = document.getElementById(`cump_${id}_dept`);
+  const selMpio    = document.getElementById(`cump_${id}_mpio`);
+  const fieldOtro  = document.getElementById(`field-cump_${id}_pais_otro`);
+  const fieldDept  = document.getElementById(`field-cump_${id}_dept`);
+  const fieldMpio  = document.getElementById(`field-cump_${id}_mpio`);
+
+  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.disabled  = true;
+  limpiarError(`field-cump_${id}_dept`);
+  limpiarError(`field-cump_${id}_mpio`);
+
+  if (codPais === 'OTRO') {
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+    return;
+  }
+
+  if (fieldOtro) {
+    fieldOtro.style.display = 'none';
+    fieldOtro.style.gridColumn = '';
+    o.OTR_PAIS = '';
+    const inp = document.getElementById(`cump_${id}_pais_otro`);
+    if (inp) inp.value = '';
+  }
+  if (fieldDept) fieldDept.style.display = '';
+  if (fieldMpio) fieldMpio.style.display = '';
+
+  if (!codPais) {
+    selDept.innerHTML = '<option value="">— Seleccione pa&#xED;s primero —</option>';
+    selDept.disabled  = true;
+    return;
+  }
+
+  if (codPais === COD_COLOMBIA) {
+    selDept.disabled = false;
+    await cargarCatalogo('/api/catalogo/departamentos', `cump_${id}_dept`,
+      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+  } else {
+    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.value = 'NA'; selDept.disabled = true;
+    o.COD_DEPT = 'NA';
+    selMpio.disabled = false;
+    selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+    await cargarCatalogo('/api/catalogo/ciudades', `cump_${id}_mpio`,
+      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+    if (_autoNoAplicaCiudad(selMpio)) {
+      actualizarOficial(id, 'COD_MPIO', 'NA');
+    } else {
+      selMpio.onchange = e => { actualizarOficial(id, 'COD_MPIO', e.target.value); limpiarError(`field-cump_${id}_mpio`); };
+    }
+  }
+}
+
+async function onCumpDeptChange(id, codDept) {
+  const o = _cumpGet(id);
+  if (!o) return;
+  o.COD_DEPT = codDept || null;
+  o.COD_MPIO = null;
+  const selMpio = document.getElementById(`cump_${id}_mpio`);
+  const codPais = document.getElementById(`cump_${id}_pais`).value;
+  selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+  selMpio.disabled  = true;
+  if (!codDept || !codPais) return;
+  await cargarCatalogo('/api/catalogo/ciudades', `cump_${id}_mpio`,
+    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+  selMpio.disabled = false;
+  selMpio.onchange = e => { actualizarOficial(id, 'COD_MPIO', e.target.value); limpiarError(`field-cump_${id}_mpio`); };
 }
 
 /* ── Agregar / Eliminar ──────────────────────────────────────────────────────── */

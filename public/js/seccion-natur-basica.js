@@ -92,20 +92,38 @@ function onTipTercChange(val) {
   // ── Título de página ──────────────────────────────────────────────────────
   const h1 = document.querySelector('.page-header h1');
   if (h1) h1.textContent = esN
-    ? 'Registro SARLAFT — Persona Natural'
-    : 'Registro SARLAFT — Persona Jurídica';
+    ? 'Registro SAGRILAFT — Persona Natural'
+    : 'Registro SAGRILAFT — Persona Jurídica';
+
+  // ── Título sección 1 ──────────────────────────────────────────────────────
+  const s1label = document.getElementById('section1-label');
+  if (s1label) s1label.textContent = esN
+    ? 'Información básica de la persona natural'
+    : 'Información básica de la empresa';
+
+  // ── Etiqueta Dirección (Sección 1) ────────────────────────────────────────
+  const dirLabel = document.getElementById('dir_terc_label');
+  if (dirLabel) dirLabel.textContent = esN
+    ? 'Dirección'
+    : 'Dirección oficina principal (Registrada la sociedad)';
 
   // ── Divider de geografía ──────────────────────────────────────────────────
   const divGeo = document.getElementById('divider-geo');
   if (divGeo) divGeo.textContent = esN
-    ? 'Lugar de expedición del documento'
-    : 'Lugar de constitución / expedición';
+    ? 'Lugar de residencia'
+    : 'Lugar de domicilio principal';
 
   // ── Texto del botón Continuar ──────────────────────────────────────────────
   const btnCont = document.getElementById('btn-continuar-basica');
   if (btnCont) btnCont.textContent = esN
     ? 'Continuar → Información financiera'
     : 'Continuar → Sección 2';
+
+  // ── Botón de la sección 12 (Activos Virtuales) ────────────────────────────
+  const btnVA = document.getElementById('btn-continuar-va');
+  if (btnVA) btnVA.textContent = esN
+    ? 'Continuar → Documentos (Secc. 14)'
+    : 'Continuar → Sección 13';
 
   // ── Secciones del acordeón exclusivas de Jurídica ────────────────────────
   ['accordion-rl', 'accordion-sociedad', 'accordion-paises',
@@ -145,6 +163,14 @@ function onTipTercChange(val) {
       if (el) el.classList.add('collapsed');
     });
   }
+
+  // ── Ajustar grid para aprovechar el espacio en modo Natural ───────────────
+  // Email ocupa el slot que Jurídica usa para "Email SAGRILAFT" → span 2
+  const mailField = document.getElementById('field-dir_mail');
+  if (mailField) mailField.style.gridColumn = esN ? 'span 2' : '';
+  // Actividad CIIU ocupa el slot vacío en la fila de datos adicionales → span 2
+  const ciiuNField = document.getElementById('field-cod_ciiu_n');
+  if (ciiuNField) ciiuNField.style.gridColumn = esN ? 'span 2' : '';
 
   console.log('[onTipTercChange] modo =', val);
 }
@@ -307,10 +333,6 @@ function validarNaturBasica() {
 
   if (!db.DIR_MAIL || !esEmailValido(db.DIR_MAIL)) {
     mostrarError('field-dir_mail');
-    ok = false;
-  }
-  if (!n.MAIL_SARL || !esEmailValido(n.MAIL_SARL)) {
-    mostrarError('field-mail_sarl_n');
     ok = false;
   }
 

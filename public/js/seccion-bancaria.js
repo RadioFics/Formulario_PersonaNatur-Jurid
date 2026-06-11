@@ -24,7 +24,7 @@ function _bancoNuevo() {
     COD_BANCO: null, OTR_BANCO: '',
     TIP_CUEN: null,  OTR_CUEN: '',
     NUM_CUEN: '',
-    CUEN_EXTR: 'N', NOM_ENT_EXT: '', TIP_CUE_EXT: '',
+    CUEN_EXTR: 'N', COD_PAIS_EXT: null, OTR_PAIS_EXT: '', NOM_ENT_EXT: '', TIP_CUE_EXT: '',
   };
 }
 function _bancoGet(id) { return formData.bancaria.find(b => b._id === id); }
@@ -42,11 +42,14 @@ function actualizarTituloBanco(id) {
   const pos = _bancoPos(id) + 1;
   const el  = document.getElementById(`banco_titulo_${id}`);
   if (!el) return;
-  // Obtener nombre del banco desde el select
   const sel = document.getElementById(`banco_${id}_banco`);
   const nom = sel ? (sel.options[sel.selectedIndex]?.text || '') : '';
   const lbl = nom && nom !== '— Seleccione entidad —' ? ` — ${nom}` : '';
-  el.textContent = `Cuenta ${pos}${lbl}`;
+  if (pos === 1) {
+    el.innerHTML = `Cuenta principal — Certificaci\xF3n bancaria${lbl} <span class="ic-info" data-tip="Esta es la cuenta donde se realizar\xE1 el pago. Debe coincidir con la certificaci\xF3n bancaria adjuntada en los documentos.">i</span>`;
+  } else {
+    el.textContent = `Cuenta ${pos}${lbl}`;
+  }
 }
 function _bancoRenumerarTodos() {
   formData.bancaria.forEach(b => actualizarTituloBanco(b._id));
@@ -60,14 +63,23 @@ function toggleGrupoBanco(id) {
 
 /* ── Condicional "Otros" en banco y tipo de cuenta ──────────────────────────── */
 function _bancoOtrosChange(id, tipo) {
-  const selId  = tipo === 'banco' ? `banco_${id}_banco`    : `banco_${id}_tipcuen`;
-  const wrapId = tipo === 'banco' ? `banco_${id}_otr_banco_wrap` : `banco_${id}_otr_cuen_wrap`;
-  const inpId  = tipo === 'banco' ? `banco_${id}_otr_banco` : `banco_${id}_otr_cuen`;
-  const campo  = tipo === 'banco' ? 'OTR_BANCO' : 'OTR_CUEN';
-  configurarOtros(selId, wrapId, () => {
+  const selId = tipo === 'banco' ? `banco_${id}_banco`           : `banco_${id}_tipcuen`;
+  const fldId = tipo === 'banco' ? `field-banco_${id}_banco_otro`: `field-banco_${id}_tipcuen_otro`;
+  const inpId = tipo === 'banco' ? `banco_${id}_otr_banco`       : `banco_${id}_otr_cuen`;
+  const campo = tipo === 'banco' ? 'OTR_BANCO'                   : 'OTR_CUEN';
+
+  const sel = document.getElementById(selId);
+  const fld = document.getElementById(fldId);
+  if (!sel || !fld) return;
+
+  const txt = (sel.selectedOptions[0]?.textContent || '').trim();
+  if (/^otro|^sin\s/i.test(txt)) {
+    fld.style.display = '';
+  } else {
+    fld.style.display = 'none';
     actualizarBanco(id, campo, null);
     const el = document.getElementById(inpId); if (el) el.value = '';
-  });
+  }
 }
 
 /* ── Condicional cuenta extranjera ──────────────────────────────────────────── */
@@ -79,19 +91,36 @@ function onTieneExtranjeraChange(id, valor) {
   if (valor === 'S') {
     wrap.style.display = 'grid';
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      wrap.style.opacity = '1'; wrap.style.maxHeight = '200px';
+      wrap.style.opacity = '1'; wrap.style.maxHeight = '300px';
     }));
   } else {
     wrap.style.opacity = '0'; wrap.style.maxHeight = '0';
     setTimeout(() => { wrap.style.display = 'none'; }, 210);
-    // Limpiar estado
-    if (b) { b.NOM_ENT_EXT = ''; b.TIP_CUE_EXT = ''; }
-    const inpNom = document.getElementById(`banco_${id}_ext_nom`);
-    const inpTip = document.getElementById(`banco_${id}_ext_tip`);
+    if (b) { b.COD_PAIS_EXT = null; b.OTR_PAIS_EXT = ''; b.NOM_ENT_EXT = ''; b.TIP_CUE_EXT = ''; }
+    const selPais = document.getElementById(`banco_${id}_ext_pais`);
+    const inpNom  = document.getElementById(`banco_${id}_ext_nom`);
+    const inpTip  = document.getElementById(`banco_${id}_ext_tip`);
+    if (selPais) selPais.value = '';
     if (inpNom) inpNom.value = '';
     if (inpTip) inpTip.value = '';
+    _bancoPaisOtroChange(id, '');
+    limpiarError(`field-banco_${id}_ext_pais`);
     limpiarError(`field-banco_${id}_ext_nom`);
     limpiarError(`field-banco_${id}_ext_tip`);
+  }
+}
+
+function _bancoPaisOtroChange(id, codPais) {
+  const fieldOtro = document.getElementById(`field-banco_${id}_ext_pais_otro`);
+  if (!fieldOtro) return;
+  if (codPais === 'OTRO') {
+    fieldOtro.style.display = '';
+  } else {
+    fieldOtro.style.display = 'none';
+    const b = _bancoGet(id);
+    if (b) b.OTR_PAIS_EXT = '';
+    const inp = document.getElementById(`banco_${id}_ext_pais_otro`);
+    if (inp) inp.value = '';
   }
 }
 
@@ -102,6 +131,9 @@ function _bancoBancoOpts() {
 function _bancoTipCtaOpts() {
   return getOpcionesHTML('/api/catalogo/tipos-cuenta', 'COD_TPCTA', 'NOM_TPCTA', '— Seleccione tipo —');
 }
+function _bancoPaisOpts() {
+  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione país —');
+}
 
 /* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
 function _crearGrupoBancoEl(cuenta) {
@@ -109,6 +141,7 @@ function _crearGrupoBancoEl(cuenta) {
   const pos = _bancoPos(id) + 1;
   const bo  = _bancoBancoOpts();
   const to  = _bancoTipCtaOpts();
+  const pa  = _bancoPaisOpts();
   const el  = document.createElement('div');
   el.className = 'grupo-item';
   el.id        = `banco_grupo_${id}`;
@@ -126,11 +159,12 @@ function _crearGrupoBancoEl(cuenta) {
             ${bo}
           </select>
           <span class="error-msg">Campo requerido</span>
-          <div id="banco_${id}_otr_banco_wrap" class="otr-wrap">
-            <label class="otr-label">Especifique la entidad bancaria <span class="req">*</span></label>
-            <input type="text" id="banco_${id}_otr_banco" maxlength="255" placeholder="Nombre de la entidad"
-                   oninput="actualizarBanco(${id},'OTR_BANCO',this.value)" />
-          </div>
+        </div>
+        <div class="field" id="field-banco_${id}_banco_otro" style="display:none; grid-column: span 2">
+          <label>Especifique la entidad bancaria <span class="req">*</span></label>
+          <input type="text" id="banco_${id}_otr_banco" maxlength="255" placeholder="Nombre de la entidad"
+                 oninput="actualizarBanco(${id},'OTR_BANCO',this.value)" />
+          <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-banco_${id}_tipcuen">
           <label>Tipo de cuenta <span class="req">*</span></label>
@@ -139,11 +173,12 @@ function _crearGrupoBancoEl(cuenta) {
             ${to}
           </select>
           <span class="error-msg">Campo requerido</span>
-          <div id="banco_${id}_otr_cuen_wrap" class="otr-wrap">
-            <label class="otr-label">Especifique el tipo de cuenta <span class="req">*</span></label>
-            <input type="text" id="banco_${id}_otr_cuen" maxlength="255" placeholder="Ej: cuenta fiduciaria, CDT…"
-                   oninput="actualizarBanco(${id},'OTR_CUEN',this.value)" />
-          </div>
+        </div>
+        <div class="field" id="field-banco_${id}_tipcuen_otro" style="display:none">
+          <label>Especifique el tipo de cuenta <span class="req">*</span></label>
+          <input type="text" id="banco_${id}_otr_cuen" maxlength="255" placeholder="Ej: cuenta fiduciaria, CDT…"
+                 oninput="actualizarBanco(${id},'OTR_CUEN',this.value)" />
+          <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-banco_${id}_numcuen">
           <label>Número de cuenta <span class="req">*</span></label>
@@ -167,7 +202,20 @@ function _crearGrupoBancoEl(cuenta) {
       </div>
       <div id="banco_${id}_ext_wrap" class="grid-4"
            style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s ease, max-height .2s ease;">
-        <div class="field col-full" id="field-banco_${id}_ext_nom">
+        <div class="field" id="field-banco_${id}_ext_pais">
+          <label>Pa&#xED;s de la cuenta <span class="req">*</span></label>
+          <select id="banco_${id}_ext_pais"
+                  onchange="actualizarBanco(${id},'COD_PAIS_EXT',this.value);_bancoPaisOtroChange(${id},this.value);limpiarError('field-banco_${id}_ext_pais')">
+            ${pa}
+          </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
+          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+          <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                 oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
+        </div>
+        <div class="field" id="field-banco_${id}_ext_nom">
           <label>Nombre de la entidad extranjera <span class="req">*</span></label>
           <input type="text" id="banco_${id}_ext_nom" maxlength="255"
                  oninput="actualizarBanco(${id},'NOM_ENT_EXT',this.value);limpiarError('field-banco_${id}_ext_nom')" />
@@ -176,7 +224,7 @@ function _crearGrupoBancoEl(cuenta) {
         <div class="field" id="field-banco_${id}_ext_tip">
           <label>Tipo de cuenta extranjera <span class="req">*</span></label>
           <input type="text" id="banco_${id}_ext_tip" maxlength="100"
-                 placeholder="Ej: Savings, Checking…"
+                 placeholder="Ej: Savings, Checking&#x2026;"
                  oninput="actualizarBanco(${id},'TIP_CUE_EXT',this.value);limpiarError('field-banco_${id}_ext_tip')" />
           <span class="error-msg">Campo requerido</span>
         </div>
@@ -195,6 +243,12 @@ function _hydrateBancoFields(cuenta, el) {
   set(`#banco_${id}_banco`, cuenta.COD_BANCO);
   set(`#banco_${id}_tipcuen`, cuenta.TIP_CUEN);
   set(`#banco_${id}_numcuen`, cuenta.NUM_CUEN);
+  set(`#banco_${id}_ext_pais`,      cuenta.COD_PAIS_EXT);
+  set(`#banco_${id}_ext_pais_otro`, cuenta.OTR_PAIS_EXT);
+  if (cuenta.COD_PAIS_EXT === 'OTRO') {
+    const fo = el.querySelector(`#field-banco_${id}_ext_pais_otro`);
+    if (fo) fo.style.display = '';
+  }
   set(`#banco_${id}_ext_nom`, cuenta.NOM_ENT_EXT);
   set(`#banco_${id}_ext_tip`, cuenta.TIP_CUE_EXT);
   set(`#banco_${id}_otr_banco`, cuenta.OTR_BANCO);
@@ -207,6 +261,7 @@ function _hydrateBancoFields(cuenta, el) {
     const yes = el.querySelector(`input[name="banco_extr_${id}"][value="S"]`);
     if (yes) yes.checked = true;
     onTieneExtranjeraChange(id, 'S');
+    if (cuenta.COD_PAIS_EXT) _bancoPaisOtroChange(id, cuenta.COD_PAIS_EXT);
   }
 }
 
@@ -230,6 +285,7 @@ function renderListaBancaria() {
     const el = _crearGrupoBancoEl(cuenta);
     list.appendChild(el);
     _hydrateBancoFields(cuenta, el);
+    actualizarTituloBanco(cuenta._id);
   });
   _bancoSyncEliminar();
 }
@@ -273,6 +329,9 @@ function _validarGrupoBanco(id) {
     mostrarError(`field-banco_${id}_numcuen`); ok = false;
   }
   if (b.CUEN_EXTR === 'S') {
+    if (!b.COD_PAIS_EXT) {
+      mostrarError(`field-banco_${id}_ext_pais`); ok = false;
+    }
     if (!b.NOM_ENT_EXT || !String(b.NOM_ENT_EXT).trim()) {
       mostrarError(`field-banco_${id}_ext_nom`); ok = false;
     }

@@ -19,7 +19,7 @@ const _TEST = {
   // Sección 1 — Básica
   NUM_IDEN:    '900123456',
   DIG_VERI:    '7',
-  NOM_COMP:    'EMPRESA DEMO SARLAFT S.A.S.',
+  NOM_COMP:    'EMPRESA DEMO SAGRILAFT S.A.S.',
   DIR_TERC:    'Carrera 15 # 93-47 Oficina 301',
   TEL_TERC:    '3001234567',
   TEL_TERC2:   '6017654321',
@@ -33,7 +33,7 @@ const _TEST = {
   REL_GRUPO:   '',
 
   // Sección 5 — Cumplimiento
-  DESC_NORM:   'La empresa aplica el Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SARLAFT) conforme a la Circular Básica Jurídica de la SFC y la Ley 526 de 1999. Se han implementado políticas internas, procedimientos de debida diligencia y controles de monitoreo de transacciones.',
+  DESC_NORM:   'La empresa aplica el Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SAGRILAFT) conforme a la Circular Básica Jurídica de la SFC y la Ley 526 de 1999. Se han implementado políticas internas, procedimientos de debida diligencia y controles de monitoreo de transacciones.',
   NORM_LAFT:   'Ley 526 de 1999 - Circular Básica Jurídica SFC - Resolución UIAF',
 
   // Representante legal
@@ -244,13 +244,12 @@ async function rellenarPrueba() {
 
   try {
     /* ── Cargar todos los catálogos en paralelo ───────────────────────────── */
-    const [tiposDoc, paises, vinculaciones, ciius, tiposSociedad, bancos, tiposCuenta] =
+    const [tiposDoc, paises, vinculaciones, ciius, bancos, tiposCuenta] =
       await Promise.all([
         _fetch('/api/catalogo/tipos-documento'),
         _fetch('/api/catalogo/paises'),
         _fetch('/api/catalogo/vinculaciones'),
         _fetch('/api/catalogo/ciiu'),
-        _fetch('/api/catalogo/tipos-sociedad'),
         _fetch('/api/catalogo/bancos'),
         _fetch('/api/catalogo/tipos-cuenta'),
       ]);
@@ -344,20 +343,15 @@ async function rellenarPrueba() {
     /* ════════════════════════════════════════════════════════════════════════
        SECCIÓN 3 — Información de la sociedad
     ════════════════════════════════════════════════════════════════════════ */
-    // COD_SOCIE es int en el catálogo; TIP_SOCIE es varchar(60) → convertir a string
-    const codTipSocieRaw = _primero(tiposSociedad, 'COD_TSOCIE') ?? _primero(tiposSociedad, 'COD_SOCIE');
-    const codTipSocie    = codTipSocieRaw != null ? String(codTipSocieRaw) : null;
     formData.sociedad.UBIC_SOC     = 'N';
     formData.sociedad.TIP_EMPR     = _TEST.TIP_EMPR;
     formData.sociedad.GRUP_EMPR    = _TEST.GRUP_EMPR;
     formData.sociedad.REL_GRUPO    = _TEST.REL_GRUPO;
-    formData.sociedad.TIP_SOCIE    = codTipSocie;
     formData.sociedad.COD_PAIS_SOC = null;
 
-    // IDs correctos: soc_ubic (select), soc_tip_empr (select), soc_tip_socie (select), soc_grup_empr (select)
-    _setSelect('soc_ubic',      'N');
-    _setSelect('soc_tip_empr',  _TEST.TIP_EMPR);
-    _setSelect('soc_tip_socie', codTipSocie);
+    // IDs correctos: soc_ubic (select), soc_tip_empr (select), soc_grup_empr (select)
+    _setSelect('soc_ubic',     'N');
+    _setSelect('soc_tip_empr', _TEST.TIP_EMPR);
     _setSelect('soc_grup_empr', 'N');
 
     if (btn) btn.textContent = '⏳ Sección 4 — Países…';

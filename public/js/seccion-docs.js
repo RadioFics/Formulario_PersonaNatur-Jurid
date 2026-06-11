@@ -87,6 +87,12 @@ function actualizarFirma(campo, valor) {
 function onArchivoSeleccionado(clave, input) {
   const file = input.files[0] || null;
   if (file) {
+    const esPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!esPDF) {
+      mostrarToast('Solo se aceptan archivos PDF. Seleccione un archivo .pdf.', 'error');
+      input.value = '';
+      return;
+    }
     _archivos.set(clave, file);
     formData.documentos[clave] = file.name;
     _actualizarIndicadorArchivo(clave, file.name);
@@ -142,16 +148,24 @@ function hayArchivosSeleccionados() {
  * @returns {boolean}
  */
 function validarSeccionDocs() {
-  // Documentos que DEBEN estar adjuntos antes de enviar
-  const requeridos = [
-    { clave: 'RUT',       indId: 'doc_ind_rut',        label: 'RUT' },
-    { clave: 'CERT_BANC', indId: 'doc_ind_cert_banc',  label: 'Certificación bancaria' },
-    { clave: 'CERT_EXIS', indId: 'doc_ind_cert_exis',  label: 'Certificado de existencia' },
-    { clave: 'DOC_ID_RL', indId: 'doc_ind_doc_id_rl',  label: 'Documento identidad RL' },
-    { clave: 'EST_FIN',   indId: 'doc_ind_est_fin',     label: 'Estados financieros' },
-    { clave: 'CERT_ACCI', indId: 'doc_ind_cert_acci',   label: 'Certificado accionario' },
-    { clave: 'CART_ACEP', indId: 'doc_ind_cart_acep',   label: 'Carta de aceptación' },
+  const esNatural = window.modoPersona === 'N';
+
+  const requeridosComun = [
+    { clave: 'RUT',       indId: 'doc_ind_rut',       label: 'RUT' },
+    { clave: 'CERT_BANC', indId: 'doc_ind_cert_banc', label: 'Certificación bancaria' },
+    { clave: 'DOC_ID_RL', indId: 'doc_ind_doc_id_rl', label: 'Documento de identidad' },
+    { clave: 'EST_FIN',   indId: 'doc_ind_est_fin',   label: esNatural ? 'Declaración de renta' : 'Estados financieros' },
+    { clave: 'CART_ACEP', indId: 'doc_ind_cart_acep', label: esNatural ? 'Carta declaración de fondos' : 'Carta de aceptación' },
   ];
+
+  const requeridosJuridica = [
+    { clave: 'CERT_EXIS', indId: 'doc_ind_cert_exis', label: 'Certificado de existencia' },
+    { clave: 'CERT_ACCI', indId: 'doc_ind_cert_acci', label: 'Certificado accionario' },
+  ];
+
+  const requeridos = esNatural
+    ? requeridosComun
+    : [...requeridosComun, ...requeridosJuridica];
 
   let ok = true;
   const faltantes = [];
@@ -188,7 +202,7 @@ function validarYContinuarDocs() {
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 13 completa. Ya puede enviar el formulario.', 'success');
+  mostrarToast('Sección 14 completa. Ya puede enviar el formulario.', 'success');
   document.getElementById('accordion-docs').classList.add('collapsed');
   const btnSubmit = document.getElementById('btn-submit');
   if (btnSubmit) btnSubmit.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -201,7 +215,7 @@ function limpiarSeccionDocs() {
   _archivos.clear();
   formData.documentos = {
     RUT: null, CERT_BANC: null, CERT_EXIS: null, DOC_ID_RL: null,
-    EST_FIN: null, CERT_ACCI: null, CART_ACEP: null,
+    EST_FIN: null, CERT_ACCI: null, CART_ACEP: null, ARCH_FIRMA: null,
   };
   document.querySelectorAll('#accordion-docs input[type="file"]')
     .forEach(inp => { inp.value = ''; });

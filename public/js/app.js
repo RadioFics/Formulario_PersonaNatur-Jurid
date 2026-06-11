@@ -1,5 +1,5 @@
 /**
- * app.js — Punto de entrada y arranque de la aplicación SARLAFT
+ * app.js — Punto de entrada y arranque de la aplicación SAGRILAFT
  *
  * Responsabilidades:
  *  · Cargar todos los catálogos iniciales al arrancar la página
@@ -81,13 +81,6 @@ async function inicializar() {
         const dest = document.getElementById('rl_s_pais');
         if (src && dest) dest.innerHTML = src.innerHTML;
       }),
-
-      // ── Sección 3: Tipos de sociedad (carga inicial para Nacional) ───────────
-      cargarCatalogo(
-        '/api/catalogo/tipos-sociedad', 'soc_tip_socie',
-        'COD_SOCIE', 'NOM_SOCIE', '— Seleccione —',
-        { ubicacion: 'N' }
-      ),
 
       // Países para el desplegable del campo "País" en sección 3
       cargarCatalogo(
@@ -190,29 +183,74 @@ function _verificarCatalogosCriticos() {
 
 /* ── Campos "Otros" — activar después de hidratar ──────────────────────────── */
 function _activarCamposOtros() {
-  // Vinculación
-  configurarOtros('cod_vinc', 'otr_vinc_wrap', () => {
+  _activarSiblingOtro('cod_vinc',       'row-vinc-otro',               () => {
     actualizarFormData('basica', 'OTR_VINC', null);
     const el = document.getElementById('otr_vinc'); if (el) el.value = '';
   });
 
-  // CIIU
-  configurarOtros('cod_ciiu', 'otr_ciiu_wrap', () => {
+  _activarSiblingOtro('cod_ciiu',       'field-cod_ciiu_otro',         () => {
     actualizarFormData('basica', 'OTR_CIIU', null);
     const el = document.getElementById('otr_ciiu'); if (el) el.value = '';
   });
 
-  // Tipo de sociedad
-  configurarOtros('soc_tip_socie', 'otr_socie_wrap', () => {
-    actualizarSociedad('OTR_SOCIE', null);
-    const el = document.getElementById('otr_socie'); if (el) el.value = '';
-  });
-
-  // Sistema de prevención
-  configurarOtros('cump_sis_preve', 'otr_preve_wrap', () => {
+  _activarSiblingOtro('cump_sis_preve', 'field-cump_sis_preve_otro',   () => {
     actualizarCump('OTR_PREVE', null);
     const el = document.getElementById('otr_preve'); if (el) el.value = '';
   });
+}
+
+/* ── "Otro país" — inyectar opción en todos los selects de país ─────────────── */
+
+/**
+ * Añade la opción "Otro país (no listado)" al cache de países y a todos los
+ * <select> de países ya presentes en el DOM. Los grupos dinámicos (BF, bancaria)
+ * la recibirán automáticamente vía getOpcionesHTML() al ser creados.
+ */
+function _agregarOtroPais() {
+  const cacheKey = new URL('/api/catalogo/paises', window.location.origin).toString();
+  if (catalogCache[cacheKey] && !catalogCache[cacheKey].find(p => p.COD_PAIS === 'OTRO')) {
+    catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)' });
+  }
+  // Añadir a todos los selects estáticos de país ya presentes en el DOM
+  ['cod_pais_exp', 'rl_p_pais', 'rl_s_pais', 'soc_pais',
+   'cump_p_pais', 'cump_s_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
+  // La lógica de mostrar/ocultar el campo libre de sección 1 está en _handlePaisExpChange.
+}
+
+/**
+ * Manejador del selector de país principal (sección 1).
+ * Intercepta el valor 'OTRO' para suprimir la cascada geográfica.
+ * @param {string} v  Valor del select
+ */
+function _handlePaisExpChange(v) {
+  const fieldOtro = document.getElementById('field-pais_exp_otro');
+  const fieldDept = document.getElementById('field-cod_dept_exp');
+  const fieldMpio = document.getElementById('field-cod_mpio_exp');
+  if (v === 'OTRO') {
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+    actualizarFormData('basica', 'COD_PAIS_EXP', 'OTRO');
+    actualizarFormData('basica', 'COD_DEPT_EXP', null);
+    actualizarFormData('basica', 'COD_MPIO_EXP', null);
+    if (typeof actualizarNatur === 'function') {
+      actualizarNatur('COD_PAIS_EXP', 'OTRO');
+      actualizarNatur('COD_DEPT_EXP', null);
+      actualizarNatur('COD_MPIO_EXP', null);
+    }
+  } else {
+    if (fieldOtro) {
+      fieldOtro.style.display = 'none';
+      fieldOtro.style.gridColumn = '';
+      actualizarFormData('basica', 'OTR_PAIS_EXP', null);
+      if (typeof actualizarNatur === 'function') actualizarNatur('OTR_PAIS_EXP', null);
+      const inp = document.getElementById('pais_exp_otro_txt');
+      if (inp) inp.value = '';
+    }
+    if (fieldDept) fieldDept.style.display = '';
+    if (fieldMpio) fieldMpio.style.display = '';
+    onPaisChange(v);
+  }
 }
 
 /* ── Selects con buscador — activar después de cargar catálogos ─────────────── */
@@ -225,7 +263,7 @@ function _activarBuscadores() {
   ['rl_p_tipdoc', 'rl_p_pais', 'rl_p_dept', 'rl_p_mpio'].forEach(convertirABuscable);
 
   // Sección 3 — Sociedad
-  ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_tip_socie', 'soc_pais'].forEach(convertirABuscable);
+  ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_pais'].forEach(convertirABuscable);
 
   // Sección 5 — Cumplimiento
   ['cump_sis_preve', 'cump_p_tipdoc', 'cump_p_pais', 'cump_p_dept', 'cump_p_mpio'].forEach(convertirABuscable);
@@ -237,6 +275,7 @@ function _activarBuscadores() {
 /* ── Arranque ───────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   await inicializar();
+  _agregarOtroPais();
   _activarBuscadores();
   inicializarTooltips();
 
@@ -486,15 +525,20 @@ async function hidratarFormularioVisual() {
     await onUbicacionChange(ubic);
 
     const socMap = {
-      soc_tip_empr: 'TIP_EMPR',
+      soc_tip_empr:  'TIP_EMPR',
       soc_grup_empr: 'GRUP_EMPR',
-      soc_tip_socie: 'TIP_SOCIE',
-      soc_pais: 'COD_PAIS_SOC',
+      soc_pais:      'COD_PAIS_SOC',
     };
     Object.entries(socMap).forEach(([id, key]) => {
       const el = document.getElementById(id);
       if (el) el.value = formData.sociedad[key] || '';
     });
+    // Hidratar campo "Otro país" en sección 3 si aplica
+    if (formData.sociedad.COD_PAIS_SOC === 'OTRO') {
+      onSocPaisChange('OTRO');
+      const inp = document.getElementById('soc_pais_otro_txt');
+      if (inp) inp.value = formData.sociedad.OTR_PAIS_SOC || '';
+    }
 
     // Sección 4: Países de operación
     // renderListaPaises ya maneja los valores.

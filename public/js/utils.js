@@ -222,12 +222,25 @@ function convertirABuscable(selectId) {
 
   function _abrir() {
     if (sel.disabled) return;
-    // Habilitar escritura para buscar y limpiar el texto actual
     inp.readOnly     = false;
     inp.style.cursor = 'text';
     inp.value        = '';
     _renderDrop('');
+
+    // Posicionamiento inteligente: abre hacia donde haya más espacio
     drop.style.display = 'block';
+    const rect       = wrap.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const dropH      = Math.min(drop.scrollHeight, 240);
+    if (spaceBelow < dropH && spaceAbove > spaceBelow) {
+      drop.style.top    = 'auto';
+      drop.style.bottom = '100%';
+    } else {
+      drop.style.top    = '100%';
+      drop.style.bottom = 'auto';
+    }
+
     _abierto = true;
   }
 
@@ -358,7 +371,7 @@ function configurarOtros(selectElOrId, wrapElOrId, onHide) {
 
   function _evaluar() {
     const txt    = (sel.options[sel.selectedIndex]?.textContent || '').trim();
-    const esOtro = /^otro/i.test(txt);
+    const esOtro = /^otro|^sin\s/i.test(txt);
     if (esOtro) {
       wrap.style.display = 'block';
       requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -374,6 +387,34 @@ function configurarOtros(selectElOrId, wrapElOrId, onHide) {
 
   sel.addEventListener('change', _evaluar);
   // Evaluar estado inicial (útil al hidratar borradores)
+  _evaluar();
+}
+
+/**
+ * Versión simplificada (sin animación) para el patrón de sibling horizontal.
+ * Muestra/oculta un campo hermano con display:none/'' según si la opción
+ * seleccionada comienza con "Otro" o "Sin asignar".
+ *
+ * @param {string}   selectId   ID del <select>
+ * @param {string}   siblingId  ID del campo sibling a mostrar/ocultar
+ * @param {Function} [onHide]   Callback al ocultar (limpiar estado)
+ */
+function _activarSiblingOtro(selectId, siblingId, onHide) {
+  const sel = document.getElementById(selectId);
+  const fld = document.getElementById(siblingId);
+  if (!sel || !fld) return;
+
+  function _evaluar() {
+    const txt = (sel.options[sel.selectedIndex]?.textContent || '').trim();
+    if (/^otro|^sin\s/i.test(txt)) {
+      fld.style.display = '';
+    } else {
+      fld.style.display = 'none';
+      if (typeof onHide === 'function') onHide();
+    }
+  }
+
+  sel.addEventListener('change', _evaluar);
   _evaluar();
 }
 
@@ -435,4 +476,79 @@ function mostrarToast(msg, tipo = 'success') {
  */
 function showLoading(visible) {
   document.getElementById('loadingOverlay').style.display = visible ? 'flex' : 'none';
+}
+
+/* ── Campo "Otro país" para selectores de país ──────────────────────────────── */
+
+/**
+ * Añade la opción "Otro país (no listado)" al final de un select de países
+ * si aún no está presente.
+ * @param {HTMLSelectElement|string} selOrId
+ */
+function agregarOpcionOtroAlSelect(selOrId) {
+  const sel = typeof selOrId === 'string' ? document.getElementById(selOrId) : selOrId;
+  if (!sel) return;
+  // Eliminar entradas de catálogo que empiecen con "Otro/Otros" o "Sin asignar"
+  // para evitar duplicados y registros placeholder en el selector de país.
+  Array.from(sel.options).forEach(opt => {
+    if (/^otro|^sin\s/i.test(opt.textContent.trim())) sel.removeChild(opt);
+  });
+  if (!sel.querySelector('option[value="OTRO"]')) {
+    const opt = document.createElement('option');
+    opt.value       = 'OTRO';
+    opt.textContent = 'Otro pa\xEDs (no listado)';
+    sel.appendChild(opt);
+  }
+}
+
+/**
+ * Detecta si un select de ciudad quedó vacío tras cargarCatalogo (país sin
+ * municipios en la BD) y, de ser así, lo establece en "No aplica" (valor 'NA').
+ * Retorna true si no había ciudades reales, false si hay al menos una.
+ *
+ * @param {HTMLSelectElement} selMpio
+ * @returns {boolean}
+ */
+function _autoNoAplicaCiudad(selMpio) {
+  const realCities = Array.from(selMpio.options).filter(o => o.value !== '' && o.value !== 'NA');
+  if (realCities.length === 0) {
+    selMpio.innerHTML = '<option value="NA">No aplica</option>';
+    selMpio.disabled = true;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Configura el comportamiento "Otro país" para un select de países.
+ * Cuando se selecciona "OTRO", muestra el campo de texto libre.
+ * Cuando se selecciona un país normal, oculta ese campo.
+ *
+ * @param {string} paisSelId   ID del <select> de países
+ * @param {string} otroWrapId  ID del contenedor del campo de texto libre
+ * @param {Function} [onOtro]  Callback al activar "Otro"
+ * @param {Function} [onNormal] Callback al desactivar "Otro"
+ */
+function configurarPaisOtroTexto(paisSelId, otroWrapId, onOtro, onNormal) {
+  const sel  = document.getElementById(paisSelId);
+  const wrap = document.getElementById(otroWrapId);
+  if (!sel || !wrap) return;
+
+  function _evaluar() {
+    if (sel.value === 'OTRO') {
+      wrap.style.display = 'block';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        wrap.style.opacity = '1'; wrap.style.maxHeight = '100px';
+      }));
+      onOtro && onOtro();
+    } else {
+      wrap.style.opacity   = '0';
+      wrap.style.maxHeight = '0';
+      setTimeout(() => { wrap.style.display = 'none'; }, 210);
+      onNormal && onNormal();
+    }
+  }
+
+  sel.addEventListener('change', _evaluar);
+  _evaluar();
 }

@@ -1,5 +1,5 @@
 /**
- * state.js — Estado global del formulario SARLAFT (Persona Jurídica)
+ * state.js — Estado global del formulario SAGRILAFT (Persona Jurídica)
  *
  * Patrón: cada sección del formulario tiene su propia sub-clave en `formData`.
  * Al agregar un nuevo acordeón, basta con añadir su clave aquí siguiendo el
@@ -20,6 +20,7 @@ const formData = {
     DIG_VERI:     '',   // Dígito de verificación del NIT (GN_TERCE)
     NOM_COMP:     '',
     COD_PAIS_EXP: null,
+    OTR_PAIS_EXP: '',   // texto libre cuando país = 'OTRO'
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
     DIR_TERC:     '',
@@ -42,20 +43,19 @@ const formData = {
   representantes: [
     {
       TIP_REPR: 'P', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null,
-      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null,
-      COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
+      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, OTR_PAIS: '',
+      COD_DEPT: null, COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
     },
   ],
 
   // Sección 3 — Información de la sociedad
   sociedad: {
-    UBIC_SOC:     'N',   // 'N' = Nacional (valor por defecto) | 'E' = Extranjera
+    UBIC_SOC:     'N',   // 'N' = Nacional | 'E' = Extranjera | 'SC' = Sucursal en Colombia
     COD_PAIS_SOC: null,  // solo si UBIC_SOC = 'E'
+    OTR_PAIS_SOC: '',    // texto libre cuando COD_PAIS_SOC = 'OTRO'
     TIP_EMPR:     null,  // 'PUBLICA' | 'PRIVADA' | 'MIXTA'
     GRUP_EMPR:    null,  // 'S' | 'N'
     REL_GRUPO:    '',    // Rol en el grupo: MATRIZ / FILIAL / SUCURSAL / etc. (GN_JURID_CUMP)
-    TIP_SOCIE:    null,  // FK → MAE_TIP_SOCIE
-    OTR_SOCIE:    '',   // texto libre cuando tipo sociedad = "Otro"
   },
 
   // Sección 4 — Países de operación

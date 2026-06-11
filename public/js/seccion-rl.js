@@ -16,7 +16,7 @@ function _rlCampos(tipRepr) {
   return {
     TIP_REPR: tipRepr,
     NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, NUM_DOCU: '',
-    FEC_EXPE: '', COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    FEC_EXPE: '', COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
   };
 }
@@ -49,7 +49,7 @@ function _rlExtraHTML(extraId, idx) {
         <button class="btn-eliminar-grupo" type="button"
                 onclick="eliminarRLExtra(${extraId})" title="Eliminar">&#10005;</button>
       </div>
-      <div>
+      <div class="grupo-body">
         <div class="grid-4">
           <div class="field" id="field-rl_x${extraId}_nom">
             <label>Nombres <span class="req">*</span></label>
@@ -93,6 +93,11 @@ function _rlExtraHTML(extraId, idx) {
             </select>
             <span class="error-msg">Campo requerido</span>
           </div>
+          <div class="field" id="field-rl_x${extraId}_pais_otro" style="display:none">
+            <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+            <input type="text" id="rl_x${extraId}_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                   oninput="actualizarRL(${idx},'OTR_PAIS',this.value)" />
+          </div>
           <div class="field" id="field-rl_x${extraId}_dept">
             <label>Departamento <span class="req">*</span></label>
             <select id="rl_x${extraId}_dept" disabled
@@ -112,7 +117,7 @@ function _rlExtraHTML(extraId, idx) {
         </div>
         <div class="grid-4">
           <div class="field" id="field-rl_x${extraId}_dir">
-            <label>Dirección <span class="req">*</span></label>
+            <label>Direcci\xF3n domicilio <span class="req">*</span></label>
             <input type="text" id="rl_x${extraId}_dir" maxlength="255"
                    oninput="actualizarRL(${idx},'DIR_REPR',this.value);limpiarError('field-rl_x${extraId}_dir')" />
             <span class="error-msg">Campo requerido</span>
@@ -172,12 +177,33 @@ async function onRLPaisChange(codPais, prefijo, idx) {
   actualizarRL(idx, 'COD_DEPT', null);
   actualizarRL(idx, 'COD_MPIO', null);
 
-  const selDept = document.getElementById(`${prefijo}_dept`);
-  const selMpio = document.getElementById(`${prefijo}_mpio`);
+  const selDept    = document.getElementById(`${prefijo}_dept`);
+  const selMpio    = document.getElementById(`${prefijo}_mpio`);
+  const fieldOtro  = document.getElementById(`field-${prefijo}_pais_otro`);
+  const fieldDept  = document.getElementById(`field-${prefijo}_dept`);
+  const fieldMpio  = document.getElementById(`field-${prefijo}_mpio`);
+
   selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
   selMpio.disabled  = true;
   limpiarError(`field-${prefijo}_dept`);
   limpiarError(`field-${prefijo}_mpio`);
+
+  if (codPais === 'OTRO') {
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+    return;
+  }
+
+  if (fieldOtro) {
+    fieldOtro.style.display = 'none';
+    fieldOtro.style.gridColumn = '';
+    actualizarRL(idx, 'OTR_PAIS', '');
+    const inp = document.getElementById(`${prefijo}_pais_otro`);
+    if (inp) inp.value = '';
+  }
+  if (fieldDept) fieldDept.style.display = '';
+  if (fieldMpio) fieldMpio.style.display = '';
 
   if (!codPais) {
     selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
@@ -195,7 +221,11 @@ async function onRLPaisChange(codPais, prefijo, idx) {
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `${prefijo}_mpio`,
       'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
-    selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-${prefijo}_mpio`); };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      actualizarRL(idx, 'COD_MPIO', 'NA');
+    } else {
+      selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-${prefijo}_mpio`); };
+    }
   }
 }
 
@@ -218,12 +248,35 @@ async function onRLExtraPaisChange(extraId, idx, codPais) {
   actualizarRL(idx, 'COD_PAIS', codPais);
   actualizarRL(idx, 'COD_DEPT', null);
   actualizarRL(idx, 'COD_MPIO', null);
-  const selDept = document.getElementById(`rl_x${extraId}_dept`);
-  const selMpio = document.getElementById(`rl_x${extraId}_mpio`);
+
+  const selDept    = document.getElementById(`rl_x${extraId}_dept`);
+  const selMpio    = document.getElementById(`rl_x${extraId}_mpio`);
+  const fieldOtro  = document.getElementById(`field-rl_x${extraId}_pais_otro`);
+  const fieldDept  = document.getElementById(`field-rl_x${extraId}_dept`);
+  const fieldMpio  = document.getElementById(`field-rl_x${extraId}_mpio`);
+
   selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
   selMpio.disabled  = true;
   limpiarError(`field-rl_x${extraId}_dept`);
   limpiarError(`field-rl_x${extraId}_mpio`);
+
+  if (codPais === 'OTRO') {
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+    return;
+  }
+
+  if (fieldOtro) {
+    fieldOtro.style.display = 'none';
+    fieldOtro.style.gridColumn = '';
+    actualizarRL(idx, 'OTR_PAIS', '');
+    const inp = document.getElementById(`rl_x${extraId}_pais_otro`);
+    if (inp) inp.value = '';
+  }
+  if (fieldDept) fieldDept.style.display = '';
+  if (fieldMpio) fieldMpio.style.display = '';
+
   if (!codPais) { selDept.innerHTML = '<option value="">— Seleccione país primero —</option>'; selDept.disabled = true; return; }
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
@@ -237,7 +290,11 @@ async function onRLExtraPaisChange(extraId, idx, codPais) {
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `rl_x${extraId}_mpio`,
       'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
-    selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-rl_x${extraId}_mpio`); };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      actualizarRL(idx, 'COD_MPIO', 'NA');
+    } else {
+      selMpio.onchange = e => { actualizarRL(idx, 'COD_MPIO', e.target.value); limpiarError(`field-rl_x${extraId}_mpio`); };
+    }
   }
 }
 
@@ -347,10 +404,14 @@ async function hidratarBloqueRLPrincipal() {
   if (d.COD_PAIS) {
     await onRLPaisChange(d.COD_PAIS, 'rl_p', 0);
     set('rl_p_pais', d.COD_PAIS);
-    if (d.COD_DEPT && d.COD_DEPT !== 'NA') {
-      await onRLDeptChange(d.COD_DEPT, 'rl_p', 0);
-      set('rl_p_dept', d.COD_DEPT);
+    if (d.COD_PAIS === 'OTRO') {
+      set('rl_p_pais_otro', d.OTR_PAIS);
+    } else {
+      if (d.COD_DEPT && d.COD_DEPT !== 'NA') {
+        await onRLDeptChange(d.COD_DEPT, 'rl_p', 0);
+        set('rl_p_dept', d.COD_DEPT);
+      }
+      set('rl_p_mpio', d.COD_MPIO);
     }
-    set('rl_p_mpio', d.COD_MPIO);
   }
 }

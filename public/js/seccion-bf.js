@@ -24,7 +24,7 @@ function _bfCampos() {
     TIP_BENE: 'N',
     NOM_BENE: '', APE_BENE: '', RAZ_BENE: '',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_BENE: '', TEL_BENE: '', MAIL_BENE: '',
   };
 }
@@ -217,6 +217,11 @@ function _crearGrupoBFEl(beneficiario) {
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
+        <div class="field" id="field-bf_${id}_pais_otro" style="display:none">
+          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                 oninput="actualizarBF(${id},'OTR_PAIS',this.value)" />
+        </div>
         <div class="field" id="field-bf_${id}_dept">
           <label>Departamento <span class="req">*</span></label>
           <select id="bf_${id}_dept" disabled
@@ -369,12 +374,35 @@ async function onBFPaisChange(id, codPais) {
   b.COD_DEPT = null;
   b.COD_MPIO = null;
 
-  const selDept = document.getElementById(`bf_${id}_dept`);
-  const selMpio = document.getElementById(`bf_${id}_mpio`);
+  const selDept    = document.getElementById(`bf_${id}_dept`);
+  const selMpio    = document.getElementById(`bf_${id}_mpio`);
+  const fieldOtro  = document.getElementById(`field-bf_${id}_pais_otro`);
+  const fieldDept  = document.getElementById(`field-bf_${id}_dept`);
+  const fieldMpio  = document.getElementById(`field-bf_${id}_mpio`);
+
   selMpio.innerHTML = '<option value="">&#x2014; Seleccione departamento primero &#x2014;</option>';
   selMpio.disabled  = true;
   limpiarError(`field-bf_${id}_dept`);
   limpiarError(`field-bf_${id}_mpio`);
+
+  // "Otro país" — mostrar campo libre, ocultar cascada
+  if (codPais === 'OTRO') {
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+    return;
+  }
+
+  // Restaurar cascada si volvemos de OTRO
+  if (fieldOtro) {
+    fieldOtro.style.display = 'none';
+    fieldOtro.style.gridColumn = '';
+    b.OTR_PAIS = '';
+    const inp = document.getElementById(`bf_${id}_pais_otro`);
+    if (inp) inp.value = '';
+  }
+  if (fieldDept) fieldDept.style.display = '';
+  if (fieldMpio) fieldMpio.style.display = '';
 
   if (!codPais) {
     selDept.innerHTML = '<option value="">&#x2014; Seleccione pa&#xED;s primero &#x2014;</option>';
@@ -399,10 +427,14 @@ async function onBFPaisChange(id, codPais) {
       '/api/catalogo/ciudades', `bf_${id}_mpio`,
       'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais }
     );
-    selMpio.onchange = e => {
-      b.COD_MPIO = e.target.value || null;
-      limpiarError(`field-bf_${id}_mpio`);
-    };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      b.COD_MPIO = 'NA';
+    } else {
+      selMpio.onchange = e => {
+        b.COD_MPIO = e.target.value || null;
+        limpiarError(`field-bf_${id}_mpio`);
+      };
+    }
   }
 }
 
@@ -492,12 +524,12 @@ function validarYContinuarBF() {
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 12 completa. Continúe con la sección 13.', 'success');
+  mostrarToast('Sección 13 completa. Continúe con la sección 14.', 'success');
   document.getElementById('accordion-bf').classList.add('collapsed');
-  const acc13 = document.getElementById('accordion-docs');
-  if (acc13) {
-    acc13.classList.remove('collapsed');
-    acc13.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const acc14 = document.getElementById('accordion-docs');
+  if (acc14) {
+    acc14.classList.remove('collapsed');
+    acc14.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   console.log('✅ formData.beneficiarios:', JSON.stringify(formData.beneficiarios, null, 2));
 }
