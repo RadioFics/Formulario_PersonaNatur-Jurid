@@ -44,13 +44,7 @@ function actualizarTituloBF(id) {
   const b = _bfGet(id);
   if (!b) return;
   const pos = _bfPos(id) + 1;
-  let nombre = '';
-  if (b.TIP_BENE === 'J') {
-    nombre = (b.RAZ_BENE || '').trim().slice(0, 45);
-  } else {
-    nombre = [(b.NOM_BENE || '').trim(), (b.APE_BENE || '').trim(),
-              (b.RAZ_BENE || '').trim()].filter(Boolean).join(' / ').slice(0, 45);
-  }
+  const nombre = [(b.NOM_BENE || '').trim(), (b.APE_BENE || '').trim()].filter(Boolean).join(' ').slice(0, 45);
   const el = document.getElementById(`bf_titulo_${id}`);
   if (el) el.textContent = `Beneficiario ${pos}${nombre ? ' — ' + nombre : ''}`;
 }
@@ -120,11 +114,8 @@ function _bfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PA
 /* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
 function _crearGrupoBFEl(beneficiario) {
   const id  = beneficiario._id;
-  const esJ = beneficiario.TIP_BENE === 'J';
-  const td  = esJ ? _bfTdNitOpts() : _bfTdOpts();
+  const td  = _bfTdOpts();
   const pa  = _bfPaOpts();
-  const natDisplay    = esJ ? 'display:none;opacity:0;max-height:0;overflow:hidden' : '';
-  const razReqDisplay = esJ ? '' : 'display:none';
 
   const el  = document.createElement('div');
   el.className = 'grupo-item';
@@ -137,65 +128,43 @@ function _crearGrupoBFEl(beneficiario) {
     </div>
     <div class="grupo-body" id="bf_body_${id}">
 
-      <!-- Tipo de persona -->
-      <div class="grid-4" style="margin-bottom:6px">
-        <div class="field field-radio">
-          <label>Tipo de persona <span class="req">*</span></label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" name="bf_tippers_${id}" value="N" ${!esJ ? 'checked' : ''}
-                     onchange="onBFTipoPersonaChange(${id},'N')"> Natural
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="bf_tippers_${id}" value="J" ${esJ ? 'checked' : ''}
-                     onchange="onBFTipoPersonaChange(${id},'J')"> Jur&#xED;dica
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Campos solo persona natural: NOM, APE, FEC_EXPE -->
-      <div id="bf_${id}_natural_wrap" style="${natDisplay}; transition:opacity .2s,max-height .3s">
-        <div class="grid-4">
-          <div class="field" id="field-bf_${id}_nom">
-            <label>Nombres <span class="req">*</span></label>
-            <input type="text" id="bf_${id}_nom" maxlength="100" placeholder="Nombres completos"
-                   oninput="actualizarBF(${id},'NOM_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_nom')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-          <div class="field" id="field-bf_${id}_ape">
-            <label>Apellidos <span class="req">*</span></label>
-            <input type="text" id="bf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
-                   oninput="actualizarBF(${id},'APE_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_ape')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-          <div class="field" id="field-bf_${id}_fec">
-            <label>Fecha de expedici&#xF3;n <span class="req">*</span></label>
-            <input type="date" id="bf_${id}_fec"
-                   onchange="actualizarBF(${id},'FEC_EXPE',this.value);limpiarError('field-bf_${id}_fec')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Campos comunes: RAZ, TIP_DOCU, NUM_DOCU -->
-      <div class="grid-4">
-        <div class="field" id="field-bf_${id}_raz">
-          <label>Raz&#xF3;n social <span class="req" id="bf_${id}_raz_req" style="${razReqDisplay}">*</span></label>
-          <input type="text" id="bf_${id}_raz" maxlength="255" placeholder="${esJ ? 'Nombre de la empresa' : 'Si aplica (persona jur&#xED;dica)'}"
-                 oninput="actualizarBF(${id},'RAZ_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_raz')" />
+      <!-- Nombres, Apellidos, Fecha expedición -->
+      <div class="grid-3">
+        <div class="field" id="field-bf_${id}_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_nom" maxlength="100" placeholder="Nombres completos"
+                 oninput="actualizarBF(${id},'NOM_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_nom')" />
           <span class="error-msg">Campo requerido</span>
         </div>
+        <div class="field" id="field-bf_${id}_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+                 oninput="actualizarBF(${id},'APE_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_ape')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-bf_${id}_fec">
+          <label>Fecha de expedici&#xF3;n <span class="req">*</span></label>
+          <input type="date" id="bf_${id}_fec"
+                 onchange="actualizarBF(${id},'FEC_EXPE',this.value);limpiarError('field-bf_${id}_fec')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <!-- TIP_DOCU, NUM_DOCU, TEL, MAIL -->
+      <div class="grid-4">
         <div class="field" id="field-bf_${id}_tipdoc">
-          <label>Tipo de doc. <span class="req">*</span></label>
+          <label>Tipo de documento <span class="req">*</span></label>
           <select id="bf_${id}_tipdoc"
-                  onchange="actualizarBF(${id},'TIP_DOCU',this.value);limpiarError('field-bf_${id}_tipdoc')">
+                  onchange="onBFTipdocChange(${id},this.value);actualizarBF(${id},'TIP_DOCU',this.value);limpiarError('field-bf_${id}_tipdoc')">
             ${td}
           </select>
+          <input type="text" id="bf_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                 placeholder="Especifique el tipo de documento"
+                 oninput="actualizarBF(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-bf_${id}_numdoc">
-          <label>N&#xFA;mero de doc. <span class="req">*</span></label>
+          <label>N&#xFA;mero de documento<span class="req">*</span></label>
           <input type="text" id="bf_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\\D/g,'');actualizarBF(${id},'NUM_DOCU',this.value);limpiarError('field-bf_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
@@ -205,9 +174,15 @@ function _crearGrupoBFEl(beneficiario) {
           <input type="tel" id="bf_${id}_tel" maxlength="20"
                  oninput="actualizarBF(${id},'TEL_BENE',this.value)" />
         </div>
+        <div class="field" id="field-bf_${id}_mail">
+          <label>Correo electr&#xF3;nico</label>
+          <input type="email" id="bf_${id}_mail" maxlength="100"
+                 oninput="actualizarBF(${id},'MAIL_BENE',this.value);limpiarError('field-bf_${id}_mail')" />
+          <span class="error-msg">Email inv&#xE1;lido</span>
+        </div>
       </div>
 
-      <!-- País / Dept / Ciudad / Dirección / Mail -->
+      <!-- País / Dept / Ciudad / Dirección -->
       <div class="grid-4">
         <div class="field" id="field-bf_${id}_pais">
           <label>Pa&#xED;s <span class="req">*</span></label>
@@ -245,57 +220,40 @@ function _crearGrupoBFEl(beneficiario) {
         </div>
       </div>
 
-      <div class="grid-4">
-        <div class="field" id="field-bf_${id}_mail">
-          <label>Correo electr&#xF3;nico</label>
-          <input type="email" id="bf_${id}_mail" maxlength="100"
-                 oninput="actualizarBF(${id},'MAIL_BENE',this.value);limpiarError('field-bf_${id}_mail')" />
-          <span class="error-msg">Email inv&#xE1;lido</span>
-        </div>
-      </div>
-
     </div>`;
+  agregarOpcionOtroAlSelect(el.querySelector(`#bf_${id}_pais`));
+  agregarOpcionOtroAlTipdoc(el.querySelector(`#bf_${id}_tipdoc`));
   return el;
 }
 
 /* ── Hidratar campos desde estado ────────────────────────────────────────────── */
 function _hydrateBFFields(beneficiario, el) {
   const id  = beneficiario._id;
-  const esJ = beneficiario.TIP_BENE === 'J';
   const set = (selector, value) => {
     const field = el.querySelector(selector);
     if (field) field.value = value || '';
   };
 
-  // Restaurar radio tipo persona
-  const radJ = el.querySelector(`input[name="bf_tippers_${id}"][value="J"]`);
-  const radN = el.querySelector(`input[name="bf_tippers_${id}"][value="N"]`);
-  if (esJ && radJ) radJ.checked = true;
-  if (!esJ && radN) radN.checked = true;
-
   set(`#bf_${id}_nom`,    beneficiario.NOM_BENE);
   set(`#bf_${id}_ape`,    beneficiario.APE_BENE);
-  set(`#bf_${id}_raz`,    beneficiario.RAZ_BENE);
   set(`#bf_${id}_tipdoc`, beneficiario.TIP_DOCU);
+  if (beneficiario.TIP_DOCU === 'OTR_TPDOC') {
+    const inpOtro = el.querySelector(`#bf_${id}_tipdoc_otro`);
+    if (inpOtro) { inpOtro.style.display = ''; inpOtro.value = beneficiario.OTR_TPDOC || ''; }
+  }
   set(`#bf_${id}_numdoc`, beneficiario.NUM_DOCU);
   set(`#bf_${id}_fec`,    beneficiario.FEC_EXPE);
   set(`#bf_${id}_tel`,    beneficiario.TEL_BENE);
   set(`#bf_${id}_mail`,   beneficiario.MAIL_BENE);
   set(`#bf_${id}_dir`,    beneficiario.DIR_BENE);
 
-  // Aplicar visibilidad sin animación en carga
-  const naturalWrap = el.querySelector(`#bf_${id}_natural_wrap`);
-  const razReq      = el.querySelector(`#bf_${id}_raz_req`);
-  if (esJ) {
-    if (naturalWrap) { naturalWrap.style.display = 'none'; naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; }
-    if (razReq)      razReq.style.display = '';
-  } else {
-    if (naturalWrap) { naturalWrap.style.display = ''; naturalWrap.style.opacity = '1'; naturalWrap.style.maxHeight = '99999px'; }
-    if (razReq)      razReq.style.display = 'none';
-  }
-
   if (beneficiario.COD_PAIS) {
     onBFPaisChange(id, beneficiario.COD_PAIS).then(() => {
+      if (beneficiario.COD_PAIS === 'OTRO' || String(beneficiario.COD_PAIS) === '52') {
+        const inp = el.querySelector(`#bf_${id}_pais_otro`);
+        if (inp) inp.value = beneficiario.OTR_PAIS || '';
+        return Promise.resolve();
+      }
       if (beneficiario.COD_DEPT) {
         const deptEl = el.querySelector(`#bf_${id}_dept`);
         if (deptEl) deptEl.value = beneficiario.COD_DEPT;
@@ -386,7 +344,7 @@ async function onBFPaisChange(id, codPais) {
   limpiarError(`field-bf_${id}_mpio`);
 
   // "Otro país" — mostrar campo libre, ocultar cascada
-  if (codPais === 'OTRO') {
+  if (codPais === 'OTRO' || String(codPais) === '52') {
     if (fieldDept) fieldDept.style.display = 'none';
     if (fieldMpio) fieldMpio.style.display = 'none';
     if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
@@ -464,35 +422,25 @@ async function onBFDeptChange(id, codDept) {
 
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 function _validarGrupoBF(id) {
-  const b   = _bfGet(id);
+  const b  = _bfGet(id);
   if (!b) return true;
-  const esJ = b.TIP_BENE === 'J';
-  let ok    = true;
+  let ok   = true;
 
-  // Campos solo persona natural
-  if (!esJ) {
-    [
-      [`field-bf_${id}_nom`, b.NOM_BENE],
-      [`field-bf_${id}_ape`, b.APE_BENE],
-      [`field-bf_${id}_fec`, b.FEC_EXPE],
-    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
-  }
-
-  // RAZ obligatoria para jurídica
-  if (esJ && (!b.RAZ_BENE || !String(b.RAZ_BENE).trim())) {
-    mostrarError(`field-bf_${id}_raz`); ok = false;
-  }
-
-  // Campos comunes
   [
+    [`field-bf_${id}_nom`,    b.NOM_BENE],
+    [`field-bf_${id}_ape`,    b.APE_BENE],
+    [`field-bf_${id}_fec`,    b.FEC_EXPE],
     [`field-bf_${id}_tipdoc`, b.TIP_DOCU],
     [`field-bf_${id}_numdoc`, b.NUM_DOCU],
     [`field-bf_${id}_pais`,   b.COD_PAIS],
-    [`field-bf_${id}_dept`,   b.COD_DEPT],
-    [`field-bf_${id}_mpio`,   b.COD_MPIO],
-  ].forEach(([fid, v]) => {
-    if (!v || !String(v).trim()) { mostrarError(fid); ok = false; }
-  });
+  ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+
+  if (b.COD_PAIS !== 'OTRO' && String(b.COD_PAIS) !== '52') {
+    [
+      [`field-bf_${id}_dept`, b.COD_DEPT],
+      [`field-bf_${id}_mpio`, b.COD_MPIO],
+    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  }
 
   if (b.MAIL_BENE && !esEmailValido(b.MAIL_BENE)) {
     mostrarError(`field-bf_${id}_mail`); ok = false;
@@ -524,14 +472,24 @@ function validarYContinuarBF() {
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 13 completa. Continúe con la sección 14.', 'success');
+  mostrarToast('Sección 9 completa. Continúe con la siguiente sección.', 'success');
   document.getElementById('accordion-bf').classList.add('collapsed');
-  const acc14 = document.getElementById('accordion-docs');
-  if (acc14) {
-    acc14.classList.remove('collapsed');
-    acc14.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const acc10 = document.getElementById('accordion-financiera');
+  if (acc10) {
+    acc10.classList.remove('collapsed');
+    acc10.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   console.log('✅ formData.beneficiarios:', JSON.stringify(formData.beneficiarios, null, 2));
+}
+
+function onBFTipdocChange(id, val) {
+  const inp = document.getElementById(`bf_${id}_tipdoc_otro`);
+  if (inp) inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    if (inp) inp.value = '';
+    const b = _bfGet(id);
+    if (b) b.OTR_TPDOC = null;
+  }
 }
 
 function limpiarSeccionBF() {

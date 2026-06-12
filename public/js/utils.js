@@ -502,6 +502,19 @@ function agregarOpcionOtroAlSelect(selOrId) {
 }
 
 /**
+ * Añade la opción "Sin asignar / Otro tipo" al final de un select de tipo de documento.
+ * @param {HTMLSelectElement|string} selOrId
+ */
+function agregarOpcionOtroAlTipdoc(selOrId) {
+  const sel = typeof selOrId === 'string' ? document.getElementById(selOrId) : selOrId;
+  if (!sel || sel.querySelector('option[value="OTR_TPDOC"]')) return;
+  const opt = document.createElement('option');
+  opt.value       = 'OTR_TPDOC';
+  opt.textContent = 'Sin asignar / Otro tipo';
+  sel.appendChild(opt);
+}
+
+/**
  * Detecta si un select de ciudad quedó vacío tras cargarCatalogo (país sin
  * municipios en la BD) y, de ser así, lo establece en "No aplica" (valor 'NA').
  * Retorna true si no había ciudades reales, false si hay al menos una.

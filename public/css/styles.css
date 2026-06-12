@@ -428,6 +428,9 @@ body {
 .btn-agregar-pais:hover,
 .btn-agregar-grupo:hover { background: #EAF5FA; }
 
+/* Input secundario dentro de un .field (p.ej. tipo de doc. otro) */
+.otro-inp { margin-top: 6px; }
+
 /* ── Textarea (campo de texto largo) ──────────────────────────────────────── */
 .field textarea {
   padding: 8px 10px;
@@ -457,12 +460,10 @@ body {
 .field-radio {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
 }
 .field-radio > label:first-child {
-  flex: 1;
   margin-bottom: 0;
 }
 .radio-group {

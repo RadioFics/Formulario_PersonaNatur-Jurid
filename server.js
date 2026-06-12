@@ -30,7 +30,8 @@ const crypto         = require('crypto');
 
 // ─── Validación MIME de archivos ─────────────────────────────────────────────
 const TIPOS_DOC_PERMITIDOS = new Set([
-  'RUT', 'CERT_BANC', 'CERT_EXIS', 'DOC_ID_RL', 'EST_FIN', 'CERT_ACCI', 'CART_ACEP',
+  'RUT', 'CERT_BANC', 'CERT_EXIS', 'DOC_ID_RL', 'EST_FIN', 'EST_FIN_1', 'EST_FIN_2',
+  'CERT_ACCI', 'CART_ACEP', 'ARCH_FIRMA',
 ]);
 
 const _EXTENSIONES_PERMITIDAS = new Set(['pdf']);
@@ -146,7 +147,9 @@ const _multerStorage = multer.diskStorage({
 });
 // Capa 1 — rechazo rápido por fieldname o extensión antes de escribir en disco
 const _multerFileFilter = (req, file, cb) => {
-  if (!TIPOS_DOC_PERMITIDOS.has(file.fieldname)) {
+  const allowed = TIPOS_DOC_PERMITIDOS.has(file.fieldname) ||
+                  /^DOC_ID_RL_\d+$/.test(file.fieldname);
+  if (!allowed) {
     return cb(Object.assign(new Error(`Campo no permitido: "${file.fieldname}"`), { status: 400 }));
   }
   const ext = path.extname(file.originalname).replace('.', '').toLowerCase();
@@ -468,7 +471,7 @@ app.get('/api/catalogo/tipos-documento', async (req, res) => {
     const rows = await query(
       `SELECT COD_TPDOC, NOM_TPDOC, COD_ABREV
          FROM MAE_TPDOC
-        ${soloNit ? 'WHERE COD_TPDOC = 8' : ''}
+        ${soloNit ? 'WHERE COD_TPDOC = 8' : 'WHERE COD_TPDOC > 0'}
         ORDER BY NOM_TPDOC`
     );
     res.json(rows);
@@ -487,6 +490,7 @@ app.get('/api/catalogo/paises', async (req, res) => {
     const rows = await query(
       `SELECT COD_PAIS, NOM_PAIS, IND_PRINCI
          FROM MAE_PAIS
+        WHERE COD_PAIS > 0
         ORDER BY CASE WHEN IND_PRINCI = 'S' THEN 0 ELSE 1 END, NOM_PAIS`
     );
     res.json(rows);
@@ -525,6 +529,7 @@ app.get('/api/catalogo/departamentos', async (req, res) => {
 app.get('/api/catalogo/ciudades', async (req, res) => {
   const { cod_dept, cod_pais } = req.query;
   if (!cod_pais) return res.status(400).json({ error: 'Se requiere cod_pais' });
+  if (cod_pais === 'OTRO' || Number(cod_pais) === 52) return res.json([]);
   try {
     let rows;
     if (cod_dept) {
@@ -1868,7 +1873,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
   if (errVal.length)
     return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
 
-  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
+  const toInt  = v => { if (v === null || v === undefined || v === '' || v === 'NA') return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; };
   const toDec  = v => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
   const toDate = v => v ? new Date(v) : null;
   const toChar = v => v || null;
@@ -1921,6 +1926,9 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
       .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
+      .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
+      .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
+      .input('DESC_GRUPO',    sql.VarChar(sql.MAX), toChar(d.DESC_GRUPO))
       .input('COD_PAIS_EXP',  sql.Int,          toInt(d.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
@@ -1931,6 +1939,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
               COD_PAIS_ORI=@COD_PAIS_ORI,UBIC_SOC=@UBIC_SOC,
               COD_PAIS_SOC=@COD_PAIS_SOC,OTR_PAIS_SOC=@OTR_PAIS_SOC,
               TIP_EMPR=@TIP_EMPR,GRUP_EMPR=@GRUP_EMPR,
+              CTRL_DECLA=@CTRL_DECLA,CAL_GRUPO=@CAL_GRUPO,DESC_GRUPO=@DESC_GRUPO,
               COD_PAIS_EXP=@COD_PAIS_EXP,OTR_PAIS_EXP=@OTR_PAIS_EXP,
               COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
@@ -1982,18 +1991,16 @@ app.put('/api/actualizar-completo', async (req, res) => {
     const tieCump = d.cump_TIE_JUNTA || 'N';
     await r()
       .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-      .input('REL_GRUPO',sql.VarChar(200),toChar(d.REL_GRUPO))
+      .input('TIE_NORM', sql.Char(1),     toChar(d.TIE_NORM) || 'N')
       .input('NORM_LAFT',sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',sql.VarChar(200),toChar(d.SIS_PREVE))
       .input('OTR_PREVE',sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',sql.VarChar(500),toChar(d.DESC_NORM))
       .input('TIE_JUNTA',sql.Char(1),    tieCump)
-      .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,REL_GRUPO,NORM_LAFT,SIS_PREVE,OTR_PREVE,DESC_NORM,TIE_JUNTA)
-              VALUES(@COD_EMPR,@COD_TERC,@REL_GRUPO,@NORM_LAFT,@SIS_PREVE,@OTR_PREVE,@DESC_NORM,@TIE_JUNTA)`);
-    for (const of_ of (Array.isArray(d.oficiales)?d.oficiales:[])) {
-      // Flat format: TIP_REPR is directly on the object
-      const p = of_;
-      if (!p.NOM_RESP && !p.RAZ_RESP) continue;
+      .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,TIE_NORM,NORM_LAFT,SIS_PREVE,OTR_PREVE,DESC_NORM,TIE_JUNTA)
+              VALUES(@COD_EMPR,@COD_TERC,@TIE_NORM,@NORM_LAFT,@SIS_PREVE,@OTR_PREVE,@DESC_NORM,@TIE_JUNTA)`);
+    for (const p of (Array.isArray(d.oficiales)?d.oficiales:[])) {
+      if (!p.NOM_RESP) continue;
       await r()
           .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
           .input('TIP_REPR', sql.Char(1),     p.TIP_REPR || 'P')
@@ -2003,7 +2010,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('FEC_EXPE', sql.Date,        toDate(p.FEC_EXPE))
           .input('NOM_RESP', sql.VarChar(60), toChar(p.NOM_RESP))
           .input('APE_RESP', sql.VarChar(60), toChar(p.APE_RESP))
-          .input('RAZ_RESP', sql.VarChar(120),toChar(p.RAZ_RESP))
+          .input('CEL_RESP', sql.VarChar(30),  toChar(p.CEL_RESP))
           .input('COD_PAIS', sql.Int,          toInt(p.COD_PAIS))
           .input('OTR_PAIS', sql.VarChar(100), toChar(p.OTR_PAIS))
           .input('COD_DEPT', sql.Int,          toInt(p.COD_DEPT))
@@ -2011,37 +2018,39 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('DIR_RESP', sql.VarChar(120), toChar(p.DIR_RESP))
           .input('TEL_RESP', sql.VarChar(30),  toChar(p.TEL_RESP))
           .input('MAIL_RESP',sql.VarChar(100), toChar(p.MAIL_RESP))
+          .input('OTR_TPDOC',sql.VarChar(100), toChar(p.OTR_TPDOC))
           .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,TIP_REPR,TIP_SIST,TIP_DOCU,NUM_DOCU,FEC_EXPE,
-                  NOM_RESP,APE_RESP,RAZ_RESP,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_RESP,TEL_RESP,MAIL_RESP)
+                  NOM_RESP,APE_RESP,CEL_RESP,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_RESP,TEL_RESP,MAIL_RESP,OTR_TPDOC)
                   VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_SIST,@TIP_DOCU,@NUM_DOCU,@FEC_EXPE,
-                  @NOM_RESP,@APE_RESP,@RAZ_RESP,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_RESP,@TEL_RESP,@MAIL_RESP)`);
+                  @NOM_RESP,@APE_RESP,@CEL_RESP,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_RESP,@TEL_RESP,@MAIL_RESP,@OTR_TPDOC)`);
     }
 
     // 6. GN_JURID_JD
     await del('GN_JURID_JD');
     for (const m of (Array.isArray(d.juntaDirectiva)?d.juntaDirectiva:[])) {
-      // Flat format: TIP_REPR is directly on the object
-      if (!m.NOM_MIEM && !m.RAZ_MIEM) continue;
+      if (!m.NOM_MIEM) continue;
       await r()
           .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
           .input('TIP_REPR', sql.Char(1),     m.TIP_REPR || 'P')
           .input('TIP_MIEM', sql.VarChar(10), toChar(m.TIP_MIEM))
           .input('NOM_MIEM', sql.VarChar(60), toChar(m.NOM_MIEM))
           .input('APE_MIEM', sql.VarChar(60), toChar(m.APE_MIEM))
-          .input('RAZ_MIEM', sql.VarChar(120),toChar(m.RAZ_MIEM))
           .input('TIP_DOCU', sql.Int,         toInt(m.TIP_DOCU))
           .input('NUM_DOCU', sql.VarChar(20), toChar(m.NUM_DOCU))
           .input('FEC_EXPE', sql.Date,        toDate(m.FEC_EXPE))
-          .input('COD_PAIS', sql.Int,         toInt(m.COD_PAIS))
-          .input('COD_DEPT', sql.Int,         toInt(m.COD_DEPT))
-          .input('COD_MPIO', sql.Int,         toInt(m.COD_MPIO))
-          .input('DIR_MIEM', sql.VarChar(120),toChar(m.DIR_MIEM))
-          .input('TEL_MIEM', sql.VarChar(30), toChar(m.TEL_MIEM))
-          .input('MAIL_MIEM',sql.VarChar(100),toChar(m.MAIL_MIEM))
-          .query(`INSERT INTO GN_JURID_JD(COD_EMPR,COD_TERC,TIP_REPR,TIP_MIEM,NOM_MIEM,APE_MIEM,RAZ_MIEM,
-                  TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_MIEM,TEL_MIEM,MAIL_MIEM)
-                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_MIEM,@NOM_MIEM,@APE_MIEM,@RAZ_MIEM,
-                  @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_MIEM,@TEL_MIEM,@MAIL_MIEM)`);
+          .input('COD_PAIS', sql.Int,          toInt(m.COD_PAIS))
+          .input('OTR_PAIS', sql.VarChar(100), toChar(m.OTR_PAIS))
+          .input('COD_DEPT', sql.Int,          toInt(m.COD_DEPT))
+          .input('COD_MPIO', sql.Int,          toInt(m.COD_MPIO))
+          .input('DIR_MIEM', sql.VarChar(120), toChar(m.DIR_MIEM))
+          .input('CEL_MIEM', sql.VarChar(30),  toChar(m.CEL_MIEM))
+          .input('TEL_MIEM', sql.VarChar(30),  toChar(m.TEL_MIEM))
+          .input('MAIL_MIEM',sql.VarChar(100), toChar(m.MAIL_MIEM))
+          .input('OTR_TPDOC',sql.VarChar(100), toChar(m.OTR_TPDOC))
+          .query(`INSERT INTO GN_JURID_JD(COD_EMPR,COD_TERC,TIP_REPR,TIP_MIEM,NOM_MIEM,APE_MIEM,
+                  TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_MIEM,CEL_MIEM,TEL_MIEM,MAIL_MIEM,OTR_TPDOC)
+                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_MIEM,@NOM_MIEM,@APE_MIEM,
+                  @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_MIEM,@CEL_MIEM,@TEL_MIEM,@MAIL_MIEM,@OTR_TPDOC)`);
     }
 
     // 7. GN_JURID_RF
@@ -2061,23 +2070,25 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('TIP_DOCU',    sql.Int,         toInt(rv.TIP_DOCU))
           .input('NUM_DOCU',    sql.VarChar(20), toChar(rv.NUM_DOCU))
           .input('FEC_EXPE',    sql.Date,        toDate(rv.FEC_EXPE))
-          .input('COD_PAIS',    sql.Int,         toInt(rv.COD_PAIS))
-          .input('COD_DEPT',    sql.Int,         toInt(rv.COD_DEPT))
-          .input('COD_MPIO',    sql.Int,         toInt(rv.COD_MPIO))
-          .input('DIR_REVI',    sql.VarChar(120),toChar(rv.DIR_REVI))
-          .input('CEL_REVI',    sql.VarChar(30), toChar(rv.CEL_REVI))
-          .input('TEL_REVI',    sql.VarChar(30), toChar(rv.TEL_REVI))
-          .input('MAIL_REVI',   sql.VarChar(100),toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',  sql.Char(1),     toChar(rv.REVI_FIRMA)||'N')
-          .input('RAZ_FIRMA',   sql.VarChar(120),toChar(rv.RAZ_FIRMA))
-          .input('TIP_DOCU_FIR',sql.Int,         toInt(rv.TIP_DOCU_FIR))
-          .input('NUM_DOCU_FIR',sql.VarChar(20), toChar(rv.NUM_DOCU_FIR))
+          .input('COD_PAIS',    sql.Int,          toInt(rv.COD_PAIS))
+          .input('OTR_PAIS',    sql.VarChar(100), toChar(rv.OTR_PAIS))
+          .input('COD_DEPT',    sql.Int,          toInt(rv.COD_DEPT))
+          .input('COD_MPIO',    sql.Int,          toInt(rv.COD_MPIO))
+          .input('DIR_REVI',    sql.VarChar(120), toChar(rv.DIR_REVI))
+          .input('CEL_REVI',    sql.VarChar(30),  toChar(rv.CEL_REVI))
+          .input('TEL_REVI',    sql.VarChar(30),  toChar(rv.TEL_REVI))
+          .input('MAIL_REVI',   sql.VarChar(100), toChar(rv.MAIL_REVI))
+          .input('REVI_FIRMA',  sql.Char(1),      toChar(rv.REVI_FIRMA)||'N')
+          .input('RAZ_FIRMA',   sql.VarChar(120), toChar(rv.RAZ_FIRMA))
+          .input('TIP_DOCU_FIR',sql.Int,          toInt(rv.TIP_DOCU_FIR))
+          .input('NUM_DOCU_FIR',sql.VarChar(20),  toChar(rv.NUM_DOCU_FIR))
+          .input('OTR_TPDOC',   sql.VarChar(100), toChar(rv.OTR_TPDOC))
           .query(`INSERT INTO GN_JURID_RF(COD_EMPR,COD_TERC,TIP_REPR,TIP_PERS,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,
-                  TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
-                  REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR)
+                  TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
+                  REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OTR_TPDOC)
                   VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_PERS,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,
-                  @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
-                  @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR)`);
+                  @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
+                  @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OTR_TPDOC)`);
     }
 
     // 8. GN_JURID_AC
@@ -2093,18 +2104,20 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('TIP_DOCU', sql.Int,         toInt(ac.TIP_DOCU))
         .input('NUM_DOCU', sql.VarChar(20), toChar(ac.NUM_DOCU))
         .input('FEC_EXPE', sql.Date,        toDate(ac.FEC_EXPE))
-        .input('COD_PAIS', sql.Int,         toInt(ac.COD_PAIS))
-        .input('COD_DEPT', sql.Int,         toInt(ac.COD_DEPT))
-        .input('COD_MPIO', sql.Int,         toInt(ac.COD_MPIO))
-        .input('DIR_ACCI', sql.VarChar(120),toChar(ac.DIR_ACCI))
-        .input('CEL_ACCI', sql.VarChar(30), toChar(ac.CEL_ACCI))
-        .input('TEL_ACCI', sql.VarChar(30), toChar(ac.TEL_ACCI))
-        .input('MAIL_ACCI',sql.VarChar(100),toChar(ac.MAIL_ACCI))
-        .input('PCT_PART', sql.Decimal(5,2),toDec(ac.PCT_PART))
+        .input('COD_PAIS', sql.Int,          toInt(ac.COD_PAIS))
+        .input('OTR_PAIS', sql.VarChar(100), toChar(ac.OTR_PAIS))
+        .input('COD_DEPT', sql.Int,          toInt(ac.COD_DEPT))
+        .input('COD_MPIO', sql.Int,          toInt(ac.COD_MPIO))
+        .input('DIR_ACCI', sql.VarChar(120), toChar(ac.DIR_ACCI))
+        .input('CEL_ACCI', sql.VarChar(30),  toChar(ac.CEL_ACCI))
+        .input('TEL_ACCI', sql.VarChar(30),  toChar(ac.TEL_ACCI))
+        .input('MAIL_ACCI',sql.VarChar(100), toChar(ac.MAIL_ACCI))
+        .input('PCT_PART', sql.Decimal(5,2), toDec(ac.PCT_PART))
+        .input('OTR_TPDOC',sql.VarChar(100), toChar(ac.OTR_TPDOC))
         .query(`INSERT INTO GN_JURID_AC(COD_EMPR,COD_TERC,TIP_PERS,NOM_ACCI,APE_ACCI,RAZ_ACCI,TIP_DOCU,NUM_DOCU,
-                FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART)
+                FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_ACCI,CEL_ACCI,TEL_ACCI,MAIL_ACCI,PCT_PART,OTR_TPDOC)
                 VALUES(@COD_EMPR,@COD_TERC,@TIP_PERS,@NOM_ACCI,@APE_ACCI,@RAZ_ACCI,@TIP_DOCU,@NUM_DOCU,
-                @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART)`);
+                @FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_ACCI,@CEL_ACCI,@TEL_ACCI,@MAIL_ACCI,@PCT_PART,@OTR_TPDOC)`);
     }
 
     // 9. GN_JURID_FIN
@@ -2183,10 +2196,11 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('DIR_BENE', sql.VarChar(120), toChar(bf.DIR_BENE))
         .input('TEL_BENE', sql.VarChar(30),  toChar(bf.TEL_BENE))
         .input('MAIL_BENE',sql.VarChar(100), toChar(bf.MAIL_BENE))
+        .input('OTR_TPDOC',sql.VarChar(100), toChar(bf.OTR_TPDOC))
         .query(`INSERT INTO GN_JURID_BF(COD_EMPR,COD_TERC,TIP_BENE,NOM_BENE,APE_BENE,RAZ_BENE,TIP_DOCU,NUM_DOCU,
-                FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE)
+                FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE,OTR_TPDOC)
                 VALUES(@COD_EMPR,@COD_TERC,@TIP_BENE,@NOM_BENE,@APE_BENE,@RAZ_BENE,@TIP_DOCU,@NUM_DOCU,
-                @FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE)`);
+                @FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE,@OTR_TPDOC)`);
     }
 
     // 14. GN_JURID_FIRMA
@@ -2268,7 +2282,7 @@ app.post('/api/guardar-completo', async (req, res) => {
     });
   }
 
-  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
+  const toInt  = v => { if (v === null || v === undefined || v === '' || v === 'NA') return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; };
   const toDec  = v => (v !== null && v !== undefined && v !== '') ? parseFloat(v) : null;
   const toDate = v => v ? new Date(v) : null;
   const toChar = v => v || null;
@@ -2332,6 +2346,9 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
       .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
+      .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
+      .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
+      .input('DESC_GRUPO',    sql.VarChar(sql.MAX), toChar(d.DESC_GRUPO))
       .input('COD_PAIS_EXP',  sql.Int,          toInt(d.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
@@ -2341,11 +2358,13 @@ app.post('/api/guardar-completo', async (req, res) => {
           (COD_EMPR, COD_TERC, TIP_VINC, OTR_VINC, MAIL_SARL, COD_CIIU, OTR_CIIU,
            URL_WEB, TIP_SOCIE, OTR_SOCIE, COD_PAIS_ORI, UBIC_SOC,
            COD_PAIS_SOC, OTR_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
+           CTRL_DECLA, CAL_GRUPO, DESC_GRUPO,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @OTR_VINC, @MAIL_SARL, @COD_CIIU, @OTR_CIIU,
            @URL_WEB, @TIP_SOCIE, @OTR_SOCIE, @COD_PAIS_ORI, @UBIC_SOC,
            @COD_PAIS_SOC, @OTR_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
+           @CTRL_DECLA, @CAL_GRUPO, @DESC_GRUPO,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
       `);
 
@@ -2405,88 +2424,86 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',   sql.BigInt,      COD_TERC)
-      .input('REL_GRUPO',  sql.VarChar(200),toChar(d.REL_GRUPO))
+      .input('TIE_NORM',   sql.Char(1),     toChar(d.TIE_NORM) || 'N')
       .input('NORM_LAFT',  sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',  sql.VarChar(200),toChar(d.SIS_PREVE))
       .input('OTR_PREVE',  sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',  sql.VarChar(500),toChar(d.DESC_NORM))
       .input('TIE_JUNTA',  sql.Char(1),     tieCump)
       .query(`
-        INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, REL_GRUPO, NORM_LAFT, SIS_PREVE, OTR_PREVE, DESC_NORM, TIE_JUNTA)
-        VALUES (@COD_EMPR, @COD_TERC, @REL_GRUPO, @NORM_LAFT, @SIS_PREVE, @OTR_PREVE, @DESC_NORM, @TIE_JUNTA)
+        INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, TIE_NORM, NORM_LAFT, SIS_PREVE, OTR_PREVE, DESC_NORM, TIE_JUNTA)
+        VALUES (@COD_EMPR, @COD_TERC, @TIE_NORM, @NORM_LAFT, @SIS_PREVE, @OTR_PREVE, @DESC_NORM, @TIE_JUNTA)
       `);
 
-    // Oficiales de cumplimiento
+    // Oficiales de cumplimiento (flat format: TIP_REPR is directly on the object)
     const oficiales = Array.isArray(d.oficiales) ? d.oficiales : [];
-    for (const of_ of oficiales) {
-      for (const rol of ['Principal', 'Suplente']) {
-        const p = of_[rol] || of_;
-        if (!p.NOM_RESP && !p.RAZ_RESP) continue;
-        await r()
-          .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
-          .input('COD_TERC',  sql.BigInt,      COD_TERC)
-          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
-          .input('TIP_SIST',  sql.VarChar(10), toChar(p.TIP_SIST))
-          .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
-          .input('NUM_DOCU',  sql.VarChar(20), toChar(p.NUM_DOCU))
-          .input('FEC_EXPE',  sql.Date,        toDate(p.FEC_EXPE))
-          .input('NOM_RESP',  sql.VarChar(60), toChar(p.NOM_RESP))
-          .input('APE_RESP',  sql.VarChar(60), toChar(p.APE_RESP))
-          .input('RAZ_RESP',  sql.VarChar(120),toChar(p.RAZ_RESP))
-          .input('COD_PAIS',  sql.Int,          toInt(p.COD_PAIS))
-          .input('OTR_PAIS',  sql.VarChar(100), toChar(p.OTR_PAIS))
-          .input('COD_DEPT',  sql.Int,          toInt(p.COD_DEPT))
-          .input('COD_MPIO',  sql.Int,          toInt(p.COD_MPIO))
-          .input('DIR_RESP',  sql.VarChar(120), toChar(p.DIR_RESP))
-          .input('TEL_RESP',  sql.VarChar(30),  toChar(p.TEL_RESP))
-          .input('MAIL_RESP', sql.VarChar(100), toChar(p.MAIL_RESP))
-          .query(`
-            INSERT INTO GN_JURID_CUMP
-              (COD_EMPR, COD_TERC, TIP_REPR, TIP_SIST, TIP_DOCU, NUM_DOCU, FEC_EXPE,
-               NOM_RESP, APE_RESP, RAZ_RESP, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
-               DIR_RESP, TEL_RESP, MAIL_RESP)
-            VALUES
-              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_SIST, @TIP_DOCU, @NUM_DOCU, @FEC_EXPE,
-               @NOM_RESP, @APE_RESP, @RAZ_RESP, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
-               @DIR_RESP, @TEL_RESP, @MAIL_RESP)
-          `);
-      }
+    for (const p of oficiales) {
+      if (!p.NOM_RESP) continue;
+      await r()
+        .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,      COD_TERC)
+        .input('TIP_REPR',  sql.Char(1),     p.TIP_REPR || 'P')
+        .input('TIP_SIST',  sql.VarChar(10), toChar(p.TIP_SIST))
+        .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
+        .input('NUM_DOCU',  sql.VarChar(20), toChar(p.NUM_DOCU))
+        .input('FEC_EXPE',  sql.Date,        toDate(p.FEC_EXPE))
+        .input('NOM_RESP',  sql.VarChar(60), toChar(p.NOM_RESP))
+        .input('APE_RESP',  sql.VarChar(60), toChar(p.APE_RESP))
+        .input('CEL_RESP',  sql.VarChar(30),  toChar(p.CEL_RESP))
+        .input('COD_PAIS',  sql.Int,          toInt(p.COD_PAIS))
+        .input('OTR_PAIS',  sql.VarChar(100), toChar(p.OTR_PAIS))
+        .input('COD_DEPT',  sql.Int,          toInt(p.COD_DEPT))
+        .input('COD_MPIO',  sql.Int,          toInt(p.COD_MPIO))
+        .input('DIR_RESP',  sql.VarChar(120), toChar(p.DIR_RESP))
+        .input('TEL_RESP',  sql.VarChar(30),  toChar(p.TEL_RESP))
+        .input('MAIL_RESP', sql.VarChar(100), toChar(p.MAIL_RESP))
+        .input('OTR_TPDOC', sql.VarChar(100), toChar(p.OTR_TPDOC))
+        .query(`
+          INSERT INTO GN_JURID_CUMP
+            (COD_EMPR, COD_TERC, TIP_REPR, TIP_SIST, TIP_DOCU, NUM_DOCU, FEC_EXPE,
+             NOM_RESP, APE_RESP, CEL_RESP, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
+             DIR_RESP, TEL_RESP, MAIL_RESP, OTR_TPDOC)
+          VALUES
+            (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_SIST, @TIP_DOCU, @NUM_DOCU, @FEC_EXPE,
+             @NOM_RESP, @APE_RESP, @CEL_RESP, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
+             @DIR_RESP, @TEL_RESP, @MAIL_RESP, @OTR_TPDOC)
+        `);
     }
 
     // ── 6. GN_JURID_JD — Junta directiva ─────────────────────────────────────
     const jdMiembros = Array.isArray(d.juntaDirectiva) ? d.juntaDirectiva : [];
-    for (const grupo of jdMiembros) {
-      for (const rol of ['Principal', 'Suplente']) {
-        const m = grupo[rol] || {};
-        if (!m.NOM_MIEM && !m.RAZ_MIEM) continue;
-        await r()
-          .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
-          .input('COD_TERC',  sql.BigInt,      COD_TERC)
-          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
-          .input('TIP_MIEM',  sql.VarChar(10), toChar(m.TIP_MIEM))
-          .input('NOM_MIEM',  sql.VarChar(60), toChar(m.NOM_MIEM))
-          .input('APE_MIEM',  sql.VarChar(60), toChar(m.APE_MIEM))
-          .input('RAZ_MIEM',  sql.VarChar(120),toChar(m.RAZ_MIEM))
-          .input('TIP_DOCU',  sql.Int,         toInt(m.TIP_DOCU))
-          .input('NUM_DOCU',  sql.VarChar(20), toChar(m.NUM_DOCU))
-          .input('FEC_EXPE',  sql.Date,        toDate(m.FEC_EXPE))
-          .input('COD_PAIS',  sql.Int,         toInt(m.COD_PAIS))
-          .input('COD_DEPT',  sql.Int,         toInt(m.COD_DEPT))
-          .input('COD_MPIO',  sql.Int,         toInt(m.COD_MPIO))
-          .input('DIR_MIEM',  sql.VarChar(120),toChar(m.DIR_MIEM))
-          .input('TEL_MIEM',  sql.VarChar(30), toChar(m.TEL_MIEM))
-          .input('MAIL_MIEM', sql.VarChar(100),toChar(m.MAIL_MIEM))
-          .query(`
-            INSERT INTO GN_JURID_JD
-              (COD_EMPR, COD_TERC, TIP_REPR, TIP_MIEM, NOM_MIEM, APE_MIEM, RAZ_MIEM,
-               TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
-               DIR_MIEM, TEL_MIEM, MAIL_MIEM)
-            VALUES
-              (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_MIEM, @NOM_MIEM, @APE_MIEM, @RAZ_MIEM,
-               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
-               @DIR_MIEM, @TEL_MIEM, @MAIL_MIEM)
-          `);
-      }
+    for (const m of jdMiembros) {
+      // Flat format: TIP_REPR is directly on the object
+      if (!m.NOM_MIEM) continue;
+      await r()
+        .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC',  sql.BigInt,      COD_TERC)
+        .input('TIP_REPR',  sql.Char(1),     m.TIP_REPR || 'P')
+        .input('TIP_MIEM',  sql.VarChar(10), toChar(m.TIP_MIEM))
+        .input('NOM_MIEM',  sql.VarChar(60), toChar(m.NOM_MIEM))
+        .input('APE_MIEM',  sql.VarChar(60), toChar(m.APE_MIEM))
+        .input('TIP_DOCU',  sql.Int,         toInt(m.TIP_DOCU))
+        .input('NUM_DOCU',  sql.VarChar(20), toChar(m.NUM_DOCU))
+        .input('FEC_EXPE',  sql.Date,        toDate(m.FEC_EXPE))
+        .input('COD_PAIS',  sql.Int,          toInt(m.COD_PAIS))
+        .input('OTR_PAIS',  sql.VarChar(100), toChar(m.OTR_PAIS))
+        .input('COD_DEPT',  sql.Int,          toInt(m.COD_DEPT))
+        .input('COD_MPIO',  sql.Int,          toInt(m.COD_MPIO))
+        .input('DIR_MIEM',  sql.VarChar(120), toChar(m.DIR_MIEM))
+        .input('CEL_MIEM',  sql.VarChar(30),  toChar(m.CEL_MIEM))
+        .input('TEL_MIEM',  sql.VarChar(30),  toChar(m.TEL_MIEM))
+        .input('MAIL_MIEM', sql.VarChar(100), toChar(m.MAIL_MIEM))
+        .input('OTR_TPDOC', sql.VarChar(100), toChar(m.OTR_TPDOC))
+        .query(`
+          INSERT INTO GN_JURID_JD
+            (COD_EMPR, COD_TERC, TIP_REPR, TIP_MIEM, NOM_MIEM, APE_MIEM,
+             TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
+             DIR_MIEM, CEL_MIEM, TEL_MIEM, MAIL_MIEM, OTR_TPDOC)
+          VALUES
+            (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_MIEM, @NOM_MIEM, @APE_MIEM,
+             @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
+             @DIR_MIEM, @CEL_MIEM, @TEL_MIEM, @MAIL_MIEM, @OTR_TPDOC)
+        `);
     }
 
     // ── 7. GN_JURID_RF — Revisores fiscales ──────────────────────────────────
@@ -2520,30 +2537,32 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('TIP_DOCU',      sql.Int,         toInt(rv.TIP_DOCU))
           .input('NUM_DOCU',      sql.VarChar(20), toChar(rv.NUM_DOCU))
           .input('FEC_EXPE',      sql.Date,        toDate(rv.FEC_EXPE))
-          .input('COD_PAIS',      sql.Int,         toInt(rv.COD_PAIS))
-          .input('COD_DEPT',      sql.Int,         toInt(rv.COD_DEPT))
-          .input('COD_MPIO',      sql.Int,         toInt(rv.COD_MPIO))
-          .input('DIR_REVI',      sql.VarChar(120),toChar(rv.DIR_REVI))
-          .input('CEL_REVI',      sql.VarChar(30), toChar(rv.CEL_REVI))
-          .input('TEL_REVI',      sql.VarChar(30), toChar(rv.TEL_REVI))
-          .input('MAIL_REVI',     sql.VarChar(100),toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',    sql.Char(1),     toChar(rf.REVI_FIRMA) || 'N')
-          .input('RAZ_FIRMA',     sql.VarChar(120),toChar(rf.RAZ_FIRMA))
-          .input('TIP_DOCU_FIR',  sql.Int,         toInt(rf.TIP_DOCU_FIR))
-          .input('NUM_DOCU_FIR',  sql.VarChar(20), toChar(rf.NUM_DOCU_FIR))
+          .input('COD_PAIS',      sql.Int,          toInt(rv.COD_PAIS))
+          .input('OTR_PAIS',      sql.VarChar(100), toChar(rv.OTR_PAIS))
+          .input('COD_DEPT',      sql.Int,          toInt(rv.COD_DEPT))
+          .input('COD_MPIO',      sql.Int,          toInt(rv.COD_MPIO))
+          .input('DIR_REVI',      sql.VarChar(120), toChar(rv.DIR_REVI))
+          .input('CEL_REVI',      sql.VarChar(30),  toChar(rv.CEL_REVI))
+          .input('TEL_REVI',      sql.VarChar(30),  toChar(rv.TEL_REVI))
+          .input('MAIL_REVI',     sql.VarChar(100), toChar(rv.MAIL_REVI))
+          .input('REVI_FIRMA',    sql.Char(1),      toChar(rf.REVI_FIRMA) || 'N')
+          .input('RAZ_FIRMA',     sql.VarChar(120), toChar(rf.RAZ_FIRMA))
+          .input('TIP_DOCU_FIR',  sql.Int,          toInt(rf.TIP_DOCU_FIR))
+          .input('NUM_DOCU_FIR',  sql.VarChar(20),  toChar(rf.NUM_DOCU_FIR))
+          .input('OTR_TPDOC',     sql.VarChar(100), toChar(rv.OTR_TPDOC))
           .query(`
             INSERT INTO GN_JURID_RF
               (COD_EMPR, COD_TERC, TIP_REPR, TIP_PERS, TIE_REVIS,
                NOM_REVI, APE_REVI, RAZ_REVI,
-               TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
+               TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
                DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
-               REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR)
+               REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR, OTR_TPDOC)
             VALUES
               (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_PERS, @TIE_REVIS,
                @NOM_REVI, @APE_REVI, @RAZ_REVI,
-               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
+               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
                @DIR_REVI, @CEL_REVI, @TEL_REVI, @MAIL_REVI,
-               @REVI_FIRMA, @RAZ_FIRMA, @TIP_DOCU_FIR, @NUM_DOCU_FIR)
+               @REVI_FIRMA, @RAZ_FIRMA, @TIP_DOCU_FIR, @NUM_DOCU_FIR, @OTR_TPDOC)
           `);
       }
     }
@@ -2563,6 +2582,7 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('NUM_DOCU',  sql.VarChar(20),   toChar(ac.NUM_DOCU))
         .input('FEC_EXPE',  sql.Date,          toDate(ac.FEC_EXPE))
         .input('COD_PAIS',  sql.Int,           toInt(ac.COD_PAIS))
+        .input('OTR_PAIS',  sql.VarChar(100),  toChar(ac.OTR_PAIS))
         .input('COD_DEPT',  sql.Int,           toInt(ac.COD_DEPT))
         .input('COD_MPIO',  sql.Int,           toInt(ac.COD_MPIO))
         .input('DIR_ACCI',  sql.VarChar(120),  toChar(ac.DIR_ACCI))
@@ -2570,15 +2590,16 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('TEL_ACCI',  sql.VarChar(30),   toChar(ac.TEL_ACCI))
         .input('MAIL_ACCI', sql.VarChar(100),  toChar(ac.MAIL_ACCI))
         .input('PCT_PART',  sql.Decimal(5,2),  toDec(ac.PCT_PART))
+        .input('OTR_TPDOC', sql.VarChar(100),  toChar(ac.OTR_TPDOC))
         .query(`
           INSERT INTO GN_JURID_AC
             (COD_EMPR, COD_TERC, TIP_PERS, NOM_ACCI, APE_ACCI, RAZ_ACCI,
-             TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, COD_DEPT, COD_MPIO,
-             DIR_ACCI, CEL_ACCI, TEL_ACCI, MAIL_ACCI, PCT_PART)
+             TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
+             DIR_ACCI, CEL_ACCI, TEL_ACCI, MAIL_ACCI, PCT_PART, OTR_TPDOC)
           VALUES
             (@COD_EMPR, @COD_TERC, @TIP_PERS, @NOM_ACCI, @APE_ACCI, @RAZ_ACCI,
-             @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @COD_DEPT, @COD_MPIO,
-             @DIR_ACCI, @CEL_ACCI, @TEL_ACCI, @MAIL_ACCI, @PCT_PART)
+             @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
+             @DIR_ACCI, @CEL_ACCI, @TEL_ACCI, @MAIL_ACCI, @PCT_PART, @OTR_TPDOC)
         `);
     }
 
@@ -2679,15 +2700,16 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('DIR_BENE',  sql.VarChar(120), toChar(bf.DIR_BENE))
         .input('TEL_BENE',  sql.VarChar(30),  toChar(bf.TEL_BENE))
         .input('MAIL_BENE', sql.VarChar(100), toChar(bf.MAIL_BENE))
+        .input('OTR_TPDOC', sql.VarChar(100), toChar(bf.OTR_TPDOC))
         .query(`
           INSERT INTO GN_JURID_BF
             (COD_EMPR, COD_TERC, TIP_BENE, NOM_BENE, APE_BENE, RAZ_BENE,
              TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
-             DIR_BENE, TEL_BENE, MAIL_BENE)
+             DIR_BENE, TEL_BENE, MAIL_BENE, OTR_TPDOC)
           VALUES
             (@COD_EMPR, @COD_TERC, @TIP_BENE, @NOM_BENE, @APE_BENE, @RAZ_BENE,
              @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
-             @DIR_BENE, @TEL_BENE, @MAIL_BENE)
+             @DIR_BENE, @TEL_BENE, @MAIL_BENE, @OTR_TPDOC)
         `);
     }
 
@@ -2770,7 +2792,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
   }
 
   // Helpers de conversión
-  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10)   : null;
+  const toInt  = v => { if (v === null || v === undefined || v === '' || v === 'NA') return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; };
   const toChar = v => v || null;
 
   let pool, transaction;
@@ -3759,7 +3781,7 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
   if (errVal.length)
     return res.status(400).json({ error: 'Errores de validación', detalles: errVal });
 
-  const toInt  = v => (v !== null && v !== undefined && v !== '' && v !== 'NA') ? parseInt(v, 10) : null;
+  const toInt  = v => { if (v === null || v === undefined || v === '' || v === 'NA') return null; const n = parseInt(v, 10); return isNaN(n) ? null : n; };
   const toDec  = v => (v !== null && v !== undefined && v !== '')               ? parseFloat(v)   : null;
   const toChar = v => v || null;
   const fin    = b.financiera || {};

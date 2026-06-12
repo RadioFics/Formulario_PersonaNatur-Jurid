@@ -89,33 +89,8 @@ async function inicializar() {
       ),
 
       // ── Sección 5: Sistema de cumplimiento ────────────────────────────────
-
-      // Sistemas de prevención LA/FT (MAE_SIST_PREV)
-      cargarCatalogo(
-        '/api/catalogo/sistemas-prevencion', 'cump_sis_preve',
-        'COD_SIST', 'NOM_SIST', '— Seleccione —'
-      ),
-
-      // Tipos de documento para oficial de cumplimiento Principal
-      // Reutiliza la carga de sec2 (ya en cache); clona al Suplente
-      cargarCatalogo(
-        '/api/catalogo/tipos-documento?todos=1', 'cump_p_tipdoc',
-        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
-      ).then(() => {
-        const src  = document.getElementById('cump_p_tipdoc');
-        const dest = document.getElementById('cump_s_tipdoc');
-        if (src && dest) dest.innerHTML = src.innerHTML;
-      }),
-
-      // Países para oficial de cumplimiento Principal; clona al Suplente
-      cargarCatalogo(
-        '/api/catalogo/paises', 'cump_p_pais',
-        'COD_PAIS', 'NOM_PAIS', '— Seleccione —'
-      ).then(() => {
-        const src  = document.getElementById('cump_p_pais');
-        const dest = document.getElementById('cump_s_pais');
-        if (src && dest) dest.innerHTML = src.innerHTML;
-      }),
+      // cump_sis_preve tiene opciones estáticas en HTML; no se carga por catálogo.
+      // Los campos de oficiales son dinámicos (renderListaCump); no hay IDs estáticos.
 
       // ── Secciones 6–8 (JD / RF / AC) ─────────────────────────────────────
       // Los catálogos de tipos-documento y paises ya están en cache desde
@@ -193,10 +168,12 @@ function _activarCamposOtros() {
     const el = document.getElementById('otr_ciiu'); if (el) el.value = '';
   });
 
-  _activarSiblingOtro('cump_sis_preve', 'field-cump_sis_preve_otro',   () => {
-    actualizarCump('OTR_PREVE', null);
-    const el = document.getElementById('otr_preve'); if (el) el.value = '';
-  });
+  // cump_sis_preve — el onchange en HTML llama onSistPreveChange(); no se necesita _activarSiblingOtro.
+  // Si SIS_PREVE='OTRO' fue hidratado desde BD, activar manualmente:
+  if (formData.cumplimiento.SIS_PREVE === 'OTRO') {
+    const fieldOtro = document.getElementById('field-cump_sis_preve_otro');
+    if (fieldOtro) fieldOtro.style.display = '';
+  }
 }
 
 /* ── "Otro país" — inyectar opción en todos los selects de país ─────────────── */
@@ -212,8 +189,8 @@ function _agregarOtroPais() {
     catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)' });
   }
   // Añadir a todos los selects estáticos de país ya presentes en el DOM
-  ['cod_pais_exp', 'rl_p_pais', 'rl_s_pais', 'soc_pais',
-   'cump_p_pais', 'cump_s_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
+  // (cump_p_pais / cump_s_pais ya no existen — los oficiales son dinámicos)
+  ['cod_pais_exp', 'rl_p_pais', 'rl_s_pais', 'soc_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
   // La lógica de mostrar/ocultar el campo libre de sección 1 está en _handlePaisExpChange.
 }
 
@@ -265,8 +242,8 @@ function _activarBuscadores() {
   // Sección 3 — Sociedad
   ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_pais'].forEach(convertirABuscable);
 
-  // Sección 5 — Cumplimiento
-  ['cump_sis_preve', 'cump_p_tipdoc', 'cump_p_pais', 'cump_p_dept', 'cump_p_mpio'].forEach(convertirABuscable);
+  // Sección 5 — Cumplimiento (solo cump_sis_preve es estático; campos de oficiales son dinámicos)
+  ['cump_sis_preve'].forEach(convertirABuscable);
 
   // Sección 13 — Firma
   ['firma_tipdoc'].forEach(convertirABuscable);
@@ -429,23 +406,25 @@ async function _cargarRegistroExistente(numIden) {
 
     // Cumplimiento
     if (datos.cumplimiento) {
+      formData.cumplimiento.TIE_NORM  = datos.cumplimiento.TIE_NORM  || 'N';
       formData.cumplimiento.DESC_NORM = datos.cumplimiento.DESC_NORM || '';
       formData.cumplimiento.NORM_LAFT = datos.cumplimiento.NORM_LAFT || '';
       formData.cumplimiento.TIE_JUNTA = datos.cumplimiento.TIE_JUNTA || 'N';
       formData.cumplimiento.SIS_PREVE = datos.cumplimiento.SIS_PREVE || null;
+      formData.cumplimiento.OTR_PREVE = datos.cumplimiento.OTR_PREVE || '';
       if (Array.isArray(datos.cumplimiento.oficiales) && datos.cumplimiento.oficiales.length) {
         formData.cumplimiento.oficiales = datos.cumplimiento.oficiales.map(o => ({
           TIP_REPR:  o.TIP_REPR,
+          NOM_RESP:  o.NOM_RESP  || '',
+          APE_RESP:  o.APE_RESP  || '',
           TIP_DOCU:  o.TIP_DOCU,
           NUM_DOCU:  o.NUM_DOCU  || '',
           FEC_EXPE:  o.FEC_EXPE  || '',
-          NOM_RESP:  o.NOM_RESP  || '',
-          APE_RESP:  o.APE_RESP  || '',
-          RAZ_RESP:  o.RAZ_RESP  || '',
           COD_PAIS:  o.COD_PAIS,
           COD_DEPT:  o.COD_DEPT,
           COD_MPIO:  o.COD_MPIO,
           DIR_RESP:  o.DIR_RESP  || '',
+          CEL_RESP:  o.CEL_RESP  || '',
           TEL_RESP:  o.TEL_RESP  || '',
           MAIL_RESP: o.MAIL_RESP || '',
         }));
@@ -540,41 +519,52 @@ async function hidratarFormularioVisual() {
       if (inp) inp.value = formData.sociedad.OTR_PAIS_SOC || '';
     }
 
+    // Hidratar cascada grupo empresarial (sección 3)
+    if (formData.sociedad.GRUP_EMPR === 'S') {
+      const selGrp = document.getElementById('soc_grup_empr');
+      if (selGrp) selGrp.value = 'S';
+      onGrupEmprChange('S');
+      if (formData.sociedad.CTRL_DECLA) {
+        const rCtrl = document.querySelector(`input[name="soc_ctrl_decla"][value="${formData.sociedad.CTRL_DECLA}"]`);
+        if (rCtrl) rCtrl.checked = true;
+        onCtrlDeclaChange(formData.sociedad.CTRL_DECLA);
+        if (formData.sociedad.CTRL_DECLA === 'N') {
+          const selCal = document.getElementById('soc_cal_grupo');
+          if (selCal) selCal.value = formData.sociedad.CAL_GRUPO || '';
+          const tDesc = document.getElementById('soc_desc_grupo');
+          if (tDesc) tDesc.value = formData.sociedad.DESC_GRUPO || '';
+        }
+      }
+    }
+
     // Sección 4: Países de operación
     // renderListaPaises ya maneja los valores.
 
-    // Sección 5: Cumplimiento
-    const descNorm = document.getElementById('cump_desc_norm');
-    if (descNorm) descNorm.value = formData.cumplimiento.DESC_NORM || '';
+    // Sección 5: Cumplimiento — los campos son dinámicos (renderListaCump)
+    const tieNormRadio = document.querySelector(`input[name="cump_tie_norm"][value="${formData.cumplimiento.TIE_NORM || 'N'}"]`);
+    if (tieNormRadio) tieNormRadio.checked = true;
+    if (formData.cumplimiento.TIE_NORM === 'S') {
+      onTieNormChange('S');
+      const descNorm = document.getElementById('cump_desc_norm');
+      if (descNorm) descNorm.value = formData.cumplimiento.DESC_NORM || '';
+      const normLaft = document.getElementById('cump_norm_laft');
+      if (normLaft) normLaft.value = formData.cumplimiento.NORM_LAFT || '';
 
-    const cumpRadio = document.querySelector(`input[name="cump_tie_sist"][value="${formData.cumplimiento.TIE_JUNTA}"]`);
-    if (cumpRadio) cumpRadio.checked = true;
-    if (formData.cumplimiento.TIE_JUNTA === 'S') {
-      onTieneSistemaChange('S');
-      const selSist = document.getElementById('cump_sis_preve');
-      if (selSist) selSist.value = formData.cumplimiento.SIS_PREVE || '';
-    }
-
-    const cumpMap = [
-      ['cump_p_tipdoc', 'TIP_DOCU'], ['cump_p_numdoc', 'NUM_DOCU'], ['cump_p_fec', 'FEC_EXPE'],
-      ['cump_p_pais', 'COD_PAIS'], ['cump_p_dept', 'COD_DEPT'], ['cump_p_mpio', 'COD_MPIO'],
-      ['cump_p_dir', 'DIR_RESP'], ['cump_p_cel', 'CEL_RESP'], ['cump_p_tel', 'TEL_RESP'],
-      ['cump_p_mail', 'MAIL_RESP'],
-      ['cump_s_tipdoc', 'TIP_DOCU'], ['cump_s_numdoc', 'NUM_DOCU'], ['cump_s_fec', 'FEC_EXPE'],
-      ['cump_s_pais', 'COD_PAIS'], ['cump_s_dept', 'COD_DEPT'], ['cump_s_mpio', 'COD_MPIO'],
-      ['cump_s_dir', 'DIR_RESP'], ['cump_s_cel', 'CEL_RESP'], ['cump_s_tel', 'TEL_RESP'],
-      ['cump_s_mail', 'MAIL_RESP'],
-    ];
-    for (let index = 0; index < 2; index += 1) {
-      const oficial = formData.cumplimiento.oficiales[index];
-      if (!oficial) continue;
-      const prefix = index === 0 ? 'cump_p_' : 'cump_s_';
-      cumpMap.filter(([id]) => id.startsWith(prefix)).forEach(([id, key]) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.value = oficial[key] || '';
-      });
-      await _hydrateGeoCascade(prefix, oficial);
+      const cumpRadio = document.querySelector(`input[name="cump_tie_sist"][value="${formData.cumplimiento.TIE_JUNTA}"]`);
+      if (cumpRadio) cumpRadio.checked = true;
+      if (formData.cumplimiento.TIE_JUNTA === 'S') {
+        onTieneSistemaChange('S');
+        const selSist = document.getElementById('cump_sis_preve');
+        if (selSist) {
+          selSist.value = formData.cumplimiento.SIS_PREVE || '';
+          if (formData.cumplimiento.SIS_PREVE === 'OTRO') {
+            const fo = document.getElementById('field-cump_sis_preve_otro');
+            if (fo) fo.style.display = '';
+            const inp = document.getElementById('otr_preve');
+            if (inp) inp.value = formData.cumplimiento.OTR_PREVE || '';
+          }
+        }
+      }
     }
 
     // Sección 11A: PEP

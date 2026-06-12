@@ -22,7 +22,7 @@ function _acCampos() {
     TIP_PERS: 'N',
     NOM_ACCI: '', APE_ACCI: '', RAZ_ACCI: '',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
+    COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_ACCI: '', CEL_ACCI: '', TEL_ACCI: '', MAIL_ACCI: '',
     PCT_PART: '',
   };
@@ -147,7 +147,7 @@ function _crearGrupoACEl(accionista) {
     <div class="grupo-body" id="ac_body_${id}">
 
       <!-- Tipo de persona -->
-      <div class="grid-4" style="margin-bottom:6px">
+      <div class="grid-2">
         <div class="field field-radio">
           <label>Tipo de persona <span class="req">*</span></label>
           <div class="radio-group">
@@ -172,7 +172,7 @@ function _crearGrupoACEl(accionista) {
 
       <!-- Campos solo persona natural: NOM, APE, FEC_EXPE -->
       <div id="ac_${id}_natural_wrap" style="${natDisplay}; transition:opacity .2s,max-height .3s">
-        <div class="grid-4">
+        <div class="grid-3">
           <div class="field" id="field-ac_${id}_nom">
             <label>Nombres <span class="req">*</span></label>
             <input type="text" id="ac_${id}_nom" maxlength="100" placeholder="Nombres completos"
@@ -203,15 +203,18 @@ function _crearGrupoACEl(accionista) {
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-ac_${id}_tipdoc">
-          <label>Tipo doc. <span class="req">*</span></label>
+          <label>Tipo de documento <span class="req">*</span></label>
           <select id="ac_${id}_tipdoc"
-                  onchange="actualizarAC(${id},'TIP_DOCU',this.value);limpiarError('field-ac_${id}_tipdoc')">
+                  onchange="onACTipdocChange(${id},this.value);actualizarAC(${id},'TIP_DOCU',this.value);limpiarError('field-ac_${id}_tipdoc')">
             ${td}
           </select>
+          <input type="text" id="ac_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                 placeholder="Especifique el tipo de documento"
+                 oninput="actualizarAC(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-ac_${id}_numdoc">
-          <label>Número doc. <span class="req">*</span></label>
+          <label>Número de documento<span class="req">*</span></label>
           <input type="text" id="ac_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\\D/g,'');actualizarAC(${id},'NUM_DOCU',this.value);limpiarError('field-ac_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
@@ -226,12 +229,17 @@ function _crearGrupoACEl(accionista) {
       <!-- País / Dept / Ciudad / Dirección -->
       <div class="grid-4">
         <div class="field" id="field-ac_${id}_pais">
-          <label>País <span class="req">*</span></label>
+          <label>País <span class="req">*</span> <span class="ic-info" data-tip="País de domicilio o residencia del accionista.">i</span></label>
           <select id="ac_${id}_pais"
                   onchange="onACPaisChange(${id},this.value);limpiarError('field-ac_${id}_pais')">
             ${pa}
           </select>
           <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-ac_${id}_pais_otro" style="display:none">
+          <label>Especifique el país <span class="req">*</span></label>
+          <input type="text" id="ac_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+                 oninput="actualizarAC(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-ac_${id}_dept">
           <label>Departamento <span class="req">*</span></label>
@@ -257,7 +265,7 @@ function _crearGrupoACEl(accionista) {
       </div>
 
       <!-- Tel / Mail -->
-      <div class="grid-4">
+      <div class="grid-2">
         <div class="field">
           <label>Teléfono fijo</label>
           <input type="tel" id="ac_${id}_tel" maxlength="20"
@@ -271,6 +279,8 @@ function _crearGrupoACEl(accionista) {
         </div>
       </div>
     </div>`;
+  agregarOpcionOtroAlSelect(el.querySelector(`#ac_${id}_pais`));
+  agregarOpcionOtroAlTipdoc(el.querySelector(`#ac_${id}_tipdoc`));
   return el;
 }
 
@@ -294,6 +304,10 @@ function _hydrateACFields(accionista, el) {
   set(`#ac_${id}_raz`,    accionista.RAZ_ACCI);
   set(`#ac_${id}_pct`,    accionista.PCT_PART);
   set(`#ac_${id}_tipdoc`, accionista.TIP_DOCU);
+  if (accionista.TIP_DOCU === 'OTR_TPDOC') {
+    const inpOtro = el.querySelector(`#ac_${id}_tipdoc_otro`);
+    if (inpOtro) { inpOtro.style.display = ''; inpOtro.value = accionista.OTR_TPDOC || ''; }
+  }
   set(`#ac_${id}_numdoc`, accionista.NUM_DOCU);
   set(`#ac_${id}_fec`,    accionista.FEC_EXPE);
   set(`#ac_${id}_cel`,    accionista.CEL_ACCI);
@@ -314,6 +328,11 @@ function _hydrateACFields(accionista, el) {
 
   if (accionista.COD_PAIS) {
     onACPaisChange(id, accionista.COD_PAIS).then(() => {
+      if (accionista.COD_PAIS === 'OTRO' || String(accionista.COD_PAIS) === '52') {
+        const inp = el.querySelector(`#ac_${id}_pais_otro`);
+        if (inp) inp.value = accionista.OTR_PAIS || '';
+        return Promise.resolve();
+      }
       if (accionista.COD_DEPT) {
         const deptEl = el.querySelector(`#ac_${id}_dept`);
         if (deptEl) deptEl.value = accionista.COD_DEPT;
@@ -401,6 +420,23 @@ async function onACPaisChange(id, codPais) {
     selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
     selDept.disabled  = true; return;
   }
+
+  if (String(codPais) === 'OTRO' || String(codPais) === '52') {
+    const fieldOtroAC = document.getElementById(`field-ac_${id}_pais_otro`);
+    const fieldDeptAC = document.getElementById(`field-ac_${id}_dept`);
+    const fieldMpioAC = document.getElementById(`field-ac_${id}_mpio`);
+    if (fieldDeptAC) fieldDeptAC.style.display = 'none';
+    if (fieldMpioAC) fieldMpioAC.style.display = 'none';
+    if (fieldOtroAC) { fieldOtroAC.style.display = ''; fieldOtroAC.style.gridColumn = 'span 2'; }
+    return;
+  }
+  const fieldOtroACR = document.getElementById(`field-ac_${id}_pais_otro`);
+  const fieldDeptACR = document.getElementById(`field-ac_${id}_dept`);
+  const fieldMpioACR = document.getElementById(`field-ac_${id}_mpio`);
+  if (fieldOtroACR) { fieldOtroACR.style.display = 'none'; fieldOtroACR.style.gridColumn = ''; a.OTR_PAIS = null; const inp = document.getElementById(`ac_${id}_pais_otro`); if (inp) inp.value = ''; }
+  if (fieldDeptACR) fieldDeptACR.style.display = '';
+  if (fieldMpioACR) fieldMpioACR.style.display = '';
+
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `ac_${id}_dept`,
@@ -466,9 +502,14 @@ function _validarGrupoAC(id) {
     [`field-ac_${id}_tipdoc`, a.TIP_DOCU],
     [`field-ac_${id}_numdoc`, a.NUM_DOCU],
     [`field-ac_${id}_pais`,   a.COD_PAIS],
-    [`field-ac_${id}_dept`,   a.COD_DEPT],
-    [`field-ac_${id}_mpio`,   a.COD_MPIO],
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+
+  if (a.COD_PAIS !== 'OTRO' && String(a.COD_PAIS) !== '52') {
+    [
+      [`field-ac_${id}_dept`, a.COD_DEPT],
+      [`field-ac_${id}_mpio`, a.COD_MPIO],
+    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  }
 
   const pct = parseFloat(a.PCT_PART);
   if (!a.PCT_PART || isNaN(pct) || pct <= 0 || pct > 100) {
@@ -506,12 +547,22 @@ function validarYContinuarAC() {
   }
   mostrarToast('Sección 8 completa. Continúe con la siguiente sección.', 'success');
   document.getElementById('accordion-ac').classList.add('collapsed');
-  const acc9 = document.getElementById('accordion-financiera');
+  const acc9 = document.getElementById('accordion-bf');
   if (acc9) {
     acc9.classList.remove('collapsed');
     acc9.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   console.log('✅ formData.accionistas:', JSON.stringify(formData.accionistas, null, 2));
+}
+
+function onACTipdocChange(id, val) {
+  const inp = document.getElementById(`ac_${id}_tipdoc_otro`);
+  if (inp) inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    if (inp) inp.value = '';
+    const a = _acGet(id);
+    if (a) a.OTR_TPDOC = null;
+  }
 }
 
 function limpiarSeccionAC() {

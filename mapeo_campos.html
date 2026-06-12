@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapeo Formulario ↔ Base de Datos — MineDax</title>
+<style>
+  :root { --col1:#1a5276; --col2:#2e86c1; --row-alt:#eaf4fb; --border:#b0c4de; }
+  body { font-family: 'Segoe UI', sans-serif; font-size:13px; color:#222; margin:0; padding:20px; background:#f5f8fb; }
+  h1 { color:var(--col1); border-bottom:3px solid var(--col2); padding-bottom:8px; font-size:20px; }
+  h2 { color:var(--col2); font-size:15px; margin:28px 0 6px; border-left:4px solid var(--col2); padding-left:10px; }
+  h3 { color:#555; font-size:13px; margin:16px 0 4px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; margin-left:6px; vertical-align:middle; }
+  .j  { background:#d6eaf8; color:#1a5276; }
+  .n  { background:#d5f5e3; color:#1e8449; }
+  .b  { background:#f9ebea; color:#922b21; }
+  table { width:100%; border-collapse:collapse; margin-bottom:12px; font-size:12px; }
+  th { background:var(--col1); color:#fff; padding:6px 8px; text-align:left; white-space:nowrap; }
+  td { border:1px solid var(--border); padding:5px 8px; vertical-align:top; }
+  tr:nth-child(even) td { background:var(--row-alt); }
+  .req { color:#c0392b; font-weight:700; }
+  .opt { color:#7f8c8d; }
+  .tabla { font-family:monospace; background:#eaf0f6; padding:2px 5px; border-radius:3px; font-size:11px; color:#154360; }
+  .campo { font-family:monospace; color:#1a5276; font-size:11px; }
+  .tipo  { font-family:monospace; color:#6e2fa0; font-size:11px; }
+  .hint  { color:#7f8c8d; font-style:italic; font-size:11px; }
+  .toc   { background:#fff; border:1px solid var(--border); border-radius:6px; padding:14px 20px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:4px 30px; }
+  .toc a { color:var(--col2); text-decoration:none; font-size:12px; }
+  .toc a:hover { text-decoration:underline; }
+  .section-box { background:#fff; border:1px solid var(--border); border-radius:6px; padding:14px; margin-bottom:16px; }
+  .updated { background:#fff8dc; border-left:4px solid #f0ad4e; padding:4px 10px; font-size:11px; margin-bottom:8px; border-radius:0 4px 4px 0; }
+</style>
+</head>
+<body>
+
+<h1>Mapeo Formulario ↔ Base de Datos <span class="badge j">Jurídica</span><span class="badge n">Natural</span></h1>
+<p style="color:#555; margin-bottom:16px;">
+  Documento de referencia que relaciona cada campo del formulario MineDax con su columna y tabla correspondiente en SQL Server (base de datos <strong>MineDax</strong>).
+  Generado: <strong>2026-06-12</strong>.
+</p>
+
+<!-- Tabla de contenido -->
+<div class="toc">
+  <a href="#sec1">§1 — Datos básicos del tercero (GN_TERCE)</a>
+  <a href="#sec2j">§2J — Representante Legal (GN_JURID_RL)</a>
+  <a href="#sec2n">§2N — Información personal natural (GN_NATUR)</a>
+  <a href="#sec3">§3 — Información de la sociedad (GN_JURID)</a>
+  <a href="#sec4">§4 — Países de operación (GN_JURID_PAIS)</a>
+  <a href="#sec5">§5 — Cumplimiento LAFT (GN_JURID_CUMP)</a>
+  <a href="#sec6">§6 — Junta directiva (GN_JURID_JD)</a>
+  <a href="#sec7">§7 — Revisores fiscales (GN_JURID_RF)</a>
+  <a href="#sec8">§8 — Composición accionaria (GN_JURID_AC)</a>
+  <a href="#sec9">§9 — Beneficiarios finales (GN_JURID_BF)</a>
+  <a href="#sec10j">§10J — Información financiera jurídica (GN_JURID_FIN)</a>
+  <a href="#sec10n">§10N — Información financiera natural (GN_NATUR_FIN)</a>
+  <a href="#sec11">§11 — Cuentas bancarias (GN_TERCE_BANCO)</a>
+  <a href="#sec12j">§12J — PEP jurídica (GN_JURID_PEP)</a>
+  <a href="#sec12n">§12N — PEP natural (GN_NATUR_PEP)</a>
+  <a href="#sec13j">§13J — Actividades VA jurídica (GN_JURID_ACT)</a>
+  <a href="#sec13n">§13N — Actividades VA natural (GN_NATUR_ACT)</a>
+  <a href="#sec14">§14 — Documentos requeridos (GN_TERCE_DOC + GN_JURID_FIRMA)</a>
+  <a href="#catalogos">Catálogos de referencia</a>
+  <a href="#migraciones">Migraciones aplicadas</a>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec1">
+<h2>§1 — Datos básicos del tercero <span class="badge b">Ambos modos</span></h2>
+<p class="hint">Tabla principal del tercero. Un registro por NUM_IDEN. <span class="tabla">GN_TERCE</span></p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tabla</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de persona (Natural / Jurídica)</td><td class="campo">TIP_TERC</td><td class="tabla">GN_TERCE</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'J' = Jurídica, 'N' = Natural</td></tr>
+  <tr><td>NIT / Número de identificación</td><td class="campo">NUM_IDEN</td><td class="tabla">GN_TERCE</td><td class="tipo">BIGINT</td><td class="req">Sí</td><td>Identificador único del formulario</td></tr>
+  <tr><td>Dígito de verificación</td><td class="campo">DIG_VERI</td><td class="tabla">GN_TERCE</td><td class="tipo">SMALLINT</td><td class="opt">No</td><td>Solo para NIT jurídico</td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">COD_TPDOC</td><td class="tabla">GN_TERCE</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td>FK a catálogo MAE_TPDOC</td></tr>
+  <tr><td>Sin asignar / Otro tipo de doc.</td><td class="campo">OTR_TPDOC</td><td class="tabla">GN_TERCE</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td>Texto libre cuando COD_TPDOC = OTR_TPDOC</td></tr>
+  <tr><td>Razón social / Nombre completo</td><td class="campo">NOM_COMP</td><td class="tabla">GN_TERCE</td><td class="tipo">VARCHAR(240)</td><td class="req">Sí</td><td>Nombre o razón social completa</td></tr>
+  <tr><td>Primer nombre</td><td class="campo">NOM_TERC</td><td class="tabla">GN_TERCE</td><td class="tipo">CHAR(40)</td><td class="opt">No</td><td>Solo persona natural</td></tr>
+  <tr><td>Segundo nombre</td><td class="campo">SEG_NOMB</td><td class="tabla">GN_TERCE</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td>Solo persona natural</td></tr>
+  <tr><td>Primer apellido</td><td class="campo">APE_TERC</td><td class="tabla">GN_TERCE</td><td class="tipo">CHAR(40)</td><td class="opt">No</td><td>Solo persona natural</td></tr>
+  <tr><td>Segundo apellido</td><td class="campo">SEG_APEL</td><td class="tabla">GN_TERCE</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td>Solo persona natural</td></tr>
+  <tr><td>Municipio / Ciudad</td><td class="campo">COD_MPIO</td><td class="tabla">GN_TERCE</td><td class="tipo">SMALLINT → MAE_MPIO</td><td class="opt">No</td><td>FK a catálogo MAE_MPIO</td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_TERC</td><td class="tabla">GN_TERCE</td><td class="tipo">CHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_TERC</td><td class="tabla">GN_TERCE</td><td class="tipo">CHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">DIR_MAIL</td><td class="tabla">GN_TERCE</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec2j">
+<h2>§2 — Representante Legal <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Uno o más registros por tercero (TIP_REPR: 'P' = Principal, 'S' = Suplente). <span class="tabla">GN_JURID_RL</span></p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de representante</td><td class="campo">TIP_REPR</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'P' = Principal, 'S' = Suplente</td></tr>
+  <tr><td>Primer nombre</td><td class="campo">NOM_REPR</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_REPR</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>País de expedición</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="req">Sí</td><td>OTRO (COD_PAIS=52) activa campo libre</td></tr>
+  <tr><td>Otro país (texto libre)</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td>Solo cuando COD_PAIS = OTRO</td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td>Solo si COD_PAIS = Colombia</td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td>Solo si COD_PAIS = Colombia</td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_REPR</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Celular</td><td class="campo">CEL_REPR</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_REPR</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_REPR</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec2n">
+<h2>§2N — Información complementaria persona natural <span class="badge n">Solo Natural</span></h2>
+<p class="hint"><span class="tabla">GN_NATUR</span></p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de vínculo</td><td class="campo">TIP_VINC</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td>FK catálogo tipos de vínculo</td></tr>
+  <tr><td>Email SAGRILAFT</td><td class="campo">MAIL_SARL</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Nacionalidad</td><td class="campo">COD_NACIO</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Actividad principal</td><td class="campo">ACT_PRINC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>CIIU</td><td class="campo">COD_CIIU</td><td class="tipo">VARCHAR(10)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Fecha de expedición doc.</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País expedición doc.</td><td class="campo">COD_PAIS_EXP</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país expedición</td><td class="campo">OTR_PAIS_EXP</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento expedición</td><td class="campo">COD_DEPT_EXP</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio expedición</td><td class="campo">COD_MPIO_EXP</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec3">
+<h2>§3 — Información de la sociedad <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint"><span class="tabla">GN_JURID</span></p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de vínculo</td><td class="campo">TIP_VINC</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro vínculo (texto libre)</td><td class="campo">OTR_VINC</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Email SAGRILAFT</td><td class="campo">MAIL_SARL</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>CIIU</td><td class="campo">COD_CIIU</td><td class="tipo">VARCHAR(10)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro CIIU (texto libre)</td><td class="campo">OTR_CIIU</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>URL / Sitio web</td><td class="campo">URL_WEB</td><td class="tipo">VARCHAR(200)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo de sociedad</td><td class="campo">TIP_SOCIE</td><td class="tipo">VARCHAR(60)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro tipo de sociedad</td><td class="campo">OTR_SOCIE</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País de origen</td><td class="campo">COD_PAIS_ORI</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Ubicación de la sociedad</td><td class="campo">UBIC_SOC</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'N'=Nacional, 'E'=Extranjera, 'SC'=Sucursal</td></tr>
+  <tr><td>País de la sociedad (extranjera)</td><td class="campo">COD_PAIS_SOC</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país sociedad</td><td class="campo">OTR_PAIS_SOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo de empresa</td><td class="campo">TIP_EMPR</td><td class="tipo">VARCHAR(10)</td><td class="opt">No</td><td>'PUBLICA', 'PRIVADA', 'MIXTA'</td></tr>
+  <tr><td>¿Grupo empresarial?</td><td class="campo">GRUP_EMPR</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'S' / 'N'</td></tr>
+  <tr><td>¿Situaciones declaradas CERL?</td><td class="campo">CTRL_DECLA</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'S' / 'N'</td></tr>
+  <tr><td>Calificación del grupo</td><td class="campo">CAL_GRUPO</td><td class="tipo">VARCHAR(20)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Descripción situación CERL</td><td class="campo">DESC_GRUPO</td><td class="tipo">TEXT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País expedición doc. (sociedad)</td><td class="campo">COD_PAIS_EXP</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país expedición</td><td class="campo">OTR_PAIS_EXP</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento expedición</td><td class="campo">COD_DEPT_EXP</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio expedición</td><td class="campo">COD_MPIO_EXP</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec4">
+<h2>§4 — Países de operación <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Un registro por país seleccionado. <span class="tabla">GN_JURID_PAIS</span></p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>País (seleccionado)</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="req">Sí</td><td>Un registro por cada país marcado</td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec5">
+<h2>§5 — Cumplimiento LAFT <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Dos tipos de registros en la misma tabla: (1) registro general sin TIP_REPR, (2) oficial de cumplimiento con TIP_REPR. <span class="tabla">GN_JURID_CUMP</span></p>
+<div class="updated">⚡ Actualizado: columna <strong>OTR_TPDOC</strong> añadida en esta sesión.</div>
+<h3>Registro general (sin TIP_REPR)</h3>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>¿Tiene normas LAFT?</td><td class="campo">TIE_NORM</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'S' / 'N'</td></tr>
+  <tr><td>Descripción normas LAFT</td><td class="campo">DESC_NORM</td><td class="tipo">VARCHAR(500)</td><td class="opt">No</td><td>Solo si TIE_NORM = 'S'</td></tr>
+  <tr><td>Norma LAFT específica</td><td class="campo">NORM_LAFT</td><td class="tipo">VARCHAR(200)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>¿Tiene junta directiva?</td><td class="campo">TIE_JUNTA</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'S' / 'N'</td></tr>
+  <tr><td>Sistema de prevención</td><td class="campo">SIS_PREVE</td><td class="tipo">VARCHAR(60)</td><td class="opt">No</td><td>FK catálogo sistemas</td></tr>
+  <tr><td>Otro sistema de prevención</td><td class="campo">OTR_PREVE</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+</table>
+<h3>Oficial de cumplimiento (con TIP_REPR)</h3>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo (P/S)</td><td class="campo">TIP_REPR</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'P' = Principal, 'S' = Suplente</td></tr>
+  <tr><td>Tipo de sistema</td><td class="campo">TIP_SIST</td><td class="tipo">VARCHAR(60)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Sin asignar / Otro tipo doc.</td><td class="campo">OTR_TPDOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td>Activo cuando TIP_DOCU = OTR_TPDOC</td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Nombre</td><td class="campo">NOM_RESP</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_RESP</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Celular</td><td class="campo">CEL_RESP</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_RESP</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_RESP</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_RESP</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec6">
+<h2>§6 — Junta directiva <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Un registro por miembro. <span class="tabla">GN_JURID_JD</span></p>
+<div class="updated">⚡ Actualizado: columnas <strong>OTR_PAIS</strong> y <strong>OTR_TPDOC</strong> añadidas en sesiones anteriores.</div>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de miembro</td><td class="campo">TIP_MIEM</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td>FK catálogo tipos de miembro</td></tr>
+  <tr><td>Tipo (P/S)</td><td class="campo">TIP_REPR</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'P' / 'S'</td></tr>
+  <tr><td>Nombre</td><td class="campo">NOM_MIEM</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_MIEM</td><td class="tipo">VARCHAR(80)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Sin asignar / Otro tipo doc.</td><td class="campo">OTR_TPDOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_MIEM</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Celular</td><td class="campo">CEL_MIEM</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_MIEM</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_MIEM</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec7">
+<h2>§7 — Revisores fiscales <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Un registro por revisor (TIP_REPR: P/S). <span class="tabla">GN_JURID_RF</span></p>
+<div class="updated">⚡ Actualizado: columnas <strong>OTR_PAIS</strong>, <strong>TIP_PERS</strong> y <strong>OTR_TPDOC</strong> añadidas.</div>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>¿Tiene revisor fiscal?</td><td class="campo">TIE_REVIS</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'S' / 'N'</td></tr>
+  <tr><td>Tipo de persona (N/J)</td><td class="campo">TIP_PERS</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'N' = Natural, 'J' = Jurídica</td></tr>
+  <tr><td>Tipo (P/S)</td><td class="campo">TIP_REPR</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'P' / 'S'</td></tr>
+  <tr><td>Nombre</td><td class="campo">NOM_REVI</td><td class="tipo">VARCHAR(80)</td><td class="req">Si persona natural</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_REVI</td><td class="tipo">VARCHAR(80)</td><td class="req">Si persona natural</td><td></td></tr>
+  <tr><td>Razón social</td><td class="campo">RAZ_REVI</td><td class="tipo">VARCHAR(200)</td><td class="req">Si persona jurídica</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Sin asignar / Otro tipo doc.</td><td class="campo">OTR_TPDOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_REVI</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Celular</td><td class="campo">CEL_REVI</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_REVI</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_REVI</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>¿Firma el representante legal?</td><td class="campo">REVI_FIRMA</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'S' / 'N'</td></tr>
+  <tr><td>Razón social firmante</td><td class="campo">RAZ_FIRMA</td><td class="tipo">VARCHAR(200)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo doc. firmante</td><td class="campo">TIP_DOCU_FIR</td><td class="tipo">INT → MAE_TPDOC</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número doc. firmante</td><td class="campo">NUM_DOCU_FIR</td><td class="tipo">VARCHAR(20)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec8">
+<h2>§8 — Composición accionaria <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Un registro por accionista. <span class="tabla">GN_JURID_AC</span></p>
+<div class="updated">⚡ Actualizado: columnas <strong>TIP_PERS</strong>, <strong>OTR_PAIS</strong> y <strong>OTR_TPDOC</strong> añadidas.</div>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de persona</td><td class="campo">TIP_PERS</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'N' = Natural, 'J' = Jurídica</td></tr>
+  <tr><td>Nombre</td><td class="campo">NOM_ACCI</td><td class="tipo">VARCHAR(80)</td><td class="req">Si natural</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_ACCI</td><td class="tipo">VARCHAR(80)</td><td class="req">Si natural</td><td></td></tr>
+  <tr><td>Razón social</td><td class="campo">RAZ_ACCI</td><td class="tipo">VARCHAR(200)</td><td class="req">Si jurídica</td><td></td></tr>
+  <tr><td>Porcentaje de participación</td><td class="campo">PCT_PART</td><td class="tipo">DECIMAL(5,2)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Sin asignar / Otro tipo doc.</td><td class="campo">OTR_TPDOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_ACCI</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Celular</td><td class="campo">CEL_ACCI</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_ACCI</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_ACCI</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec9">
+<h2>§9 — Beneficiarios finales <span class="badge j">Solo Jurídica</span></h2>
+<p class="hint">Un registro por beneficiario. <span class="tabla">GN_JURID_BF</span></p>
+<div class="updated">⚡ Actualizado: columnas <strong>OTR_PAIS</strong> y <strong>OTR_TPDOC</strong> añadidas.</div>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Tipo de beneficiario</td><td class="campo">TIP_BENE</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'N' / 'J'</td></tr>
+  <tr><td>Nombre</td><td class="campo">NOM_BENE</td><td class="tipo">VARCHAR(80)</td><td class="req">Si natural</td><td></td></tr>
+  <tr><td>Apellidos</td><td class="campo">APE_BENE</td><td class="tipo">VARCHAR(80)</td><td class="req">Si natural</td><td></td></tr>
+  <tr><td>Razón social</td><td class="campo">RAZ_BENE</td><td class="tipo">VARCHAR(200)</td><td class="req">Si jurídica</td><td></td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Sin asignar / Otro tipo doc.</td><td class="campo">OTR_TPDOC</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Fecha de expedición</td><td class="campo">FEC_EXPE</td><td class="tipo">DATE</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País</td><td class="campo">COD_PAIS</td><td class="tipo">INT → MAE_PAIS</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país</td><td class="campo">OTR_PAIS</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Departamento</td><td class="campo">COD_DEPT</td><td class="tipo">INT → MAE_DEPT</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Municipio</td><td class="campo">COD_MPIO</td><td class="tipo">INT → MAE_MPIO</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Dirección</td><td class="campo">DIR_BENE</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Teléfono</td><td class="campo">TEL_BENE</td><td class="tipo">VARCHAR(30)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Correo electrónico</td><td class="campo">MAIL_BENE</td><td class="tipo">VARCHAR(150)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec10j">
+<h2>§10J — Información financiera <span class="badge j">Jurídica → GN_JURID_FIN</span></h2>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th></tr>
+  <tr><td>Activos totales</td><td class="campo">ACT_TOTAL</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Ingresos mensuales</td><td class="campo">ING_MENS</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Pasivos totales</td><td class="campo">PAS_TOTAL</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Egresos mensuales</td><td class="campo">EGR_MENS</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Patrimonio</td><td class="campo">PATRIMONIO</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Otros ingresos</td><td class="campo">OTR_ING</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+</table>
+</div>
+
+<div class="section-box" id="sec10n">
+<h2>§10N — Información financiera <span class="badge n">Natural → GN_NATUR_FIN</span></h2>
+<p class="hint">Mismas columnas que GN_JURID_FIN.</p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th></tr>
+  <tr><td>Activos totales</td><td class="campo">ACT_TOTAL</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Ingresos mensuales</td><td class="campo">ING_MENS</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Pasivos totales</td><td class="campo">PAS_TOTAL</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Egresos mensuales</td><td class="campo">EGR_MENS</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Patrimonio</td><td class="campo">PATRIMONIO</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+  <tr><td>Otros ingresos</td><td class="campo">OTR_ING</td><td class="tipo">DECIMAL(18,2)</td><td class="opt">No</td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec11">
+<h2>§11 — Cuentas bancarias <span class="badge b">Ambos modos → GN_TERCE_BANCO</span></h2>
+<p class="hint">Un registro por cuenta bancaria.</p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>Entidad bancaria</td><td class="campo">COD_BANCO</td><td class="tipo">INT → MAE_BANCO</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Otro banco (texto libre)</td><td class="campo">OTR_BANCO</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo de cuenta</td><td class="campo">TIP_CUEN</td><td class="tipo">INT → catálogo</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Otro tipo de cuenta</td><td class="campo">OTR_CUEN</td><td class="tipo">VARCHAR(255)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Número de cuenta</td><td class="campo">NUM_CUEN</td><td class="tipo">VARCHAR(30)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>¿Cuenta en el exterior?</td><td class="campo">CUEN_EXTR</td><td class="tipo">CHAR(1)</td><td class="opt">No</td><td>'S' / 'N'</td></tr>
+  <tr><td>Nombre entidad exterior</td><td class="campo">NOM_ENT_EXT</td><td class="tipo">VARCHAR(120)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Tipo de cuenta exterior</td><td class="campo">TIP_CUE_EXT</td><td class="tipo">VARCHAR(40)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>País de la cuenta exterior</td><td class="campo">COD_PAIS_EXT</td><td class="tipo">VARCHAR(10)</td><td class="opt">No</td><td></td></tr>
+  <tr><td>Otro país exterior</td><td class="campo">OTR_PAIS_EXT</td><td class="tipo">VARCHAR(100)</td><td class="opt">No</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec12j">
+<h2>§12J — PEP <span class="badge j">Jurídica → GN_JURID_PEP</span></h2>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>¿Maneja recursos públicos?</td><td class="campo">MAN_RPUB</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'S' / 'N'</td></tr>
+  <tr><td>¿Ostenta cargo público?</td><td class="campo">CAR_PUBL</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td>'S' / 'N'</td></tr>
+</table>
+</div>
+
+<div class="section-box" id="sec12n">
+<h2>§12N — PEP <span class="badge n">Natural → GN_NATUR_PEP</span></h2>
+<p class="hint">Mismas columnas que GN_JURID_PEP.</p>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>¿Maneja recursos públicos?</td><td class="campo">MAN_RPUB</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>¿Ostenta cargo público?</td><td class="campo">CAR_PUBL</td><td class="tipo">CHAR(1)</td><td class="req">Sí</td><td></td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec13j">
+<h2>§13J — Actividades de riesgo SAGRILAFT <span class="badge j">Jurídica → GN_JURID_ACT</span></h2>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Notas</th></tr>
+  <tr><td>¿Opera con activos virtuales fiat?</td><td class="campo">ACT_VA_FIAT</td><td class="tipo">CHAR(1)</td><td>'S' / 'N'</td></tr>
+  <tr><td>¿Opera con activos virtuales (VA)?</td><td class="campo">ACT_VA_VA</td><td class="tipo">CHAR(1)</td><td></td></tr>
+  <tr><td>¿Realiza transferencias?</td><td class="campo">ACT_TRANS</td><td class="tipo">CHAR(1)</td><td></td></tr>
+  <tr><td>¿Custodia activos?</td><td class="campo">ACT_CUSTO</td><td class="tipo">CHAR(1)</td><td></td></tr>
+  <tr><td>¿Servicios financieros VA?</td><td class="campo">ACT_SERV_FIN</td><td class="tipo">CHAR(1)</td><td></td></tr>
+  <tr><td>¿Servicios de participación VA?</td><td class="campo">ACT_SERV_VAP</td><td class="tipo">CHAR(1)</td><td></td></tr>
+  <tr><td>Certificación de información</td><td class="campo">CERT_INFO</td><td class="tipo">CHAR(1)</td><td></td></tr>
+</table>
+</div>
+
+<div class="section-box" id="sec13n">
+<h2>§13N — Actividades SAGRILAFT <span class="badge n">Natural → GN_NATUR_ACT</span></h2>
+<p class="hint">Mismas columnas que GN_JURID_ACT.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="sec14">
+<h2>§14 — Documentos requeridos <span class="badge b">Ambos modos</span></h2>
+<p class="hint">Metadatos: <span class="tabla">GN_TERCE_DOC</span> (un registro por archivo). Firma RL: <span class="tabla">GN_JURID_FIRMA</span>.</p>
+<div class="updated">⚡ Actualizado: EST_FIN dividido en EST_FIN_1 / EST_FIN_2 (jurídica); DOC_ID_RL pasa a ser dinámico (DOC_ID_RL_0, DOC_ID_RL_1, … según §2).</div>
+<h3>Archivos del formulario → GN_TERCE_DOC (columna TIP_DOC)</h3>
+<table>
+  <tr><th>Campo del formulario</th><th>TIP_DOC (clave archivo)</th><th>Modo</th><th>Requerido</th><th>Notas</th></tr>
+  <tr><td>RUT</td><td class="campo">RUT</td><td>Ambos</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Certificación bancaria</td><td class="campo">CERT_BANC</td><td>Ambos</td><td class="req">Sí</td><td>Vigencia &lt; 30 días</td></tr>
+  <tr><td>Certificado de existencia y representación</td><td class="campo">CERT_EXIS</td><td>Solo Jurídica</td><td class="req">Sí (J)</td><td></td></tr>
+  <tr><td>Doc. identidad persona natural</td><td class="campo">DOC_ID_RL</td><td>Solo Natural</td><td class="req">Sí (N)</td><td>Clave fija para modo natural</td></tr>
+  <tr><td>Doc. identidad RL Principal</td><td class="campo">DOC_ID_RL_0</td><td>Solo Jurídica</td><td class="req">Sí (J)</td><td>Dinámico: uno por cada RL en §2</td></tr>
+  <tr><td>Doc. identidad RL Suplente 1</td><td class="campo">DOC_ID_RL_1</td><td>Solo Jurídica</td><td class="opt">Si existe RL</td><td>Se muestra solo si hay ≥2 RLs en §2</td></tr>
+  <tr><td>Doc. identidad RL Suplente N</td><td class="campo">DOC_ID_RL_N</td><td>Solo Jurídica</td><td class="opt">Si existe RL</td><td>Patrón /^DOC_ID_RL_\d+$/</td></tr>
+  <tr><td>Declaración de renta o juramentada</td><td class="campo">EST_FIN</td><td>Solo Natural</td><td class="req">Sí (N)</td><td></td></tr>
+  <tr><td>Estados financieros — Año 1 (penúltimo)</td><td class="campo">EST_FIN_1</td><td>Solo Jurídica</td><td class="req">Sí (J)</td><td>Nuevo: reemplaza EST_FIN para jurídica</td></tr>
+  <tr><td>Estados financieros — Año 2 (último)</td><td class="campo">EST_FIN_2</td><td>Solo Jurídica</td><td class="req">Sí (J)</td><td>Nuevo</td></tr>
+  <tr><td>Certificado de composición accionaria</td><td class="campo">CERT_ACCI</td><td>Solo Jurídica</td><td class="req">Sí (J)</td><td></td></tr>
+  <tr><td>Carta de aceptación / declaración de fondos</td><td class="campo">CART_ACEP</td><td>Ambos</td><td class="req">Sí</td><td></td></tr>
+  <tr><td>Archivo de firma (RL)</td><td class="campo">ARCH_FIRMA</td><td>Solo Jurídica</td><td class="opt">No</td><td>Guardado en GN_JURID_FIRMA.ARCH_FIRMA</td></tr>
+</table>
+<h3>Metadatos del archivo en GN_TERCE_DOC</h3>
+<table>
+  <tr><th>Columna BD</th><th>Tipo</th><th>Descripción</th></tr>
+  <tr><td class="campo">TIP_DOC</td><td class="tipo">VARCHAR(20)</td><td>Clave del documento (ver tabla anterior)</td></tr>
+  <tr><td class="campo">NOM_DOC</td><td class="tipo">VARCHAR(120)</td><td>Nombre descriptivo del documento</td></tr>
+  <tr><td class="campo">RUT_DOC</td><td class="tipo">VARCHAR(500)</td><td>Ruta del archivo en disco del servidor</td></tr>
+  <tr><td class="campo">NOM_ARCH</td><td class="tipo">VARCHAR(260)</td><td>Nombre original del archivo subido</td></tr>
+  <tr><td class="campo">EXT_ARCH</td><td class="tipo">VARCHAR(10)</td><td>Extensión del archivo (siempre 'pdf')</td></tr>
+  <tr><td class="campo">TAM_ARCH</td><td class="tipo">BIGINT</td><td>Tamaño del archivo en bytes</td></tr>
+  <tr><td class="campo">HASH_ARCH</td><td class="tipo">VARCHAR(64)</td><td>SHA-256 del contenido del archivo</td></tr>
+  <tr><td class="campo">FEC_CARG</td><td class="tipo">DATE</td><td>Fecha de carga</td></tr>
+</table>
+<h3>Campos de firma (GN_JURID_FIRMA)</h3>
+<table>
+  <tr><th>Campo del formulario</th><th>Columna BD</th><th>Tipo</th><th>Requerido</th></tr>
+  <tr><td>Nombre firmante</td><td class="campo">NOM_FIRM</td><td class="tipo">VARCHAR(80)</td><td class="opt">No</td></tr>
+  <tr><td>Apellidos firmante</td><td class="campo">APE_FIRM</td><td class="tipo">VARCHAR(80)</td><td class="opt">No</td></tr>
+  <tr><td>Tipo de documento</td><td class="campo">TIP_DOCU</td><td class="tipo">INT → MAE_TPDOC</td><td class="opt">No</td></tr>
+  <tr><td>Número de documento</td><td class="campo">NUM_DOCU</td><td class="tipo">VARCHAR(20)</td><td class="opt">No</td></tr>
+  <tr><td>Fecha de firma</td><td class="campo">FEC_FIRMA</td><td class="tipo">DATE</td><td class="opt">No</td></tr>
+  <tr><td>Archivo PDF de firma</td><td class="campo">ARCH_FIRMA / RUT_DOC</td><td class="tipo">VARCHAR</td><td class="opt">No</td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="catalogos">
+<h2>Catálogos de referencia</h2>
+<table>
+  <tr><th>Tabla catálogo</th><th>PK</th><th>Descripción</th><th>Usado en</th></tr>
+  <tr><td class="tabla">MAE_TPDOC</td><td class="campo">COD_TPDOC</td><td>Tipos de documento de identidad</td><td>Todos los TIP_DOCU / COD_TPDOC</td></tr>
+  <tr><td class="tabla">MAE_PAIS</td><td class="campo">COD_PAIS</td><td>Países del mundo</td><td>Todos los COD_PAIS</td></tr>
+  <tr><td class="tabla">MAE_DEPT</td><td class="campo">COD_DEPT</td><td>Departamentos de Colombia</td><td>Todos los COD_DEPT</td></tr>
+  <tr><td class="tabla">MAE_MPIO</td><td class="campo">COD_MPIO</td><td>Municipios de Colombia</td><td>Todos los COD_MPIO</td></tr>
+  <tr><td class="tabla">MAE_BANCO</td><td class="campo">COD_BANCO</td><td>Entidades bancarias</td><td>GN_TERCE_BANCO.COD_BANCO</td></tr>
+  <tr><td class="tabla">MAE_CIIU</td><td class="campo">COD_CIIU</td><td>Actividades económicas CIIU</td><td>GN_JURID.COD_CIIU, GN_NATUR.COD_CIIU</td></tr>
+</table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-box" id="migraciones">
+<h2>Migraciones aplicadas</h2>
+<table>
+  <tr><th>Fecha</th><th>Sentencia SQL</th><th>Motivo</th></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_JD ADD OTR_PAIS VARCHAR(100) NULL</td><td>Campo libre "otro país" en junta directiva</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_RF ADD OTR_PAIS VARCHAR(100) NULL</td><td>Ídem para revisores fiscales</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_AC ADD OTR_PAIS VARCHAR(100) NULL</td><td>Ídem para composición accionaria</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_BF ADD OTR_PAIS VARCHAR(100) NULL</td><td>Ídem para beneficiarios finales</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_CUMP ADD OTR_PAIS VARCHAR(100) NULL</td><td>Ídem para oficiales de cumplimiento</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_JD ADD OTR_TPDOC VARCHAR(100) NULL</td><td>"Sin asignar / Otro tipo de documento" en junta directiva</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_RF ADD OTR_TPDOC VARCHAR(100) NULL</td><td>Ídem para revisores fiscales</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_AC ADD OTR_TPDOC VARCHAR(100) NULL</td><td>Ídem para composición accionaria</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_BF ADD OTR_TPDOC VARCHAR(100) NULL</td><td>Ídem para beneficiarios finales</td></tr>
+  <tr><td>2026-06</td><td class="campo">ALTER TABLE GN_JURID_CUMP ADD OTR_TPDOC VARCHAR(100) NULL</td><td>Ídem para oficiales de cumplimiento</td></tr>
+</table>
+</div>
+
+<p style="text-align:center; color:#aaa; font-size:11px; margin-top:30px;">
+  MineDax — Formulario Persona Natural y Jurídica · Generado 2026-06-12
+</p>
+</body>
+</html>

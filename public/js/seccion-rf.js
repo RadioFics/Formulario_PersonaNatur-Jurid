@@ -26,7 +26,7 @@ function _rfCampos(tipRepr) {
     NUM_DOCU_FIR: '',
     NOM_REVI:    '', APE_REVI: '', RAZ_REVI: '',
     TIP_DOCU:    null, NUM_DOCU: '', FEC_EXPE: '',
-    COD_PAIS:    null, COD_DEPT: null, COD_MPIO: null,
+    COD_PAIS:    null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_REVI:    '', CEL_REVI: '', TEL_REVI: '', OBS_REVI: '', MAIL_REVI: '',
   };
 }
@@ -48,12 +48,7 @@ function actualizarTituloRF(id) {
   if (!r) return;
   const pos = _rfPos(id) + 1;
   const rol = r.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
-  let nombre = '';
-  if (r.TIP_PERS === 'J') {
-    nombre = (r.RAZ_REVI || '').trim();
-  } else {
-    nombre = [(r.NOM_REVI || '').trim(), (r.APE_REVI || '').trim()].filter(Boolean).join(' ');
-  }
+  const nombre = [(r.NOM_REVI || '').trim(), (r.APE_REVI || '').trim()].filter(Boolean).join(' ');
   const el = document.getElementById(`rf_titulo_${id}`);
   if (el) el.textContent = `Revisor ${pos} (${rol})${nombre ? ' — ' + nombre : ''}`;
 }
@@ -158,14 +153,11 @@ function _rfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PA
 
 /* ── HTML de un revisor ──────────────────────────────────────────────────────── */
 function _rfMiembroHTML(r) {
-  const id     = r._id;
-  const esJ    = r.TIP_PERS === 'J';
-  const td     = esJ ? _rfTdNitOpts() : _rfTdOpts();
-  const pa     = _rfPaOpts();
-  const selS   = r.TIP_REPR === 'S' ? 'selected' : '';
-  const selP   = r.TIP_REPR !== 'S' ? 'selected' : '';
-  const natDisplay = esJ ? 'display:none;opacity:0;max-height:0;overflow:hidden' : '';
-  const razReqDisplay = esJ ? '' : 'display:none';
+  const id  = r._id;
+  const td  = _rfTdOpts();
+  const pa  = _rfPaOpts();
+  const selS = r.TIP_REPR === 'S' ? 'selected' : '';
+  const selP = r.TIP_REPR !== 'S' ? 'selected' : '';
 
   return `
     <div class="grupo-header" onclick="toggleGrupoRF(${id})">
@@ -174,21 +166,8 @@ function _rfMiembroHTML(r) {
     </div>
     <div class="grupo-body" id="rf_body_${id}">
 
-      <!-- Tipo de persona + Rol -->
-      <div class="grid-4" style="margin-bottom:6px">
-        <div class="field field-radio">
-          <label>Tipo de persona <span class="req">*</span></label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" name="rf_tippers_${id}" value="N" ${!esJ ? 'checked' : ''}
-                     onchange="onRFTipoPersonaChange(${id},'N')"> Natural
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="rf_tippers_${id}" value="J" ${esJ ? 'checked' : ''}
-                     onchange="onRFTipoPersonaChange(${id},'J')"> Jurídica
-            </label>
-          </div>
-        </div>
+      <!-- Rol, Nombres, Apellidos, Fecha expedición -->
+      <div class="grid-4">
         <div class="field">
           <label>Rol <span class="req">*</span></label>
           <select id="rf_${id}_tipRepr"
@@ -197,50 +176,41 @@ function _rfMiembroHTML(r) {
             <option value="S" ${selS}>Suplente</option>
           </select>
         </div>
-      </div>
-
-      <!-- Campos solo persona natural: NOM, APE, FEC_EXPE -->
-      <div id="rf_${id}_natural_wrap" style="${natDisplay}; transition:opacity .2s,max-height .3s">
-        <div class="grid-4">
-          <div class="field" id="field-rf_${id}_nom">
-            <label>Nombres <span class="req">*</span></label>
-            <input type="text" id="rf_${id}_nom" maxlength="100" placeholder="Nombres completos"
-                   oninput="actualizarRF(${id},'NOM_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_nom')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-          <div class="field" id="field-rf_${id}_ape">
-            <label>Apellidos <span class="req">*</span></label>
-            <input type="text" id="rf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
-                   oninput="actualizarRF(${id},'APE_REVI',this.value);limpiarError('field-rf_${id}_ape')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-          <div class="field" id="field-rf_${id}_fec">
-            <label>Fecha expedición doc. <span class="req">*</span></label>
-            <input type="date" id="rf_${id}_fec"
-                   onchange="actualizarRF(${id},'FEC_EXPE',this.value);limpiarError('field-rf_${id}_fec')" />
-            <span class="error-msg">Campo requerido</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Campos comunes: RAZ, TIP_DOCU, NUM_DOCU, CEL, TEL -->
-      <div class="grid-4">
-        <div class="field" id="field-rf_${id}_raz">
-          <label>Razón social <span class="req" id="rf_${id}_raz_req" style="${razReqDisplay}">*</span></label>
-          <input type="text" id="rf_${id}_raz" maxlength="255" placeholder="${esJ ? 'Nombre de la empresa' : 'Si aplica'}"
-                 oninput="actualizarRF(${id},'RAZ_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_raz')" />
+        <div class="field" id="field-rf_${id}_nom">
+          <label>Nombres <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_nom" maxlength="100" placeholder="Nombres completos"
+                 oninput="actualizarRF(${id},'NOM_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_nom')" />
           <span class="error-msg">Campo requerido</span>
         </div>
+        <div class="field" id="field-rf_${id}_ape">
+          <label>Apellidos <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+                 oninput="actualizarRF(${id},'APE_REVI',this.value);limpiarError('field-rf_${id}_ape')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-rf_${id}_fec">
+          <label>Fecha expedición doc. <span class="req">*</span></label>
+          <input type="date" id="rf_${id}_fec"
+                 onchange="actualizarRF(${id},'FEC_EXPE',this.value);limpiarError('field-rf_${id}_fec')" />
+          <span class="error-msg">Campo requerido</span>
+        </div>
+      </div>
+
+      <!-- TIP_DOCU, NUM_DOCU, CEL -->
+      <div class="grid-3">
         <div class="field" id="field-rf_${id}_tipdoc">
-          <label>Tipo doc. <span class="req">*</span></label>
+          <label>Tipo de documento <span class="req">*</span></label>
           <select id="rf_${id}_tipdoc"
-                  onchange="actualizarRF(${id},'TIP_DOCU',this.value);limpiarError('field-rf_${id}_tipdoc')">
+                  onchange="onRFTipdocChange(${id},this.value);actualizarRF(${id},'TIP_DOCU',this.value);limpiarError('field-rf_${id}_tipdoc')">
             ${td}
           </select>
+          <input type="text" id="rf_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                 placeholder="Especifique el tipo de documento"
+                 oninput="actualizarRF(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-rf_${id}_numdoc">
-          <label>Número doc. <span class="req">*</span></label>
+          <label>Número de documento <span class="req">*</span></label>
           <input type="text" id="rf_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU',this.value);limpiarError('field-rf_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
@@ -262,6 +232,11 @@ function _rfMiembroHTML(r) {
             ${pa}
           </select>
           <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-rf_${id}_pais_otro" style="display:none">
+          <label>Especifique el país <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+                 oninput="actualizarRF(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-rf_${id}_dept">
           <label>Departamento <span class="req">*</span></label>
@@ -332,7 +307,7 @@ function _rfMiembroHTML(r) {
             <span class="error-msg">Campo requerido</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_tipdoc">
-            <label>Tipo doc. de la firma <span class="req">*</span></label>
+            <label>Tipo de documento de la firma<span class="req">*</span></label>
             <select id="rf_${id}_firma_tipdoc"
                     onchange="actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
               ${_rfTdOpts()}
@@ -340,7 +315,7 @@ function _rfMiembroHTML(r) {
             <span class="error-msg">Campo requerido</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_numdoc">
-            <label>Número doc. de la firma <span class="req">*</span></label>
+            <label>Número de documento de la firma<span class="req">*</span></label>
             <input type="text" id="rf_${id}_firma_numdoc" maxlength="20" inputmode="numeric"
                    oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
             <span class="error-msg">Campo requerido</span>
@@ -356,6 +331,8 @@ function _crearGrupoRFEl(r) {
   el.className = 'grupo-item';
   el.id        = `rf_grupo_${r._id}`;
   el.innerHTML = _rfMiembroHTML(r);
+  agregarOpcionOtroAlSelect(el.querySelector(`#rf_${r._id}_pais`));
+  agregarOpcionOtroAlTipdoc(el.querySelector(`#rf_${r._id}_tipdoc`));
   return el;
 }
 
@@ -364,19 +341,15 @@ function _hydrateRFFields(r, el) {
   const id  = r._id;
   const set = (sel, val) => { const f = el.querySelector(sel); if (f) f.value = val || ''; };
 
-  // Restaurar tipo de persona (radio) sin disparar el cambio de visibilidad aún
-  const esJ = r.TIP_PERS === 'J';
-  const radJ = el.querySelector(`input[name="rf_tippers_${id}"][value="J"]`);
-  const radN = el.querySelector(`input[name="rf_tippers_${id}"][value="N"]`);
-  if (esJ && radJ) radJ.checked = true;
-  if (!esJ && radN) radN.checked = true;
-
   set(`#rf_${id}_tipRepr`,  r.TIP_REPR);
   set(`#rf_${id}_nom`,      r.NOM_REVI);
   set(`#rf_${id}_ape`,      r.APE_REVI);
-  set(`#rf_${id}_raz`,      r.RAZ_REVI);
   set(`#rf_${id}_cel`,      r.CEL_REVI);
   set(`#rf_${id}_tipdoc`,   r.TIP_DOCU);
+  if (r.TIP_DOCU === 'OTR_TPDOC') {
+    const inpOtro = el.querySelector(`#rf_${id}_tipdoc_otro`);
+    if (inpOtro) { inpOtro.style.display = ''; inpOtro.value = r.OTR_TPDOC || ''; }
+  }
   set(`#rf_${id}_numdoc`,   r.NUM_DOCU);
   set(`#rf_${id}_fec`,      r.FEC_EXPE);
   set(`#rf_${id}_tel`,      r.TEL_REVI);
@@ -384,20 +357,14 @@ function _hydrateRFFields(r, el) {
   set(`#rf_${id}_mail`,     r.MAIL_REVI);
   set(`#rf_${id}_obs`,      r.OBS_REVI);
 
-  // Aplicar visibilidad según tipo de persona (sin animación en carga)
-  const naturalWrap = el.querySelector(`#rf_${id}_natural_wrap`);
-  const razReq      = el.querySelector(`#rf_${id}_raz_req`);
-  if (esJ) {
-    if (naturalWrap) { naturalWrap.style.display = 'none'; naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; }
-    if (razReq)      razReq.style.display = '';
-  } else {
-    if (naturalWrap) { naturalWrap.style.display = ''; naturalWrap.style.opacity = '1'; naturalWrap.style.maxHeight = '99999px'; }
-    if (razReq)      razReq.style.display = 'none';
-  }
-
   if (r.COD_PAIS) {
     onRFPaisChange(id, r.COD_PAIS)
       .then(() => {
+        if (r.COD_PAIS === 'OTRO' || String(r.COD_PAIS) === '52') {
+          const inp = el.querySelector(`#rf_${id}_pais_otro`);
+          if (inp) inp.value = r.OTR_PAIS || '';
+          return Promise.resolve();
+        }
         const deptEl = el.querySelector(`#rf_${id}_dept`);
         if (deptEl) deptEl.value = r.COD_DEPT || '';
         if (r.COD_DEPT && r.COD_DEPT !== 'NA') return onRFDeptChange(id, r.COD_DEPT);
@@ -528,6 +495,23 @@ async function onRFPaisChange(id, codPais) {
     selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
     selDept.disabled  = true; return;
   }
+
+  if (String(codPais) === 'OTRO' || String(codPais) === '52') {
+    const fieldOtroRF = document.getElementById(`field-rf_${id}_pais_otro`);
+    const fieldDeptRF = document.getElementById(`field-rf_${id}_dept`);
+    const fieldMpioRF = document.getElementById(`field-rf_${id}_mpio`);
+    if (fieldDeptRF) fieldDeptRF.style.display = 'none';
+    if (fieldMpioRF) fieldMpioRF.style.display = 'none';
+    if (fieldOtroRF) { fieldOtroRF.style.display = ''; fieldOtroRF.style.gridColumn = 'span 2'; }
+    return;
+  }
+  const fieldOtroRFR = document.getElementById(`field-rf_${id}_pais_otro`);
+  const fieldDeptRFR = document.getElementById(`field-rf_${id}_dept`);
+  const fieldMpioRFR = document.getElementById(`field-rf_${id}_mpio`);
+  if (fieldOtroRFR) { fieldOtroRFR.style.display = 'none'; fieldOtroRFR.style.gridColumn = ''; r.OTR_PAIS = null; const inp = document.getElementById(`rf_${id}_pais_otro`); if (inp) inp.value = ''; }
+  if (fieldDeptRFR) fieldDeptRFR.style.display = '';
+  if (fieldMpioRFR) fieldMpioRFR.style.display = '';
+
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `rf_${id}_dept`,
@@ -570,34 +554,24 @@ async function onRFDeptChange(id, codDept) {
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 function _validarMiembroRF(r) {
   const id  = r._id;
-  const esJ = r.TIP_PERS === 'J';
   let ok = true;
 
-  // Campos solo para persona natural
-  if (!esJ) {
-    const reqNat = [
-      [`field-rf_${id}_nom`, r.NOM_REVI],
-      [`field-rf_${id}_ape`, r.APE_REVI],
-      [`field-rf_${id}_fec`, r.FEC_EXPE],
-    ];
-    reqNat.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
-  }
-
-  // RAZ obligatoria para jurídica
-  if (esJ && (!r.RAZ_REVI || !String(r.RAZ_REVI).trim())) {
-    mostrarError(`field-rf_${id}_raz`); ok = false;
-  }
-
-  // Campos comunes
-  const reqComun = [
+  [
+    [`field-rf_${id}_nom`,    r.NOM_REVI],
+    [`field-rf_${id}_ape`,    r.APE_REVI],
+    [`field-rf_${id}_fec`,    r.FEC_EXPE],
     [`field-rf_${id}_tipdoc`, r.TIP_DOCU],
     [`field-rf_${id}_numdoc`, r.NUM_DOCU],
     [`field-rf_${id}_cel`,    r.CEL_REVI],
     [`field-rf_${id}_pais`,   r.COD_PAIS],
-    [`field-rf_${id}_dept`,   r.COD_DEPT],
-    [`field-rf_${id}_mpio`,   r.COD_MPIO],
-  ];
-  reqComun.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+
+  if (r.COD_PAIS !== 'OTRO') {
+    [
+      [`field-rf_${id}_dept`, r.COD_DEPT],
+      [`field-rf_${id}_mpio`, r.COD_MPIO],
+    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  }
 
   if (!r.MAIL_REVI || !esEmailValido(r.MAIL_REVI)) {
     mostrarError(`field-rf_${id}_mail`); ok = false;
@@ -639,6 +613,16 @@ function validarYContinuarRF() {
   const acc8 = document.getElementById('accordion-ac');
   acc8.classList.remove('collapsed');
   acc8.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function onRFTipdocChange(id, val) {
+  const inp = document.getElementById(`rf_${id}_tipdoc_otro`);
+  if (inp) inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    if (inp) inp.value = '';
+    const r = _rfGet(id);
+    if (r) r.OTR_TPDOC = null;
+  }
 }
 
 function limpiarSeccionRF() {

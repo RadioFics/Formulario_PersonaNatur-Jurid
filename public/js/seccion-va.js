@@ -31,18 +31,18 @@ function validarYContinuarVA() {
   document.getElementById('accordion-va').classList.add('collapsed');
 
   if (window.modoPersona === 'N') {
-    mostrarToast('Sección 12 completa. Continúe con los documentos.', 'success');
+    mostrarToast('Sección 13 completa. Continúe con los documentos.', 'success');
     const accDocs = document.getElementById('accordion-docs');
     if (accDocs) {
       accDocs.classList.remove('collapsed');
       accDocs.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   } else {
-    mostrarToast('Sección 12 completa. Continúe con la siguiente sección.', 'success');
-    const accBF = document.getElementById('accordion-bf');
-    if (accBF) {
-      accBF.classList.remove('collapsed');
-      accBF.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    mostrarToast('Sección 13 completa. Continúe con los documentos.', 'success');
+    const accDocs2 = document.getElementById('accordion-docs');
+    if (accDocs2) {
+      accDocs2.classList.remove('collapsed');
+      accDocs2.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 

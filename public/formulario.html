@@ -559,22 +559,67 @@
 
       </div>
 
-      <!-- REL_GRUPO: campo condicional (visible solo cuando GRUP_EMPR = 'S') -->
-      <div class="campo-condicional" id="soc_rel_grupo_wrap"
-           style="opacity:0;max-height:0;display:none">
-        <div class="field" id="field-soc_rel_grupo">
-          <label for="soc_rel_grupo">
-            Rol en el grupo empresarial <span class="req">*</span>
-            <span style="font-size:.7rem;font-weight:400;text-transform:none">
-              (ej.: MATRIZ, FILIAL, SUCURSAL, SUBSIDIARIA)
-            </span>
+      <!-- Cascada grupo empresarial: visible solo cuando GRUP_EMPR = 'S' -->
+      <div id="soc_grup_wrap" class="bloque-condicional"
+           style="display:none;opacity:0;max-height:0">
+
+        <!-- Pregunta 1: ¿Situaciones declaradas en el CERL? -->
+        <div class="field field-radio" id="field-soc_ctrl_decla">
+          <label>
+            La(s) situación(es) de control y/o grupo empresarial aplicable(s) a la sociedad
+            se encuentra(n) debidamente registrada(s) y declarada(s) en el Certificado de
+            Existencia y Representación Legal que se adjunta al presente formulario
+            <span class="req">*</span>
           </label>
-          <input type="text" id="soc_rel_grupo" maxlength="100"
-                 placeholder="Describa la relación, ej: COLMINA – MATRIZ"
-                 oninput="actualizarSociedad('REL_GRUPO',this.value); limpiarError('field-soc_rel_grupo')" />
-          <span class="error-msg">Campo requerido cuando pertenece a un grupo</span>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="soc_ctrl_decla" value="S"
+                     onchange="actualizarSociedad('CTRL_DECLA','S');onCtrlDeclaChange('S');limpiarError('field-soc_ctrl_decla')"> Sí
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="soc_ctrl_decla" value="N"
+                     onchange="actualizarSociedad('CTRL_DECLA','N');onCtrlDeclaChange('N');limpiarError('field-soc_ctrl_decla')"> No
+            </label>
+          </div>
+          <span class="error-msg">Campo requerido</span>
         </div>
-      </div>
+
+        <!-- Sub-acordeón: visible solo cuando CTRL_DECLA = 'N' -->
+        <div id="soc_ctrl_no_wrap" class="bloque-condicional"
+             style="display:none;opacity:0;max-height:0">
+
+          <div class="grid-2">
+            <div class="field" id="field-soc_cal_grupo">
+              <label for="soc_cal_grupo">
+                Calidad de la sociedad/sucursal dentro del grupo empresarial o situación de control
+                <span class="req">*</span>
+              </label>
+              <select id="soc_cal_grupo"
+                      onchange="actualizarSociedad('CAL_GRUPO',this.value); limpiarError('field-soc_cal_grupo')">
+                <option value="">— Seleccione —</option>
+                <option value="MATRIZ">Matriz / Controlante</option>
+                <option value="FILIAL">Filial</option>
+                <option value="SUBSIDIARIA">Subsidiaria</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
+          </div>
+
+          <div class="field col-full" id="field-soc_desc_grupo">
+            <label for="soc_desc_grupo">
+              Describa la estructura del grupo empresarial, indicando las sociedades que lo
+              conforman, el rol de cada una (matriz, filial, subsidiaria o subordinada), el
+              país de constitución y la relación de control existente entre ellas
+              <span class="req">*</span>
+            </label>
+            <textarea id="soc_desc_grupo" rows="4" maxlength="2000"
+                      placeholder="Describa la estructura del grupo empresarial…"
+                      oninput="actualizarSociedad('DESC_GRUPO',this.value); limpiarError('field-soc_desc_grupo')"></textarea>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+
+        </div><!-- /soc_ctrl_no_wrap -->
+      </div><!-- /soc_grup_wrap -->
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
@@ -636,91 +681,119 @@
 
     <div class="accordion-body">
 
-      <!-- ── Bloque A: Normatividad (siempre visible) ──────────────────────── -->
-      <div class="field col-full" id="field-cump_desc_norm">
-        <label for="cump_desc_norm">
-          ¿La sociedad está sujeta a alguna normatividad que la obligue a implementar algún
-          control para la prevención o gestión de riesgos de LA/FT, Fraude, Corrupción y/o
-          Soborno? ¿Cuál es o son estas regulaciones o normas?
+      <!-- ── Pregunta puerta: ¿Sujeta a normatividad? ──────────────────────── -->
+      <div class="field field-radio" id="field-cump_tie_norm">
+        <label>
+          ¿La sociedad está sujeta a alguna normatividad que la obligue a implementar
+          algún control para la prevención o gestión de riesgos de LA/FT, Fraude,
+          Corrupción y/o Soborno?
           <span class="req">*</span>
         </label>
-        <textarea id="cump_desc_norm" rows="3"
-                  placeholder="Describa la normatividad aplicable…"
-                  oninput="actualizarCump('DESC_NORM',this.value); limpiarError('field-cump_desc_norm')"></textarea>
-        <span class="error-msg">Campo requerido</span>
-      </div>
-
-      <div class="field col-full" id="field-cump_norm_laft">
-        <label for="cump_norm_laft">
-          Referencia específica de normatividad LA/FT
-          <span style="font-size:.7rem;font-weight:400;text-transform:none">
-            (ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)
-          </span>
-        </label>
-        <input type="text" id="cump_norm_laft" maxlength="255"
-               placeholder="Nombre o número de la norma LA/FT aplicable"
-               oninput="actualizarCump('NORM_LAFT',this.value)" />
-      </div>
-
-      <!-- ── Bloque B: ¿Tiene sistema implementado? ────────────────────────── -->
-      <div class="field field-radio">
-        <label>¿Tiene sistema de prevención de riesgos implementado? <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
-            <input type="radio" name="cump_tie_sist" value="S"
-                   onchange="onTieneSistemaChange('S')"> Sí
+            <input type="radio" name="cump_tie_norm" value="S"
+                   onchange="onTieNormChange('S')"> Sí
           </label>
           <label class="radio-option">
-            <input type="radio" name="cump_tie_sist" value="N" checked
-                   onchange="onTieneSistemaChange('N')"> No
+            <input type="radio" name="cump_tie_norm" value="N" checked
+                   onchange="onTieNormChange('N')"> No
           </label>
         </div>
       </div>
 
-      <!-- ── Sub-bloque B1: Tipo de sistema + Oficial (condicional) ──────────── -->
-      <div id="bloque-cump-sistema" class="bloque-condicional"
-           style="display:none; opacity:0; max-height:0">
+      <!-- ── Resto de la sección — visible solo cuando TIE_NORM = 'S' ──────── -->
+      <div id="bloque-cump-normativa" class="bloque-condicional"
+           style="display:none;opacity:0;max-height:0">
 
-        <!-- Tipo de sistema implementado -->
-        <div class="grid-2">
-          <div class="field" id="field-cump_sis_preve">
-            <label for="cump_sis_preve">Tipo de sistema implementado <span class="req">*</span></label>
-            <select id="cump_sis_preve"
-                    onchange="actualizarCump('SIS_PREVE',this.value); limpiarError('field-cump_sis_preve')">
-              <option value="">— Seleccione —</option>
-            </select>
-            <span class="error-msg">Campo requerido</span>
-          </div>
+        <!-- ¿Cuál es o son las regulaciones? -->
+        <div class="field col-full" id="field-cump_desc_norm">
+          <label for="cump_desc_norm">
+            ¿Cuál es o son estas regulaciones o normas?
+            <span class="req">*</span>
+          </label>
+          <textarea id="cump_desc_norm" rows="3"
+                    placeholder="Describa la normatividad aplicable…"
+                    oninput="actualizarCump('DESC_NORM',this.value); limpiarError('field-cump_desc_norm')"></textarea>
+          <span class="error-msg">Campo requerido</span>
+        </div>
 
-          <!-- Sibling sistema — visible solo cuando se elige "Otro" -->
-          <div class="field" id="field-cump_sis_preve_otro" style="display:none">
-            <label>Especifique el sistema de prevenci&#xF3;n <span class="req">*</span></label>
-            <input type="text" id="otr_preve" maxlength="255" placeholder="Describa el sistema implementado"
-                   oninput="actualizarCump('OTR_PREVE',this.value)" />
-            <span class="error-msg">Campo requerido</span>
+        <div class="field col-full" id="field-cump_norm_laft">
+          <label for="cump_norm_laft">
+            Referencia específica de normatividad LA/FT
+            <span style="font-size:.7rem;font-weight:400;text-transform:none">
+              (ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)
+            </span>
+          </label>
+          <input type="text" id="cump_norm_laft" maxlength="255"
+                 placeholder="Nombre o número de la norma LA/FT aplicable"
+                 oninput="actualizarCump('NORM_LAFT',this.value)" />
+        </div>
+
+        <!-- ¿Tiene sistema implementado? -->
+        <div class="field field-radio">
+          <label>¿Tiene sistema de prevención de riesgos implementado? <span class="req">*</span></label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="cump_tie_sist" value="S"
+                     onchange="onTieneSistemaChange('S')"> Sí
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="cump_tie_sist" value="N" checked
+                     onchange="onTieneSistemaChange('N')"> No
+            </label>
           </div>
         </div>
 
-        <!-- Nota informativa -->
-        <p class="cump-note">
-          Esta información solo es requerida para las personas jurídicas obligadas a tener un
-          sistema de prevención de riesgos de lavado de activos y financiación de terrorismo
-          o similar.
-        </p>
+        <!-- Tipo de sistema + Oficial (condicional a TIE_JUNTA='S') -->
+        <div id="bloque-cump-sistema" class="bloque-condicional"
+             style="display:none;opacity:0;max-height:0">
 
-        <!-- Sub-título -->
-        <p class="cump-subtitle">Información del oficial de cumplimiento</p>
+          <div class="grid-2">
+            <div class="field" id="field-cump_sis_preve">
+              <label for="cump_sis_preve">Tipo de sistema implementado <span class="req">*</span></label>
+              <select id="cump_sis_preve"
+                      onchange="actualizarCump('SIS_PREVE',this.value); onSistPreveChange(this.value); limpiarError('field-cump_sis_preve')">
+                <option value="">— Seleccione —</option>
+                <option value="PTEE">PTEE</option>
+                <option value="PTEP">PTEP</option>
+                <option value="SAGRILAFT">SAGRILAFT</option>
+                <option value="SARLAFT">SARLAFT</option>
+                <option value="SIPLA">SIPLA</option>
+                <option value="SIPLAFT">SIPLAFT</option>
+                <option value="NA">N/A</option>
+                <option value="OTRO">Otro</option>
+              </select>
+              <span class="error-msg">Campo requerido</span>
+            </div>
 
-        <!-- ── Lista dinámica de oficiales ───────────────────────────────── -->
-        <div id="cump-oficiales-list" class="grupo-lista"></div>
+            <!-- Texto libre para "Otro" sistema -->
+            <div class="field" id="field-cump_sis_preve_otro" style="display:none">
+              <label>Especifique el sistema de prevención <span class="req">*</span></label>
+              <input type="text" id="otr_preve" maxlength="255"
+                     placeholder="Describa el sistema implementado"
+                     oninput="actualizarCump('OTR_PREVE',this.value)" />
+              <span class="error-msg">Campo requerido</span>
+            </div>
+          </div>
 
-        <div class="pais-actions" style="margin-top:10px">
-          <button class="btn-agregar-pais" type="button" onclick="agregarCump()">
-            ＋ Agregar miembro
-          </button>
-        </div>
+          <p class="cump-note">
+            Esta información solo es requerida para las personas jurídicas obligadas a tener un
+            sistema de prevención de riesgos de lavado de activos y financiación de terrorismo
+            o similar.
+          </p>
 
-      </div><!-- /bloque-cump-sistema -->
+          <p class="cump-subtitle">Información del oficial de cumplimiento</p>
+
+          <div id="cump-oficiales-list" class="grupo-lista"></div>
+
+          <div class="pais-actions" style="margin-top:10px">
+            <button class="btn-agregar-pais" type="button" onclick="agregarCump()">
+              ＋ Agregar oficial
+            </button>
+          </div>
+
+        </div><!-- /bloque-cump-sistema -->
+      </div><!-- /bloque-cump-normativa -->
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
@@ -872,12 +945,49 @@
     </div><!-- /accordion-body -->
   </section>
 
-  <!-- ─── SECCIÓN 9: Información financiera ───────────────────────────────── -->
+  <!-- ─── SECCIÓN 9: Beneficiarios Finales ────────────────────────────────── -->
+  <section class="accordion collapsed" id="accordion-bf">
+
+    <div class="accordion-header" onclick="toggleAccordion('accordion-bf')">
+      <span class="accordion-title">
+        <span class="section-num">9</span>
+        Beneficiarios Finales
+      </span>
+      <span class="chevron">&#8964;</span>
+    </div>
+
+    <div class="accordion-body">
+
+      <p class="section-hint">
+        Identifique las personas naturales que poseen o controlan,
+        directa o indirectamente, el 5&#xA0;% o m&#xE1;s de la participaci&#xF3;n o votaci&#xF3;n
+        de la empresa, o que por otros medios ejercen control sobre ella.
+      </p>
+
+      <div id="bf-grupos-list"><!-- renderListaBF() popula esta lista --></div>
+
+      <div class="pais-actions">
+        <button class="btn-agregar-grupo" type="button" onclick="agregarBF()">
+          &#43; Agregar beneficiario
+        </button>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button"
+                onclick="limpiarSeccionBF()">Limpiar secci&#xF3;n</button>
+        <button class="btn btn-primary" type="button"
+                onclick="validarYContinuarBF()">Continuar &#x2192; Secci&#xF3;n&#xA0;10</button>
+      </div>
+
+    </div><!-- /accordion-body -->
+  </section>
+
+  <!-- ─── SECCIÓN 10: Información financiera ──────────────────────────────────── -->
   <section class="accordion collapsed" id="accordion-financiera">
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-financiera')">
       <span class="accordion-title">
-        <span class="section-num">9</span>
+        <span class="section-num">10</span>
         Información financiera
       </span>
       <span class="chevron">&#8964;</span>
@@ -968,7 +1078,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionFinanciera()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarFinanciera()">Continuar &#x2192; Sección 10</button>
+                onclick="validarYContinuarFinanciera()">Continuar &#x2192; Secci&#xF3;n 11</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -979,7 +1089,7 @@
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-bancaria')">
       <span class="accordion-title">
-        <span class="section-num">10</span>
+        <span class="section-num">11</span>
         Información bancaria
       </span>
       <span class="chevron">&#8964;</span>
@@ -990,8 +1100,8 @@
       <!-- Lista dinámica de cuentas bancarias -->
       <div class="grupo-lista" id="banco-grupos-list"></div>
 
-      <!-- Botón agregar cuenta — solo Jurídica -->
-      <div class="pais-actions solo-juridica">
+      <!-- Botón agregar cuenta — deshabilitado para Jurídica -->
+      <div class="pais-actions solo-juridica" style="display:none">
         <button class="btn-agregar-pais" type="button" onclick="agregarBanco()">
           &#65291; Agregar cuenta bancaria
         </button>
@@ -1001,7 +1111,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="renderListaBancaria()">Limpiar sección</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBancaria()">Continuar &#x2192; Sección 11</button>
+                onclick="validarYContinuarBancaria()">Continuar &#x2192; Secci&#xF3;n 12</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1012,7 +1122,7 @@
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-pep')">
       <span class="accordion-title">
-        <span class="section-num">11</span>
+        <span class="section-num">12</span>
         PEP &#x2014; Exposici&#xF3;n pol&#xED;tica
         <span class="ic-info" data-tip="PEP (Persona Expuesta Políticamente): persona que ejerce o ha ejercido cargos o funciones públicas prominentes en el país o en el exterior, como jefes de Estado, políticos, funcionarios judiciales, militares de alto rango, directivos de empresas públicas, o que tiene vínculos cercanos con dichas personas (familiares directos, asociados).">i</span>
       </span>
@@ -1059,7 +1169,7 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionPEP()">Limpiar secci&#xF3;n</button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarPEP()">Continuar &#x2192; Secci&#xF3;n 12</button>
+                onclick="validarYContinuarPEP()">Continuar &#x2192; Secci&#xF3;n 13</button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1070,7 +1180,7 @@
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-va')">
       <span class="accordion-title">
-        <span class="section-num">12</span>
+        <span class="section-num">13</span>
         Actividades con activos virtuales
         <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado.">i</span>
       </span>
@@ -1136,50 +1246,13 @@
         <button class="btn btn-secondary" type="button"
                 onclick="limpiarSeccionVA()">Limpiar secci&#xF3;n</button>
         <button class="btn btn-primary" type="button" id="btn-continuar-va"
-                onclick="validarYContinuarVA()">Continuar &#x2192; Secci&#xF3;n 13</button>
+                onclick="validarYContinuarVA()">Continuar &#x2192; Secci&#xF3;n 14</button>
       </div>
 
     </div><!-- /accordion-body -->
   </section>
 
-  <!-- ─── SECCIÓN 13: Beneficiarios Finales ───────────────────────────────── -->
-  <section class="accordion collapsed" id="accordion-bf">
-
-    <div class="accordion-header" onclick="toggleAccordion('accordion-bf')">
-      <span class="accordion-title">
-        <span class="section-num">13</span>
-        Beneficiarios Finales
-      </span>
-      <span class="chevron">&#8964;</span>
-    </div>
-
-    <div class="accordion-body">
-
-      <p class="section-hint">
-        Identifique las personas naturales o jurídicas que poseen o controlan,
-        directa o indirectamente, más del 25&#xA0;% de la participación o votación
-        de la empresa, o que por otros medios ejercen control sobre ella.
-      </p>
-
-      <div id="bf-grupos-list"><!-- renderListaBF() popula esta lista --></div>
-
-      <div class="form-actions" style="margin-top:0.5rem">
-        <button class="btn btn-outline" type="button" onclick="agregarBF()">
-          &#43; Agregar beneficiario
-        </button>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionBF()">Limpiar sección</button>
-        <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBF()">Continuar &#x2192; Secci&#xF3;n&#xA0;14</button>
-      </div>
-
-    </div><!-- /accordion-body -->
-  </section>
-
-  <!-- ─── SECCIÓN 13: Documentos Requeridos y Firma ──────────────────────── -->
+  <!-- ─── SECCIÓN 14: Documentos Requeridos y Firma ──────────────────────── -->
   <section class="accordion collapsed" id="accordion-docs">
 
     <div class="accordion-header" onclick="toggleAccordion('accordion-docs')">
@@ -1252,13 +1325,9 @@
           </div>
         </div>
 
-        <!-- Documento de identidad — etiqueta diferente según modo, mismo archivo -->
-        <div class="doc-item">
-          <div class="doc-label solo-juridica">
-            Copia del documento de identidad del Representante Legal
-            <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
-          </div>
-          <div class="doc-label solo-natural" style="display:none">
+        <!-- Documento de identidad — Natural: único; Jurídica: uno por RL (dinámico) -->
+        <div class="doc-item solo-natural" style="display:none">
+          <div class="doc-label">
             Copia del documento de identidad de la persona natural
             <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
           </div>
@@ -1271,14 +1340,12 @@
             <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
+        <!-- Jurídica: contenedor dinámico generado por renderDocRLFields() -->
+        <div id="doc-rl-container" class="solo-juridica"></div>
 
-        <!-- Estados financieros / Declaración de renta — etiqueta diferente según modo -->
-        <div class="doc-item">
-          <div class="doc-label solo-juridica">
-            Estados financieros <small>(&#xFA;ltimos dos a&#xF1;os)</small>
-            <span class="ic-info" data-tip="Balance general y estado de resultados (pérdidas y ganancias) de los últimos dos años fiscales, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
-          </div>
-          <div class="doc-label solo-natural" style="display:none">
+        <!-- Declaración de renta — solo Natural -->
+        <div class="doc-item solo-natural" style="display:none">
+          <div class="doc-label">
             Declaraci&#xF3;n de renta o juramentada
             <span class="ic-info" data-tip="Declaración de renta del último año fiscal o declaración juramentada de ingresos si no está obligado a declarar renta.">i</span>
           </div>
@@ -1289,6 +1356,40 @@
                      onchange="onArchivoSeleccionado('EST_FIN',this)" />
             </label>
             <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ning&#xFA;n archivo seleccionado</span>
+          </div>
+        </div>
+
+        <!-- Estados financieros Año 1 — solo Jurídica -->
+        <div class="doc-item solo-juridica">
+          <div class="doc-label">
+            Estados financieros &#8212; A&#xF1;o 1
+            <small>(pen&#xFA;ltimo a&#xF1;o fiscal)</small>
+            <span class="ic-info" data-tip="Balance general y estado de resultados del penúltimo año fiscal, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
+          </div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf" style="display:none"
+                     onchange="onArchivoSeleccionado('EST_FIN_1',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_est_fin_1">Ning&#xFA;n archivo seleccionado</span>
+          </div>
+        </div>
+
+        <!-- Estados financieros Año 2 — solo Jurídica -->
+        <div class="doc-item solo-juridica">
+          <div class="doc-label">
+            Estados financieros &#8212; A&#xF1;o 2
+            <small>(&#xFA;ltimo a&#xF1;o fiscal)</small>
+            <span class="ic-info" data-tip="Balance general y estado de resultados del último año fiscal, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
+          </div>
+          <div class="doc-upload-wrap">
+            <label class="btn-upload" tabindex="0">
+              Seleccionar archivo
+              <input type="file" accept=".pdf" style="display:none"
+                     onchange="onArchivoSeleccionado('EST_FIN_2',this)" />
+            </label>
+            <span class="doc-archivo-nombre" id="doc_ind_est_fin_2">Ning&#xFA;n archivo seleccionado</span>
           </div>
         </div>
 

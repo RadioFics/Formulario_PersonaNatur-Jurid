@@ -56,9 +56,54 @@ async function initSeccionDocs() {
   set('firma_numdoc', f.NUM_DOCU);
   set('firma_fec',    f.FEC_FIRMA);
 
-  // Hidratar indicadores de archivos desde borrador (solo nombre, no el File)
+  // Renderizar campos de RL dinámicos y luego hidratar indicadores de archivos
+  renderDocRLFields();
   const docs = formData.documentos || {};
   Object.entries(docs).forEach(([clave, nombre]) => {
+    if (nombre) _actualizarIndicadorArchivo(clave, nombre);
+  });
+}
+
+/**
+ * Genera un campo de carga por cada RL registrado en formData.representantes.
+ * Clave usada: DOC_ID_RL_0, DOC_ID_RL_1, …
+ * Debe llamarse también cuando se agrega/elimina un RL en sección 2.
+ */
+function renderDocRLFields() {
+  const container = document.getElementById('doc-rl-container');
+  if (!container) return;
+
+  const rls = Array.isArray(formData.representantes) ? formData.representantes : [];
+  container.innerHTML = '';
+
+  rls.forEach((rl, idx) => {
+    const clave     = `DOC_ID_RL_${idx}`;
+    const nombreRL  = [rl.NOM_REPR, rl.APE_REPR].filter(Boolean).join(' ');
+    const tituloRL  = nombreRL ||
+                      (idx === 0 ? 'Representante Legal Principal' : `Representante Legal Suplente ${idx}`);
+    const labelBase = idx === 0
+      ? 'Copia del documento de identidad del Representante Legal'
+      : `Copia del documento de identidad del Representante Legal ${idx + 1}`;
+
+    const item = document.createElement('div');
+    item.className = 'doc-item';
+    item.innerHTML = `
+      <div class="doc-label">
+        ${labelBase}
+        <small>${tituloRL}</small>
+        <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
+      </div>
+      <div class="doc-upload-wrap">
+        <label class="btn-upload" tabindex="0">
+          Seleccionar archivo
+          <input type="file" accept=".pdf" style="display:none"
+                 onchange="onArchivoSeleccionado('${clave}',this)" />
+        </label>
+        <span class="doc-archivo-nombre" id="doc_ind_${clave.toLowerCase()}">Ningún archivo seleccionado</span>
+      </div>`;
+    container.appendChild(item);
+
+    const nombre = (formData.documentos || {})[clave];
     if (nombre) _actualizarIndicadorArchivo(clave, nombre);
   });
 }
@@ -153,10 +198,28 @@ function validarSeccionDocs() {
   const requeridosComun = [
     { clave: 'RUT',       indId: 'doc_ind_rut',       label: 'RUT' },
     { clave: 'CERT_BANC', indId: 'doc_ind_cert_banc', label: 'Certificación bancaria' },
-    { clave: 'DOC_ID_RL', indId: 'doc_ind_doc_id_rl', label: 'Documento de identidad' },
-    { clave: 'EST_FIN',   indId: 'doc_ind_est_fin',   label: esNatural ? 'Declaración de renta' : 'Estados financieros' },
     { clave: 'CART_ACEP', indId: 'doc_ind_cart_acep', label: esNatural ? 'Carta declaración de fondos' : 'Carta de aceptación' },
   ];
+
+  if (esNatural) {
+    requeridosComun.push(
+      { clave: 'DOC_ID_RL', indId: 'doc_ind_doc_id_rl', label: 'Documento de identidad' },
+      { clave: 'EST_FIN',   indId: 'doc_ind_est_fin',   label: 'Declaración de renta' }
+    );
+  } else {
+    // Un campo por cada RL registrado en sección 2
+    const rls = Array.isArray(formData.representantes) ? formData.representantes : [];
+    rls.forEach((rl, idx) => {
+      const clave = `DOC_ID_RL_${idx}`;
+      const nom   = [rl.NOM_REPR, rl.APE_REPR].filter(Boolean).join(' ') ||
+                    (idx === 0 ? 'RL Principal' : `RL Suplente ${idx}`);
+      requeridosComun.push({ clave, indId: `doc_ind_${clave.toLowerCase()}`, label: `Doc. identidad ${nom}` });
+    });
+    requeridosComun.push(
+      { clave: 'EST_FIN_1', indId: 'doc_ind_est_fin_1', label: 'Estados financieros Año 1' },
+      { clave: 'EST_FIN_2', indId: 'doc_ind_est_fin_2', label: 'Estados financieros Año 2' }
+    );
+  }
 
   const requeridosJuridica = [
     { clave: 'CERT_EXIS', indId: 'doc_ind_cert_exis', label: 'Certificado de existencia' },
@@ -214,9 +277,14 @@ function limpiarSeccionDocs() {
   // Archivos
   _archivos.clear();
   formData.documentos = {
-    RUT: null, CERT_BANC: null, CERT_EXIS: null, DOC_ID_RL: null,
-    EST_FIN: null, CERT_ACCI: null, CART_ACEP: null, ARCH_FIRMA: null,
+    RUT: null, CERT_BANC: null, CERT_EXIS: null,
+    DOC_ID_RL: null,
+    EST_FIN: null, EST_FIN_1: null, EST_FIN_2: null,
+    CERT_ACCI: null, CART_ACEP: null, ARCH_FIRMA: null,
   };
+  // Limpiar también claves dinámicas de RL
+  const rls = Array.isArray(formData.representantes) ? formData.representantes : [];
+  rls.forEach((_, idx) => { formData.documentos[`DOC_ID_RL_${idx}`] = null; });
   document.querySelectorAll('#accordion-docs input[type="file"]')
     .forEach(inp => { inp.value = ''; });
   document.querySelectorAll('#accordion-docs .doc-archivo-nombre')

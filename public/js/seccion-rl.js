@@ -157,6 +157,7 @@ function agregarRLExtra() {
   div.innerHTML = _rlExtraHTML(extraId, idx);
   list.appendChild(div);
   div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (typeof renderDocRLFields === 'function') renderDocRLFields();
   guardarBorradorDebounced();
 }
 
@@ -168,6 +169,7 @@ function eliminarRLExtra(extraId) {
   _rlExtraMap.delete(extraId);
   const wrap = document.getElementById(`rl_extra_wrap_${extraId}`);
   if (wrap) wrap.remove();
+  if (typeof renderDocRLFields === 'function') renderDocRLFields();
   guardarBorradorDebounced();
 }
 

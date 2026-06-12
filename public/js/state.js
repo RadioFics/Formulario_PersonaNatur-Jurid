@@ -55,7 +55,10 @@ const formData = {
     OTR_PAIS_SOC: '',    // texto libre cuando COD_PAIS_SOC = 'OTRO'
     TIP_EMPR:     null,  // 'PUBLICA' | 'PRIVADA' | 'MIXTA'
     GRUP_EMPR:    null,  // 'S' | 'N'
-    REL_GRUPO:    '',    // Rol en el grupo: MATRIZ / FILIAL / SUCURSAL / etc. (GN_JURID_CUMP)
+    // Campos del cascada de grupo empresarial (solo cuando GRUP_EMPR = 'S')
+    CTRL_DECLA:   null,  // ¿Situaciones declaradas en CERL? 'S' | 'N'
+    CAL_GRUPO:    null,  // 'MATRIZ' | 'FILIAL' | 'SUBSIDIARIA'
+    DESC_GRUPO:   '',    // Descripción de la estructura del grupo (texto libre extenso)
   },
 
   // Sección 4 — Países de operación
@@ -65,29 +68,18 @@ const formData = {
 
   // Sección 5 — Sistema de cumplimiento
   cumplimiento: {
-    DESC_NORM:  '',   // textarea: normatividad aplicable (siempre requerida)
-    NORM_LAFT:  '',   // Referencia específica normativa LA/FT, ej. "LEY XXXX DE 2026"
-    TIE_JUNTA:  'N', // radio: ¿tiene sistema implementado? — 'S' | 'N'
+    TIE_NORM:  'N',  // radio: ¿sujeta a normatividad LA/FT? — 'S' | 'N'
+    DESC_NORM: '',   // textarea: ¿cuál(es) regulación(es)?
+    NORM_LAFT: '',   // Referencia específica normativa LA/FT
+    TIE_JUNTA: 'N', // radio: ¿tiene sistema implementado? — 'S' | 'N'
 
     // Solo aplican cuando TIE_JUNTA = 'S':
-    SIS_PREVE: null,  // FK → MAE_SIST_PREV
-    OTR_PREVE: '',   // texto libre cuando sistema prevención = "Otro"
+    SIS_PREVE: null,  // Tipo de sistema (abreviatura o valor seleccionado)
+    OTR_PREVE: '',    // texto libre cuando sistema prevención = "Otro"
 
-    // Oficial de cumplimiento (Principal + Suplente)
-    oficiales: [
-      {
-        TIP_REPR: 'P', TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-        NOM_RESP: '', APE_RESP: '', RAZ_RESP: '',
-        COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-        DIR_RESP: '', TEL_RESP: '', MAIL_RESP: '',
-      },
-      {
-        TIP_REPR: 'S', TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-        NOM_RESP: '', APE_RESP: '', RAZ_RESP: '',
-        COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-        DIR_RESP: '', TEL_RESP: '', MAIL_RESP: '',
-      },
-    ],
+    // Oficiales de cumplimiento — se agregan dinámicamente.
+    // El Principal se crea al activar TIE_JUNTA='S'; los suplentes son opcionales.
+    oficiales: [],
   },
 
   // Sección 6 — Junta directiva / Consejo de administración
@@ -156,6 +148,8 @@ const formData = {
     CERT_EXIS: null,
     DOC_ID_RL: null,
     EST_FIN:   null,
+    EST_FIN_1: null,
+    EST_FIN_2: null,
     CERT_ACCI: null,
     CART_ACEP: null,
     ARCH_FIRMA: null,

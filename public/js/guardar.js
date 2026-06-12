@@ -71,8 +71,16 @@ function validarTodo() {
     errores.push('Información de la sociedad: Grupo empresarial requerido');
   if (formData.sociedad.UBIC_SOC === 'E' && !formData.sociedad.COD_PAIS_SOC)
     errores.push('Información de la sociedad: País requerido para empresa extranjera');
-  if (formData.sociedad.GRUP_EMPR === 'S' && !formData.sociedad.REL_GRUPO)
-    errores.push('Información de la sociedad: Rol en el grupo empresarial requerido');
+  if (formData.sociedad.GRUP_EMPR === 'S') {
+    if (!formData.sociedad.CTRL_DECLA)
+      errores.push('Información de la sociedad: Indique si las situaciones de control están declaradas en el CERL');
+    if (formData.sociedad.CTRL_DECLA === 'N') {
+      if (!formData.sociedad.CAL_GRUPO)
+        errores.push('Información de la sociedad: Calidad dentro del grupo empresarial requerida');
+      if (!formData.sociedad.DESC_GRUPO)
+        errores.push('Información de la sociedad: Descripción del grupo empresarial requerida');
+    }
+  }
 
   /* ── Sección 4: Países ───────────────────────────────────────────────── */
   if (!formData.paises.length || !formData.paises[0].COD_PAIS)
@@ -81,8 +89,10 @@ function validarTodo() {
     errores.push('Países de operación: Hay entradas sin país seleccionado');
 
   /* ── Sección 5: Cumplimiento ─────────────────────────────────────────── */
-  if (!formData.cumplimiento.DESC_NORM || !String(formData.cumplimiento.DESC_NORM).trim())
-    errores.push('Sistema de cumplimiento: Descripción de normatividad requerida');
+  if (formData.cumplimiento.TIE_NORM === 'S') {
+    if (!formData.cumplimiento.DESC_NORM || !String(formData.cumplimiento.DESC_NORM).trim())
+      errores.push('Sistema de cumplimiento: Descripción de normatividad requerida');
+  }
 
   /* ── Sección 6: Junta directiva ──────────────────────────────────────── */
   if (formData.juntaDirectiva.TIE_JUNTA === 'S' &&
@@ -566,7 +576,9 @@ function _construirPayload() {
     OTR_PAIS_SOC: s.OTR_PAIS_SOC || null,
     TIP_EMPR:     s.TIP_EMPR     || null,
     GRUP_EMPR:    s.GRUP_EMPR    || null,
-    REL_GRUPO:    s.REL_GRUPO    || null,
+    CTRL_DECLA:   s.CTRL_DECLA   || null,
+    CAL_GRUPO:    s.CAL_GRUPO    || null,
+    DESC_GRUPO:   s.DESC_GRUPO   || null,
 
     // ── Sección 2 — Representantes legales (GN_JURID_RL) ───────────────────
     representantes: formData.representantes.map(r => ({ ...r })),
@@ -575,11 +587,12 @@ function _construirPayload() {
     paises: formData.paises.filter(p => p.COD_PAIS).map(p => ({ COD_PAIS: p.COD_PAIS })),
 
     // ── Sección 5 — Cumplimiento (GN_JURID_CUMP) ───────────────────────────
-    // Prefijos para evitar colisiones con campos de otras secciones
+    TIE_NORM:       c.TIE_NORM    || 'N',
     DESC_NORM:      c.DESC_NORM   || null,
     NORM_LAFT:      c.NORM_LAFT   || null,
     cump_TIE_JUNTA: c.TIE_JUNTA  || 'N',
     SIS_PREVE:      c.SIS_PREVE   || null,
+    OTR_PREVE:      c.OTR_PREVE   || null,
     oficiales:      (c.oficiales || []).map(o => _omitir(o, ['_id'])),
 
     // ── Sección 6 — Junta directiva (GN_JURID_JD) ──────────────────────────

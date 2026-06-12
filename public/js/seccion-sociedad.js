@@ -92,13 +92,63 @@ function onSocPaisChange(codPais) {
   }
 }
 
+/* ── Cascada grupo empresarial ──────────────────────────────────────────────── */
+
+function onGrupEmprChange(valor) {
+  actualizarSociedad('GRUP_EMPR', valor || null);
+  limpiarError('field-soc_grup_empr');
+  const wrap = document.getElementById('soc_grup_wrap');
+  if (!wrap) return;
+  if (valor === 'S') {
+    wrap.style.display = 'flex';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      wrap.style.opacity   = '1';
+      wrap.style.maxHeight = '99999px';
+    }));
+  } else {
+    wrap.style.opacity   = '0';
+    wrap.style.maxHeight = '0';
+    setTimeout(() => { wrap.style.display = 'none'; }, 210);
+    actualizarSociedad('CTRL_DECLA', null);
+    actualizarSociedad('CAL_GRUPO',  null);
+    actualizarSociedad('DESC_GRUPO', '');
+    document.querySelectorAll('input[name="soc_ctrl_decla"]').forEach(r => { r.checked = false; });
+    const sub = document.getElementById('soc_ctrl_no_wrap');
+    if (sub) { sub.style.opacity = '0'; sub.style.maxHeight = '0'; sub.style.display = 'none'; }
+    const sel = document.getElementById('soc_cal_grupo');
+    if (sel) sel.value = '';
+    const ta = document.getElementById('soc_desc_grupo');
+    if (ta) ta.value = '';
+  }
+}
+
+function onCtrlDeclaChange(valor) {
+  actualizarSociedad('CTRL_DECLA', valor);
+  const sub = document.getElementById('soc_ctrl_no_wrap');
+  if (!sub) return;
+  if (valor === 'N') {
+    sub.style.display = 'flex';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      sub.style.opacity   = '1';
+      sub.style.maxHeight = '99999px';
+    }));
+  } else {
+    sub.style.opacity   = '0';
+    sub.style.maxHeight = '0';
+    setTimeout(() => { sub.style.display = 'none'; }, 210);
+    actualizarSociedad('CAL_GRUPO', null);
+    actualizarSociedad('DESC_GRUPO', '');
+    const sel = document.getElementById('soc_cal_grupo');
+    if (sel) sel.value = '';
+    const ta = document.getElementById('soc_desc_grupo');
+    if (ta) ta.value = '';
+  }
+}
+
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 
 /**
  * Valida los campos requeridos de la sección de sociedad.
- * Requeridos: UBIC_SOC, GRUP_EMPR.
- * COD_PAIS_SOC es requerido solo si UBIC_SOC = 'E'.
- *
  * @returns {boolean}
  */
 function validarSeccionSociedad() {
@@ -113,6 +163,14 @@ function validarSeccionSociedad() {
     if (!d.COD_PAIS_SOC) { mostrarError('campo-soc_pais'); ok = false; }
     if (d.COD_PAIS_SOC === 'OTRO' && !d.OTR_PAIS_SOC) {
       mostrarError('field-soc_pais_otro'); ok = false;
+    }
+  }
+
+  if (d.GRUP_EMPR === 'S') {
+    if (!d.CTRL_DECLA) { mostrarError('field-soc_ctrl_decla'); ok = false; }
+    if (d.CTRL_DECLA === 'N') {
+      if (!d.CAL_GRUPO) { mostrarError('field-soc_cal_grupo'); ok = false; }
+      if (!d.DESC_GRUPO || !String(d.DESC_GRUPO).trim()) { mostrarError('field-soc_desc_grupo'); ok = false; }
     }
   }
 
@@ -143,7 +201,8 @@ function validarYContinuarSociedad() {
 function limpiarSeccionSociedad() {
   formData.sociedad = {
     UBIC_SOC: 'N', COD_PAIS_SOC: null, OTR_PAIS_SOC: '',
-    TIP_EMPR: null, GRUP_EMPR: null, REL_GRUPO: '',
+    TIP_EMPR: null, GRUP_EMPR: null,
+    CTRL_DECLA: null, CAL_GRUPO: null, DESC_GRUPO: '',
   };
 
   document.getElementById('soc_ubic').value      = 'N';
@@ -152,6 +211,17 @@ function limpiarSeccionSociedad() {
   document.getElementById('soc_pais').value      = '';
   const inp = document.getElementById('soc_pais_otro_txt');
   if (inp) inp.value = '';
+
+  // Ocultar / limpiar cascada grupo empresarial
+  document.querySelectorAll('input[name="soc_ctrl_decla"]').forEach(r => { r.checked = false; });
+  const calGrupo = document.getElementById('soc_cal_grupo');
+  if (calGrupo) calGrupo.value = '';
+  const descGrupo = document.getElementById('soc_desc_grupo');
+  if (descGrupo) descGrupo.value = '';
+  const grupWrap = document.getElementById('soc_grup_wrap');
+  if (grupWrap) { grupWrap.style.opacity = '0'; grupWrap.style.maxHeight = '0'; grupWrap.style.display = 'none'; }
+  const ctrlNoWrap = document.getElementById('soc_ctrl_no_wrap');
+  if (ctrlNoWrap) { ctrlNoWrap.style.opacity = '0'; ctrlNoWrap.style.maxHeight = '0'; ctrlNoWrap.style.display = 'none'; }
 
   document.getElementById('campo-soc_pais').style.display = 'none';
   const fo = document.getElementById('field-soc_pais_otro');

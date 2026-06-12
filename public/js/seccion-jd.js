@@ -16,10 +16,10 @@ let _jdId = 0;
 function _jdCampos(tipRepr) {
   return {
     TIP_REPR: tipRepr || 'P',
-    TIP_MIEM: '', NOM_MIEM: '', APE_MIEM: '', RAZ_MIEM: '',
+    TIP_MIEM: '', NOM_MIEM: '', APE_MIEM: '',
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
-    COD_PAIS: null, COD_DEPT: null, COD_MPIO: null,
-    DIR_MIEM: '', TEL_MIEM: '', MAIL_MIEM: '',
+    COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
+    DIR_MIEM: '', CEL_MIEM: '', TEL_MIEM: '', MAIL_MIEM: '',
   };
 }
 function _jdNuevo(tipRepr) {
@@ -34,13 +34,15 @@ function actualizarJDMiem(id, campo, valor) {
 }
 
 function actualizarTituloJD(id) {
-  const m   = _jdGet(id);
+  const m = _jdGet(id);
   if (!m) return;
-  const pos = _jdPos(id) + 1;
+  const pos = _jdPos(id);
+  // TIP_REPR siempre refleja la posición actual
+  m.TIP_REPR = pos === 0 ? 'P' : 'S';
   const nom = [(m.NOM_MIEM || '').trim(), (m.APE_MIEM || '').trim()].filter(Boolean).join(' ');
-  const rol = m.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
+  const rol = pos === 0 ? 'Principal' : 'Suplente';
   const el  = document.getElementById(`jd_titulo_${id}`);
-  if (el) el.textContent = `Miembro ${pos} (${rol})${nom ? ' — ' + nom : ''}`;
+  if (el) el.textContent = `Miembro ${pos + 1} (${rol})${nom ? ' — ' + nom : ''}`;
 }
 function _jdRenumerarTodos() {
   formData.juntaDirectiva.miembros.forEach(m => actualizarTituloJD(m._id));
@@ -74,66 +76,57 @@ function _jdPaOpts() { return getOpcionesHTML('/api/catalogo/paises','COD_PAIS',
 
 function _jdMiembroHTML(m) {
   const id  = m._id;
+  const pos = _jdPos(id);
+  const rol = pos === 0 ? 'Principal' : 'Suplente';
   const td  = _jdTdOpts();
   const pa  = _jdPaOpts();
-  const sel = m.TIP_REPR === 'S' ? 'selected' : '';
-  const selP = m.TIP_REPR !== 'S' ? 'selected' : '';
   return `
     <div class="grupo-header" onclick="toggleGrupoJD(${id})">
-      <span class="grupo-titulo" id="jd_titulo_${id}">Miembro ${_jdPos(id)+1}</span>
+      <span class="grupo-titulo" id="jd_titulo_${id}">Miembro ${pos + 1} (${rol})</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarJD(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="jd_body_${id}">
-      <div class="grid-4" style="margin-bottom:6px">
-        <div class="field">
-          <label>Rol <span class="req">*</span></label>
-          <select id="jd_${id}_tipRepr"
-                  onchange="actualizarJDMiem(${id},'TIP_REPR',this.value);actualizarTituloJD(${id})">
-            <option value="P" ${selP}>Principal</option>
-            <option value="S" ${sel}>Suplente</option>
-          </select>
-        </div>
-        <div class="field" id="field-jd_${id}_tipmiem">
+      <div class="grid-4">
+        <div class="field" style="grid-column: span 2" id="field-jd_${id}_tipmiem">
           <label>Tipo de miembro <span class="req">*</span></label>
-          <input type="text" id="jd_${id}_tipmiem" maxlength="100" placeholder="Ej: Titular, Suplente de consejo…"
+          <input type="text" id="jd_${id}_tipmiem" maxlength="100"
+                 placeholder="Ej: Titular, Suplente de consejo…"
                  oninput="actualizarJDMiem(${id},'TIP_MIEM',this.value);limpiarError('field-jd_${id}_tipmiem')" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-jd_${id}_nom">
           <label>Nombres <span class="req">*</span></label>
-          <input type="text" id="jd_${id}_nom" maxlength="100" placeholder="Nombres completos"
+          <input type="text" id="jd_${id}_nom" maxlength="100"
                  oninput="actualizarJDMiem(${id},'NOM_MIEM',this.value);actualizarTituloJD(${id});limpiarError('field-jd_${id}_nom')" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-jd_${id}_ape">
           <label>Apellidos <span class="req">*</span></label>
-          <input type="text" id="jd_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+          <input type="text" id="jd_${id}_ape" maxlength="100"
                  oninput="actualizarJDMiem(${id},'APE_MIEM',this.value);limpiarError('field-jd_${id}_ape')" />
           <span class="error-msg">Campo requerido</span>
         </div>
       </div>
-      <div class="grid-4">
-        <div class="field">
-          <label>Razón social</label>
-          <input type="text" id="jd_${id}_raz" maxlength="255" placeholder="Si aplica"
-                 oninput="actualizarJDMiem(${id},'RAZ_MIEM',this.value)" />
-        </div>
+      <div class="grid-3">
         <div class="field" id="field-jd_${id}_tipdoc">
-          <label>Tipo doc. <span class="req">*</span></label>
+          <label>Tipo de documento <span class="req">*</span></label>
           <select id="jd_${id}_tipdoc"
-                  onchange="actualizarJDMiem(${id},'TIP_DOCU',this.value);limpiarError('field-jd_${id}_tipdoc')">
+                  onchange="onJDTipdocChange(${id},this.value);actualizarJDMiem(${id},'TIP_DOCU',this.value);limpiarError('field-jd_${id}_tipdoc')">
             ${td}
           </select>
+          <input type="text" id="jd_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                 placeholder="Especifique el tipo de documento"
+                 oninput="actualizarJDMiem(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-jd_${id}_numdoc">
-          <label>Número doc. <span class="req">*</span></label>
+          <label>Número de documento <span class="req">*</span></label>
           <input type="text" id="jd_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\D/g,'');actualizarJDMiem(${id},'NUM_DOCU',this.value);limpiarError('field-jd_${id}_numdoc')" />
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field" id="field-jd_${id}_fec">
-          <label>Fecha expedición <span class="req">*</span></label>
+          <label>Fecha de expedición <span class="req">*</span></label>
           <input type="date" id="jd_${id}_fec"
                  onchange="actualizarJDMiem(${id},'FEC_EXPE',this.value);limpiarError('field-jd_${id}_fec')" />
           <span class="error-msg">Campo requerido</span>
@@ -147,6 +140,11 @@ function _jdMiembroHTML(m) {
             ${pa}
           </select>
           <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field" id="field-jd_${id}_pais_otro" style="display:none">
+          <label>Especifique el país <span class="req">*</span></label>
+          <input type="text" id="jd_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+                 oninput="actualizarJDMiem(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-jd_${id}_dept">
           <label>Departamento <span class="req">*</span></label>
@@ -165,17 +163,22 @@ function _jdMiembroHTML(m) {
           <span class="error-msg">Campo requerido</span>
         </div>
         <div class="field">
-          <label>Dirección</label>
+          <label>Dirección domicilio</label>
           <input type="text" id="jd_${id}_dir" maxlength="255"
                  oninput="actualizarJDMiem(${id},'DIR_MIEM',this.value)" />
         </div>
       </div>
-      <div class="grid-4">
-        <div class="field" id="field-jd_${id}_tel">
-          <label>Teléfono <span class="req">*</span></label>
-          <input type="tel" id="jd_${id}_tel" maxlength="20"
-                 oninput="actualizarJDMiem(${id},'TEL_MIEM',this.value);limpiarError('field-jd_${id}_tel')" />
+      <div class="grid-3">
+        <div class="field" id="field-jd_${id}_cel">
+          <label>Celular <span class="req">*</span></label>
+          <input type="tel" id="jd_${id}_cel" maxlength="20"
+                 oninput="actualizarJDMiem(${id},'CEL_MIEM',this.value);limpiarError('field-jd_${id}_cel')" />
           <span class="error-msg">Campo requerido</span>
+        </div>
+        <div class="field">
+          <label>Teléfono fijo</label>
+          <input type="tel" id="jd_${id}_tel" maxlength="20"
+                 oninput="actualizarJDMiem(${id},'TEL_MIEM',this.value)" />
         </div>
         <div class="field" id="field-jd_${id}_mail">
           <label>Correo electrónico <span class="req">*</span></label>
@@ -192,27 +195,37 @@ function _crearGrupoJDEl(m) {
   el.className = 'grupo-item';
   el.id        = `jd_grupo_${m._id}`;
   el.innerHTML = _jdMiembroHTML(m);
+  agregarOpcionOtroAlSelect(el.querySelector(`#jd_${m._id}_pais`));
+  agregarOpcionOtroAlTipdoc(el.querySelector(`#jd_${m._id}_tipdoc`));
   return el;
 }
 
 function _hydrateJDFields(m, el) {
   const id  = m._id;
   const set = (sel, val) => { const f = el.querySelector(sel); if (f) f.value = val || ''; };
-  set(`#jd_${id}_tipRepr`,  m.TIP_REPR);
   set(`#jd_${id}_tipmiem`,  m.TIP_MIEM);
   set(`#jd_${id}_nom`,      m.NOM_MIEM);
   set(`#jd_${id}_ape`,      m.APE_MIEM);
-  set(`#jd_${id}_raz`,      m.RAZ_MIEM);
   set(`#jd_${id}_tipdoc`,   m.TIP_DOCU);
+  if (m.TIP_DOCU === 'OTR_TPDOC') {
+    const inpOtro = el.querySelector(`#jd_${id}_tipdoc_otro`);
+    if (inpOtro) { inpOtro.style.display = ''; inpOtro.value = m.OTR_TPDOC || ''; }
+  }
   set(`#jd_${id}_numdoc`,   m.NUM_DOCU);
   set(`#jd_${id}_fec`,      m.FEC_EXPE);
   set(`#jd_${id}_pais`,     m.COD_PAIS);
   set(`#jd_${id}_dir`,      m.DIR_MIEM);
+  set(`#jd_${id}_cel`,      m.CEL_MIEM);
   set(`#jd_${id}_tel`,      m.TEL_MIEM);
   set(`#jd_${id}_mail`,     m.MAIL_MIEM);
   if (m.COD_PAIS) {
     onJDPaisChange(id, m.COD_PAIS)
       .then(() => {
+        if (m.COD_PAIS === 'OTRO' || String(m.COD_PAIS) === '52') {
+          const inp = el.querySelector(`#jd_${id}_pais_otro`);
+          if (inp) inp.value = m.OTR_PAIS || '';
+          return Promise.resolve();
+        }
         const deptEl = el.querySelector(`#jd_${id}_dept`);
         if (deptEl) deptEl.value = m.COD_DEPT || '';
         if (m.COD_DEPT && m.COD_DEPT !== 'NA') return onJDDeptChange(id, m.COD_DEPT);
@@ -316,6 +329,23 @@ async function onJDPaisChange(id, codPais) {
   limpiarError(`field-jd_${id}_dept`);
   limpiarError(`field-jd_${id}_mpio`);
   if (!codPais) { selDept.innerHTML = '<option value="">— Seleccione país primero —</option>'; selDept.disabled = true; return; }
+
+  if (String(codPais) === 'OTRO' || String(codPais) === '52') {
+    const fieldOtroJD = document.getElementById(`field-jd_${id}_pais_otro`);
+    const fieldDeptJD = document.getElementById(`field-jd_${id}_dept`);
+    const fieldMpioJD = document.getElementById(`field-jd_${id}_mpio`);
+    if (fieldDeptJD) fieldDeptJD.style.display = 'none';
+    if (fieldMpioJD) fieldMpioJD.style.display = 'none';
+    if (fieldOtroJD) { fieldOtroJD.style.display = ''; fieldOtroJD.style.gridColumn = 'span 2'; }
+    return;
+  }
+  const fieldOtroJDR = document.getElementById(`field-jd_${id}_pais_otro`);
+  const fieldDeptJDR = document.getElementById(`field-jd_${id}_dept`);
+  const fieldMpioJDR = document.getElementById(`field-jd_${id}_mpio`);
+  if (fieldOtroJDR) { fieldOtroJDR.style.display = 'none'; fieldOtroJDR.style.gridColumn = ''; m.OTR_PAIS = null; const inp = document.getElementById(`jd_${id}_pais_otro`); if (inp) inp.value = ''; }
+  if (fieldDeptJDR) fieldDeptJDR.style.display = '';
+  if (fieldMpioJDR) fieldMpioJDR.style.display = '';
+
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_dept`, 'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
@@ -355,12 +385,16 @@ function _validarMiembroJD(m) {
     [`field-jd_${id}_numdoc`,  m.NUM_DOCU],
     [`field-jd_${id}_fec`,     m.FEC_EXPE],
     [`field-jd_${id}_pais`,    m.COD_PAIS],
-    [`field-jd_${id}_dept`,    m.COD_DEPT],
-    [`field-jd_${id}_mpio`,    m.COD_MPIO],
-    [`field-jd_${id}_tel`,     m.TEL_MIEM],
+    [`field-jd_${id}_cel`,     m.CEL_MIEM],
   ];
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  if (m.COD_PAIS !== 'OTRO') {
+    [
+      [`field-jd_${id}_dept`, m.COD_DEPT],
+      [`field-jd_${id}_mpio`, m.COD_MPIO],
+    ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  }
   if (!m.MAIL_MIEM || !esEmailValido(m.MAIL_MIEM)) { mostrarError(`field-jd_${id}_mail`); ok = false; }
   return ok;
 }
@@ -392,6 +426,16 @@ function validarYContinuarJD() {
   const acc7 = document.getElementById('accordion-rf');
   acc7.classList.remove('collapsed');
   acc7.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function onJDTipdocChange(id, val) {
+  const inp = document.getElementById(`jd_${id}_tipdoc_otro`);
+  if (inp) inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    if (inp) inp.value = '';
+    const m = _jdGet(id);
+    if (m) m.OTR_TPDOC = null;
+  }
 }
 
 function limpiarSeccionJD() {
