@@ -58,7 +58,14 @@ async function inicializar() {
         '/api/catalogo/ciiu', 'cod_ciiu',
         'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
         {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
-      ),
+      ).then(() => {
+        const sel = document.getElementById('cod_ciiu');
+        if (sel && !sel.querySelector('option[value="OTRO"]')) {
+          const opt = document.createElement('option');
+          opt.value = 'OTRO'; opt.textContent = 'Otro CIIU (no listado)';
+          sel.appendChild(opt);
+        }
+      }),
 
       // ── Sección 2: Representante Legal ─────────────────────────────────────
 
@@ -67,9 +74,10 @@ async function inicializar() {
         '/api/catalogo/tipos-documento?todos=1', 'rl_p_tipdoc',
         'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
       ).then(() => {
+        agregarOpcionOtroAlTipdoc('rl_p_tipdoc');
         const src  = document.getElementById('rl_p_tipdoc');
         const dest = document.getElementById('rl_s_tipdoc');
-        if (src && dest) dest.innerHTML = src.innerHTML;
+        if (src && dest) { dest.innerHTML = src.innerHTML; }
       }),
 
       // Países — Principal; se clona al Suplente
@@ -166,6 +174,21 @@ function _activarCamposOtros() {
   _activarSiblingOtro('cod_ciiu',       'field-cod_ciiu_otro',         () => {
     actualizarFormData('basica', 'OTR_CIIU', null);
     const el = document.getElementById('otr_ciiu'); if (el) el.value = '';
+  });
+
+  _activarSiblingOtro('cod_ciiu_n',     'field-cod_ciiu_n_otro',       () => {
+    if (typeof actualizarNatur === 'function') actualizarNatur('OTR_CIIU', null);
+    const el = document.getElementById('ciiu_n_otro_txt'); if (el) el.value = '';
+  });
+
+  _activarSiblingOtro('cod_nacio_n',    'field-cod_nacio_n_otro',      () => {
+    if (typeof actualizarNatur === 'function') actualizarNatur('OTR_NACIO', null);
+    const el = document.getElementById('nacio_n_otro_txt'); if (el) el.value = '';
+  });
+
+  _activarSiblingOtro('rl_p_tipdoc',   'rl_p_tipdoc_otro',            () => {
+    actualizarRL(0, 'OTR_TPDOC', null);
+    const el = document.getElementById('rl_p_tipdoc_otro'); if (el) el.value = '';
   });
 
   // cump_sis_preve — el onchange en HTML llama onSistPreveChange(); no se necesita _activarSiblingOtro.
@@ -277,6 +300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await renderListaJD();
   await renderListaRF();
   await renderListaBF();
+  await renderListaRL();
   await initSeccionDocs();
 
   // Hidratación de campos estáticos a partir del estado global.
@@ -287,10 +311,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Hidrata los inputs "otros" si hay borrador o modo actualizar
   const _otrMap = {
-    otr_vinc:  formData.basica?.OTR_VINC,
-    otr_ciiu:  formData.basica?.OTR_CIIU,
-    otr_socie: formData.sociedad?.OTR_SOCIE,
-    otr_preve: formData.cumplimiento?.OTR_PREVE,
+    otr_vinc:       formData.basica?.OTR_VINC,
+    otr_ciiu:       formData.basica?.OTR_CIIU,
+    otr_socie:      formData.sociedad?.OTR_SOCIE,
+    otr_preve:      formData.cumplimiento?.OTR_PREVE,
+    // RL principal — tipo de documento "otro"
+    rl_p_tipdoc_otro: formData.representantes?.[0]?.OTR_TPDOC,
+    // Persona Natural — nacionalidad y CIIU "otro"
+    nacio_n_otro_txt: window.formDataNatur?.basica?.OTR_NACIO,
+    ciiu_n_otro_txt:  window.formDataNatur?.basica?.OTR_CIIU,
   };
   Object.entries(_otrMap).forEach(([id, val]) => {
     const el = document.getElementById(id); if (el && val) el.value = val;
@@ -392,9 +421,11 @@ async function _cargarRegistroExistente(numIden) {
         NOM_REPR:  r.NOM_REPR  || '',
         APE_REPR:  r.APE_REPR  || '',
         TIP_DOCU:  r.TIP_DOCU,
+        OTR_TPDOC: r.OTR_TPDOC || null,
         NUM_DOCU:  r.NUM_DOCU  || '',
         FEC_EXPE:  r.FEC_EXPE  || '',
         COD_PAIS:  r.COD_PAIS,
+        OTR_PAIS:  r.OTR_PAIS  || '',
         COD_DEPT:  r.COD_DEPT,
         COD_MPIO:  r.COD_MPIO,
         DIR_REPR:  r.DIR_REPR  || '',
@@ -473,6 +504,38 @@ async function hidratarFormularioVisual() {
       const el = document.getElementById(id);
       if (el) el.value = formData.basica[key] || '';
     });
+
+    // Sección 1: cascada/OTRO para País de expedición del documento
+    {
+      const cpe = formData.basica.COD_PAIS_EXP;
+      if (cpe === 'OTRO') {
+        const fieldOtro = document.getElementById('field-pais_exp_otro');
+        const fieldDept = document.getElementById('field-cod_dept_exp');
+        const fieldMpio = document.getElementById('field-cod_mpio_exp');
+        if (fieldDept) fieldDept.style.display = 'none';
+        if (fieldMpio) fieldMpio.style.display = 'none';
+        if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
+        const inp = document.getElementById('pais_exp_otro_txt');
+        if (inp) inp.value = formData.basica.OTR_PAIS_EXP || '';
+      } else if (cpe) {
+        await cargarCatalogo('/api/catalogo/departamentos', 'cod_dept_exp',
+          'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: cpe });
+        const selDept = document.getElementById('cod_dept_exp');
+        if (selDept) {
+          selDept.disabled = false;
+          if (formData.basica.COD_DEPT_EXP) {
+            selDept.value = formData.basica.COD_DEPT_EXP;
+            if (formData.basica.COD_MPIO_EXP) {
+              await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
+                'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+                { cod_dept: formData.basica.COD_DEPT_EXP, cod_pais: cpe });
+              const selMpio = document.getElementById('cod_mpio_exp');
+              if (selMpio) { selMpio.disabled = false; selMpio.value = formData.basica.COD_MPIO_EXP; }
+            }
+          }
+        }
+      }
+    }
 
     // Sección 2: Representante Legal
     const rlMap = [
@@ -621,7 +684,21 @@ async function _hydrateGeoCascade(prefix, item) {
   const selMpio = document.getElementById(`${prefix}mpio`);
   if (!selDept || !selMpio) return;
 
-  if (item.COD_PAIS === COD_COLOMBIA) {
+  if (item.COD_PAIS === 'OTRO') {
+    // País extranjero no listado — mostrar campo libre, ocultar dept/mpio
+    const fieldDept = document.getElementById(`field-${prefix}dept`);
+    const fieldMpio = document.getElementById(`field-${prefix}mpio`);
+    if (fieldDept) fieldDept.style.display = 'none';
+    if (fieldMpio) fieldMpio.style.display = 'none';
+    const fieldOtro = document.getElementById(`field-${prefix}pais_otro`);
+    if (fieldOtro) {
+      fieldOtro.style.display = '';
+      fieldOtro.style.gridColumn = 'span 2';
+      const inp = document.getElementById(`${prefix}pais_otro`);
+      if (inp) inp.value = item.OTR_PAIS || '';
+    }
+    return;
+  } else if (item.COD_PAIS === COD_COLOMBIA) {
     await cargarCatalogo(
       '/api/catalogo/departamentos', `${prefix}dept`,
       'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',

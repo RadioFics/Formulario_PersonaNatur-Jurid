@@ -45,11 +45,17 @@ function onUbicacionChange(ubic) {
 
   if (ubic === 'E') {
     fieldPais.style.display = '';
-    // E: País visible → cols fill naturally; onSocPaisChange will set spans
     if (tipEmpr)  tipEmpr.style.gridColumn  = '';
     if (grupEmpr) grupEmpr.style.gridColumn = '';
+    // Sociedad extranjera no puede ser de Colombia — quitar esa opción
+    const colOpt = selPais ? selPais.querySelector(`option[value="${COD_COLOMBIA}"]`) : null;
+    if (colOpt) colOpt.remove();
   } else {
-    // Nacional / SC: only Ubic + TipEmpr visible → GrupEmpr spans remaining 2 cols
+    // Nacional / SC: restaurar soc_pais completo (con Colombia) si fue removida
+    if (selPais && !selPais.querySelector(`option[value="${COD_COLOMBIA}"]`)) {
+      selPais.innerHTML = getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione país —');
+      agregarOpcionOtroAlSelect(selPais);
+    }
     fieldPais.style.display = 'none';
     if (fieldOtro) fieldOtro.style.display = 'none';
     if (fieldOtro) fieldOtro.style.gridColumn = '';

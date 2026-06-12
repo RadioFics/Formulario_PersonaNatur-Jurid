@@ -15,7 +15,7 @@ const _rlExtraMap = new Map(); // extraId → arrayIndex
 function _rlCampos(tipRepr) {
   return {
     TIP_REPR: tipRepr,
-    NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, NUM_DOCU: '',
+    NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, OTR_TPDOC: null, NUM_DOCU: '',
     FEC_EXPE: '', COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
   };
@@ -66,9 +66,12 @@ function _rlExtraHTML(extraId, idx) {
           <div class="field" id="field-rl_x${extraId}_tipdoc">
             <label>Tipo de documento <span class="req">*</span></label>
             <select id="rl_x${extraId}_tipdoc"
-                    onchange="actualizarRL(${idx},'TIP_DOCU',this.value);limpiarError('field-rl_x${extraId}_tipdoc')">
-              ${td}
+                    onchange="actualizarRL(${idx},'TIP_DOCU',this.value);limpiarError('field-rl_x${extraId}_tipdoc');onRLExtraTipdocChange(${extraId},${idx},this.value)">
+              ${td}<option value="OTR_TPDOC">Sin asignar / Otro tipo</option>
             </select>
+            <input type="text" id="rl_x${extraId}_tipdoc_otro" class="otro-inp" maxlength="100"
+                   style="display:none" placeholder="Especifique el tipo de documento"
+                   oninput="actualizarRL(${idx},'OTR_TPDOC',this.value)" />
             <span class="error-msg">Campo requerido</span>
           </div>
           <div class="field" id="field-rl_x${extraId}_numdoc">
@@ -144,8 +147,19 @@ function _rlExtraHTML(extraId, idx) {
     </div>`;
 }
 
+/* ── OTR_TPDOC handler para extras dinámicos ────────────────────────────────── */
+function onRLExtraTipdocChange(extraId, idx, val) {
+  const inp = document.getElementById(`rl_x${extraId}_tipdoc_otro`);
+  if (!inp) return;
+  inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    inp.value = '';
+    actualizarRL(idx, 'OTR_TPDOC', null);
+  }
+}
+
 /* ── Agregar / Eliminar extras ──────────────────────────────────────────────── */
-function agregarRLExtra() {
+async function agregarRLExtra() {
   const idx     = formData.representantes.length;
   const extraId = _rlExtraId++;
   _rlExtraMap.set(extraId, idx);
@@ -157,8 +171,76 @@ function agregarRLExtra() {
   div.innerHTML = _rlExtraHTML(extraId, idx);
   list.appendChild(div);
   div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Apply modern OTRO option and default Colombia
+  const paisSel = document.getElementById(`rl_x${extraId}_pais`);
+  if (paisSel) {
+    agregarOpcionOtroAlSelect(paisSel);
+    paisSel.value = COD_COLOMBIA;
+    await onRLExtraPaisChange(extraId, idx, COD_COLOMBIA);
+  }
+
   if (typeof renderDocRLFields === 'function') renderDocRLFields();
   guardarBorradorDebounced();
+}
+
+/* ── Restaurar extras desde borrador / BD ──────────────────────────────────── */
+async function renderListaRL() {
+  const list = document.getElementById('rl-extras-list');
+  if (!list) return;
+  list.innerHTML = '';
+  _rlExtraMap.clear();
+  _rlExtraId = 0;
+
+  // Index 0 = Principal (static HTML); extras start at index 1
+  for (let i = 1; i < formData.representantes.length; i++) {
+    const rl = formData.representantes[i];
+    const extraId = _rlExtraId++;
+    _rlExtraMap.set(extraId, i);
+    const div = document.createElement('div');
+    div.id = `rl_extra_wrap_${extraId}`;
+    div.innerHTML = _rlExtraHTML(extraId, i);
+    list.appendChild(div);
+
+    agregarOpcionOtroAlSelect(document.getElementById(`rl_x${extraId}_pais`));
+
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val != null && val !== '') el.value = val;
+    };
+    set(`rl_x${extraId}_nom`,    rl.NOM_REPR);
+    set(`rl_x${extraId}_ape`,    rl.APE_REPR);
+    set(`rl_x${extraId}_tipdoc`, rl.TIP_DOCU);
+    set(`rl_x${extraId}_numdoc`, rl.NUM_DOCU);
+    set(`rl_x${extraId}_fec`,    rl.FEC_EXPE);
+    set(`rl_x${extraId}_dir`,    rl.DIR_REPR);
+    set(`rl_x${extraId}_cel`,    rl.CEL_REPR);
+    set(`rl_x${extraId}_tel`,    rl.TEL_REPR);
+    set(`rl_x${extraId}_mail`,   rl.MAIL_REPR);
+
+    if (rl.TIP_DOCU === 'OTR_TPDOC') {
+      const inp = document.getElementById(`rl_x${extraId}_tipdoc_otro`);
+      if (inp) { inp.style.display = ''; inp.value = rl.OTR_TPDOC || ''; }
+    }
+
+    if (rl.COD_PAIS) {
+      const paisSel = document.getElementById(`rl_x${extraId}_pais`);
+      if (paisSel) paisSel.value = rl.COD_PAIS;
+      await onRLExtraPaisChange(extraId, i, rl.COD_PAIS);
+      if (String(rl.COD_PAIS) === COD_COLOMBIA && rl.COD_DEPT) {
+        const deptSel = document.getElementById(`rl_x${extraId}_dept`);
+        if (deptSel) deptSel.value = rl.COD_DEPT;
+        if (rl.COD_MPIO) {
+          await onRLExtraDeptChange(extraId, i, rl.COD_DEPT);
+          const mpioSel = document.getElementById(`rl_x${extraId}_mpio`);
+          if (mpioSel) mpioSel.value = rl.COD_MPIO;
+        }
+      } else if (rl.COD_PAIS === 'OTRO') {
+        const inp = document.getElementById(`rl_x${extraId}_pais_otro`);
+        if (inp) inp.value = rl.OTR_PAIS || '';
+      }
+    }
+  }
 }
 
 function eliminarRLExtra(extraId) {

@@ -21,10 +21,12 @@ window.formDataNatur = {
     // ─── GN_NATUR ───────────────────────────────────────────────
     MAIL_SARL:    null,
     COD_NACIO:    null,
+    OTR_NACIO:    null,   // texto libre cuando nacionalidad = 'OTRO'
     ACT_PRINC:    null,
     COD_CIIU:     null,
+    OTR_CIIU:     null,   // texto libre cuando CIIU = 'OTRO'
     FEC_EXPE:     null,
-    COD_PAIS_EXP: null,
+    COD_PAIS_EXP: '1',
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
   }

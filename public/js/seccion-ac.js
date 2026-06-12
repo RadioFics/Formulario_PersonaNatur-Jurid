@@ -114,6 +114,7 @@ function _acFiltrarTipoDoc(id, soloNit) {
   const optsHtml = getOpcionesHTML(endpoint, 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
   const current  = sel.value;
   sel.innerHTML  = optsHtml;
+  agregarOpcionOtroAlTipdoc(sel);
   if (current && sel.querySelector(`option[value="${current}"]`)) {
     sel.value = current;
   } else {

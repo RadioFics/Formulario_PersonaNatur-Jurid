@@ -294,9 +294,16 @@
         <div class="field" id="field-cod_nacio_n">
           <label for="cod_nacio_n">Nacionalidad <span class="req">*</span></label>
           <select id="cod_nacio_n"
-                  onchange="actualizarNatur('COD_NACIO',this.value); limpiarError('field-cod_nacio_n')">
+                  onchange="actualizarNatur('COD_NACIO',this.value); limpiarError('field-cod_nacio_n'); onNacioNChange(this.value)">
             <option value="">— Seleccione —</option>
           </select>
+          <span class="error-msg">Campo requerido</span>
+        </div>
+
+        <div class="field" id="field-cod_nacio_n_otro" style="display:none">
+          <label>Especifique la nacionalidad <span class="req">*</span></label>
+          <input type="text" id="nacio_n_otro_txt" maxlength="100" placeholder="Pa&#xED;s o nacionalidad"
+                 oninput="actualizarNatur('OTR_NACIO',this.value)" />
           <span class="error-msg">Campo requerido</span>
         </div>
 
@@ -310,10 +317,18 @@
         <div class="field" id="field-cod_ciiu_n">
           <label for="cod_ciiu_n">Actividad CIIU <span class="req">*</span></label>
           <select id="cod_ciiu_n"
-                  onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n')">
+                  onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n'); onCiiuNChange(this.value)">
             <option value="">— Seleccione actividad —</option>
           </select>
           <span class="error-msg">Seleccione una actividad válida</span>
+        </div>
+
+        <div class="field" id="field-cod_ciiu_n_otro" style="display:none">
+          <label>Describa la actividad <span class="req">*</span></label>
+          <input type="text" id="ciiu_n_otro_txt" maxlength="255"
+                 placeholder="Describa la actividad econ&#xF3;mica"
+                 oninput="actualizarNatur('OTR_CIIU',this.value)" />
+          <span class="error-msg">Campo requerido</span>
         </div>
       </div>
 
@@ -373,6 +388,9 @@
                     onchange="actualizarRL(0,'TIP_DOCU',this.value); limpiarError('field-rl_p_tipdoc')">
               <option value="">— Seleccione —</option>
             </select>
+            <input type="text" id="rl_p_tipdoc_otro" class="otro-inp" maxlength="100"
+                   style="display:none" placeholder="Especifique el tipo de documento"
+                   oninput="actualizarRL(0,'OTR_TPDOC',this.value)" />
             <span class="error-msg">Campo requerido</span>
           </div>
 
@@ -1359,37 +1377,30 @@
           </div>
         </div>
 
-        <!-- Estados financieros Año 1 — solo Jurídica -->
+        <!-- Estados financieros Año 1 y Año 2 — solo Jurídica, fila combinada -->
         <div class="doc-item solo-juridica">
           <div class="doc-label">
-            Estados financieros &#8212; A&#xF1;o 1
-            <small>(pen&#xFA;ltimo a&#xF1;o fiscal)</small>
-            <span class="ic-info" data-tip="Balance general y estado de resultados del penúltimo año fiscal, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
+            Estados financieros
+            <small>(pen&#xFA;ltimo y &#xFA;ltimo a&#xF1;o fiscal)</small>
+            <span class="ic-info" data-tip="Balance general y estado de resultados de los dos últimos años fiscales, firmados por el Representante Legal y el Contador o Revisor Fiscal.">i</span>
           </div>
-          <div class="doc-upload-wrap">
-            <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
-              <input type="file" accept=".pdf" style="display:none"
-                     onchange="onArchivoSeleccionado('EST_FIN_1',this)" />
-            </label>
-            <span class="doc-archivo-nombre" id="doc_ind_est_fin_1">Ning&#xFA;n archivo seleccionado</span>
-          </div>
-        </div>
-
-        <!-- Estados financieros Año 2 — solo Jurídica -->
-        <div class="doc-item solo-juridica">
-          <div class="doc-label">
-            Estados financieros &#8212; A&#xF1;o 2
-            <small>(&#xFA;ltimo a&#xF1;o fiscal)</small>
-            <span class="ic-info" data-tip="Balance general y estado de resultados del último año fiscal, firmados por el Representante Legal y el Contador o Revisor Fiscal según corresponda.">i</span>
-          </div>
-          <div class="doc-upload-wrap">
-            <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
-              <input type="file" accept=".pdf" style="display:none"
-                     onchange="onArchivoSeleccionado('EST_FIN_2',this)" />
-            </label>
-            <span class="doc-archivo-nombre" id="doc_ind_est_fin_2">Ning&#xFA;n archivo seleccionado</span>
+          <div class="doc-multi-upload">
+            <div class="doc-upload-wrap">
+              <label class="btn-upload" tabindex="0">
+                A&#xF1;o 1
+                <input type="file" accept=".pdf" style="display:none"
+                       onchange="onArchivoSeleccionado('EST_FIN_1',this)" />
+              </label>
+              <span class="doc-archivo-nombre" id="doc_ind_est_fin_1">Ning&#xFA;n archivo seleccionado</span>
+            </div>
+            <div class="doc-upload-wrap">
+              <label class="btn-upload" tabindex="0">
+                A&#xF1;o 2
+                <input type="file" accept=".pdf" style="display:none"
+                       onchange="onArchivoSeleccionado('EST_FIN_2',this)" />
+              </label>
+              <span class="doc-archivo-nombre" id="doc_ind_est_fin_2">Ning&#xFA;n archivo seleccionado</span>
+            </div>
           </div>
         </div>
 

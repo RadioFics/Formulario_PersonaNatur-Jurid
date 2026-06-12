@@ -200,33 +200,37 @@ function _crearGrupoBancoEl(cuenta) {
           </label>
         </div>
       </div>
-      <div id="banco_${id}_ext_wrap" class="grid-4"
+      <div id="banco_${id}_ext_wrap"
            style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s ease, max-height .2s ease;">
-        <div class="field" id="field-banco_${id}_ext_pais">
-          <label>Pa&#xED;s de la cuenta <span class="req">*</span></label>
-          <select id="banco_${id}_ext_pais"
-                  onchange="actualizarBanco(${id},'COD_PAIS_EXT',this.value);_bancoPaisOtroChange(${id},this.value);limpiarError('field-banco_${id}_ext_pais')">
-            ${pa}
-          </select>
-          <span class="error-msg">Campo requerido</span>
+        <div class="grid-4">
+          <div class="field" id="field-banco_${id}_ext_pais">
+            <label>Pa&#xED;s de la cuenta <span class="req">*</span></label>
+            <select id="banco_${id}_ext_pais"
+                    onchange="actualizarBanco(${id},'COD_PAIS_EXT',this.value);_bancoPaisOtroChange(${id},this.value);limpiarError('field-banco_${id}_ext_pais')">
+              ${pa}
+            </select>
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
+            <label>Especifique el pa&#xED;s <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                   oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
+          </div>
         </div>
-        <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
-          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-          <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
-                 oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
-        </div>
-        <div class="field" id="field-banco_${id}_ext_nom">
-          <label>Nombre de la entidad extranjera <span class="req">*</span></label>
-          <input type="text" id="banco_${id}_ext_nom" maxlength="255"
-                 oninput="actualizarBanco(${id},'NOM_ENT_EXT',this.value);limpiarError('field-banco_${id}_ext_nom')" />
-          <span class="error-msg">Campo requerido</span>
-        </div>
-        <div class="field" id="field-banco_${id}_ext_tip">
-          <label>Tipo de cuenta extranjera <span class="req">*</span></label>
-          <input type="text" id="banco_${id}_ext_tip" maxlength="100"
-                 placeholder="Ej: Savings, Checking&#x2026;"
-                 oninput="actualizarBanco(${id},'TIP_CUE_EXT',this.value);limpiarError('field-banco_${id}_ext_tip')" />
-          <span class="error-msg">Campo requerido</span>
+        <div class="grid-4">
+          <div class="field" id="field-banco_${id}_ext_nom">
+            <label>Nombre de la entidad extranjera <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_ext_nom" maxlength="255"
+                   oninput="actualizarBanco(${id},'NOM_ENT_EXT',this.value);limpiarError('field-banco_${id}_ext_nom')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
+          <div class="field" id="field-banco_${id}_ext_tip">
+            <label>Tipo de cuenta extranjera <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_ext_tip" maxlength="100"
+                   placeholder="Ej: Savings, Checking&#x2026;"
+                   oninput="actualizarBanco(${id},'TIP_CUE_EXT',this.value);limpiarError('field-banco_${id}_ext_tip')" />
+            <span class="error-msg">Campo requerido</span>
+          </div>
         </div>
       </div>
     </div>`;

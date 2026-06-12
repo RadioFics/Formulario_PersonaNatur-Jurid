@@ -1683,8 +1683,8 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     // ── Rama Persona Natural — tablas GN_NATUR y relacionadas ────────────────
     if (row.TIP_TERC === 'N') {
       const [naturRes, naturFinRes, banRes, pepRes, actRes] = await Promise.all([
-        rC().query(`SELECT TIP_VINC AS COD_VINC, MAIL_SARL, COD_NACIO, ACT_PRINC,
-                          COD_CIIU, CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
+        rC().query(`SELECT TIP_VINC AS COD_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO, ACT_PRINC,
+                          COD_CIIU, OTR_CIIU, CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
                           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP
                    FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
@@ -1712,8 +1712,8 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         naturBasica: {
           NOM_TERC:    row.NOM_TERC,     SEG_NOMB:    row.SEG_NOMB,
           APE_TERC:    row.APE_TERC,     SEG_APEL:    row.SEG_APEL,
-          MAIL_SARL:   nRow.MAIL_SARL,   COD_NACIO:   nRow.COD_NACIO,
-          ACT_PRINC:   nRow.ACT_PRINC,   COD_CIIU:    nRow.COD_CIIU,
+          MAIL_SARL:   nRow.MAIL_SARL,   COD_NACIO:   nRow.COD_NACIO,   OTR_NACIO: nRow.OTR_NACIO,
+          ACT_PRINC:   nRow.ACT_PRINC,   COD_CIIU:    nRow.COD_CIIU,    OTR_CIIU:  nRow.OTR_CIIU,
           FEC_EXPE:    nRow.FEC_EXPE,    COD_PAIS_EXP: nRow.COD_PAIS_EXP,
           OTR_PAIS_EXP: nRow.OTR_PAIS_EXP,
           COD_DEPT_EXP: nRow.COD_DEPT_EXP, COD_MPIO_EXP: nRow.COD_MPIO_EXP,
@@ -1727,7 +1727,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     // ── Rama Persona Jurídica (comportamiento existente) ─────────────────────
 
     const rlRes  = await rC().query(`
-      SELECT TIP_REPR, NOM_REPR, APE_REPR, TIP_DOCU, NUM_DOCU,
+      SELECT TIP_REPR, NOM_REPR, APE_REPR, TIP_DOCU, OTR_TPDOC, NUM_DOCU,
              CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
              COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO, DIR_REPR, CEL_REPR, TEL_REPR, MAIL_REPR
       FROM GN_JURID_RL WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC ORDER BY TIP_REPR`);
@@ -1970,9 +1970,10 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('CEL_REPR', sql.VarChar(30),  toChar(p.CEL_REPR))
           .input('TEL_REPR', sql.VarChar(30),  toChar(p.TEL_REPR))
           .input('MAIL_REPR',sql.VarChar(100), toChar(p.MAIL_REPR))
-          .query(`INSERT INTO GN_JURID_RL(COD_EMPR,COD_TERC,TIP_REPR,NOM_REPR,APE_REPR,TIP_DOCU,
+          .input('OTR_TPDOC',sql.VarChar(100), toChar(p.OTR_TPDOC))
+          .query(`INSERT INTO GN_JURID_RL(COD_EMPR,COD_TERC,TIP_REPR,NOM_REPR,APE_REPR,TIP_DOCU,OTR_TPDOC,
                   NUM_DOCU,FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_REPR,CEL_REPR,TEL_REPR,MAIL_REPR)
-                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@NOM_REPR,@APE_REPR,@TIP_DOCU,
+                  VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@NOM_REPR,@APE_REPR,@TIP_DOCU,@OTR_TPDOC,
                   @NUM_DOCU,@FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REPR,@CEL_REPR,@TEL_REPR,@MAIL_REPR)`);
       }
     }
@@ -2392,15 +2393,16 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('CEL_REPR',  sql.VarChar(30),  toChar(p.CEL_REPR))
           .input('TEL_REPR',  sql.VarChar(30),  toChar(p.TEL_REPR))
           .input('MAIL_REPR', sql.VarChar(100), toChar(p.MAIL_REPR))
+          .input('OTR_TPDOC', sql.VarChar(100), toChar(p.OTR_TPDOC))
           .query(`
             INSERT INTO GN_JURID_RL
               (COD_EMPR, COD_TERC, TIP_REPR, NOM_REPR, APE_REPR,
-               TIP_DOCU, NUM_DOCU, FEC_EXPE,
+               TIP_DOCU, OTR_TPDOC, NUM_DOCU, FEC_EXPE,
                COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
                DIR_REPR, CEL_REPR, TEL_REPR, MAIL_REPR)
             VALUES
               (@COD_EMPR, @COD_TERC, @TIP_REPR, @NOM_REPR, @APE_REPR,
-               @TIP_DOCU, @NUM_DOCU, @FEC_EXPE,
+               @TIP_DOCU, @OTR_TPDOC, @NUM_DOCU, @FEC_EXPE,
                @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
                @DIR_REPR, @CEL_REPR, @TEL_REPR, @MAIL_REPR)
           `);
@@ -2855,8 +2857,10 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('TIP_VINC',    sql.VarChar(40), toChar(b.COD_VINC))
       .input('MAIL_SARL',   sql.VarChar(150),b.MAIL_SARL   || null)
       .input('COD_NACIO',   sql.Int,         toInt(b.COD_NACIO))
+      .input('OTR_NACIO',   sql.VarChar(100),toChar(b.OTR_NACIO))
       .input('ACT_PRINC',   sql.VarChar(100),b.ACT_PRINC   || null)
       .input('COD_CIIU',    sql.VarChar(10), b.COD_CIIU    || null)
+      .input('OTR_CIIU',    sql.VarChar(255),toChar(b.OTR_CIIU))
       .input('FEC_EXPE',    sql.Date,        b.FEC_EXPE ? new Date(b.FEC_EXPE) : null)
       .input('COD_PAIS_EXP', sql.Int,          toInt(b.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
@@ -2864,12 +2868,12 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
       .query(`
         INSERT INTO GN_NATUR
-          (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO,
-           ACT_PRINC, COD_CIIU, FEC_EXPE,
+          (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO,
+           ACT_PRINC, COD_CIIU, OTR_CIIU, FEC_EXPE,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
         VALUES
-          (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO,
-           @ACT_PRINC, @COD_CIIU, @FEC_EXPE,
+          (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO, @OTR_NACIO,
+           @ACT_PRINC, @COD_CIIU, @OTR_CIIU, @FEC_EXPE,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
       `);
 
@@ -3832,16 +3836,18 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('TIP_VINC',    sql.VarChar(40), toChar(b.COD_VINC))
       .input('MAIL_SARL',   sql.VarChar(150),b.MAIL_SARL   || null)
       .input('COD_NACIO',   sql.Int,         toInt(b.COD_NACIO))
+      .input('OTR_NACIO',   sql.VarChar(100),toChar(b.OTR_NACIO))
       .input('ACT_PRINC',   sql.VarChar(100),b.ACT_PRINC   || null)
       .input('COD_CIIU',    sql.VarChar(10), b.COD_CIIU    || null)
+      .input('OTR_CIIU',    sql.VarChar(255),toChar(b.OTR_CIIU))
       .input('FEC_EXPE',    sql.Date,        b.FEC_EXPE ? new Date(b.FEC_EXPE) : null)
       .input('COD_PAIS_EXP', sql.Int,          toInt(b.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP', sql.Int,          toInt(b.COD_DEPT_EXP))
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
       .query(`UPDATE GN_NATUR
-              SET TIP_VINC=@TIP_VINC, MAIL_SARL=@MAIL_SARL, COD_NACIO=@COD_NACIO,
-                  ACT_PRINC=@ACT_PRINC, COD_CIIU=@COD_CIIU, FEC_EXPE=@FEC_EXPE,
+              SET TIP_VINC=@TIP_VINC, MAIL_SARL=@MAIL_SARL, COD_NACIO=@COD_NACIO, OTR_NACIO=@OTR_NACIO,
+                  ACT_PRINC=@ACT_PRINC, COD_CIIU=@COD_CIIU, OTR_CIIU=@OTR_CIIU, FEC_EXPE=@FEC_EXPE,
                   COD_PAIS_EXP=@COD_PAIS_EXP, OTR_PAIS_EXP=@OTR_PAIS_EXP,
                   COD_DEPT_EXP=@COD_DEPT_EXP, COD_MPIO_EXP=@COD_MPIO_EXP
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);

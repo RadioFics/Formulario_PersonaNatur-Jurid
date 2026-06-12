@@ -19,7 +19,7 @@ const formData = {
     NUM_IDEN:     '',
     DIG_VERI:     '',   // Dígito de verificación del NIT (GN_TERCE)
     NOM_COMP:     '',
-    COD_PAIS_EXP: null,
+    COD_PAIS_EXP: '1',
     OTR_PAIS_EXP: '',   // texto libre cuando país = 'OTRO'
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
@@ -42,8 +42,8 @@ const formData = {
   // fallara aunque el usuario no hubiera agregado ningún representante extra.
   representantes: [
     {
-      TIP_REPR: 'P', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null,
-      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, OTR_PAIS: '',
+      TIP_REPR: 'P', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, OTR_TPDOC: null,
+      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: '1', OTR_PAIS: '',
       COD_DEPT: null, COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
     },
   ],

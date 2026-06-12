@@ -1039,6 +1039,15 @@ body {
   margin-top: 2px;
 }
 
+/* Contenedor multi-upload (dos botones en la misma fila, ej. EST_FIN_1 + EST_FIN_2) */
+.doc-multi-upload {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
 /* Contenedor del botón de upload + nombre del archivo */
 .doc-upload-wrap {
   display: flex;

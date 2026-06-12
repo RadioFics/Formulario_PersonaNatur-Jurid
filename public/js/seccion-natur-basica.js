@@ -76,6 +76,28 @@ function actualizarNatur(campo, valor) {
   formDataNatur.basica[campo] = (valor === '' || valor === undefined) ? null : valor;
 }
 
+function onNacioNChange(val) {
+  const fld = document.getElementById('field-cod_nacio_n_otro');
+  if (!fld) return;
+  fld.style.display = val === 'OTRO' ? '' : 'none';
+  if (val !== 'OTRO') {
+    actualizarNatur('OTR_NACIO', null);
+    const inp = document.getElementById('nacio_n_otro_txt');
+    if (inp) inp.value = '';
+  }
+}
+
+function onCiiuNChange(val) {
+  const fld = document.getElementById('field-cod_ciiu_n_otro');
+  if (!fld) return;
+  fld.style.display = val === 'OTRO' ? '' : 'none';
+  if (val !== 'OTRO') {
+    actualizarNatur('OTR_CIIU', null);
+    const inp = document.getElementById('ciiu_n_otro_txt');
+    if (inp) inp.value = '';
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    Conmutador principal
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -387,7 +409,14 @@ async function inicializarNaturBasica() {
       '/api/catalogo/ciiu', 'cod_ciiu_n',
       'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
       {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
-    ),
+    ).then(() => {
+      const sel = document.getElementById('cod_ciiu_n');
+      if (sel && !sel.querySelector('option[value="OTRO"]')) {
+        const opt = document.createElement('option');
+        opt.value = 'OTRO'; opt.textContent = 'Otro CIIU (no listado)';
+        sel.appendChild(opt);
+      }
+    }),
   ]);
 }
 
