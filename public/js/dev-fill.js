@@ -686,8 +686,8 @@ async function rellenarPrueba() {
   btn.title       = 'Rellena todos los campos con datos ficticios de prueba (solo desarrollo)';
   Object.assign(btn.style, {
     position:     'fixed',
-    top:          '16px',
-    right:        '16px',
+    bottom:       '16px',
+    left:         '16px',
     zIndex:       '9999',
     padding:      '10px 16px',
     background:   '#ff6d00',

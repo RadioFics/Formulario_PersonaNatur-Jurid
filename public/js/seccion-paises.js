@@ -49,13 +49,15 @@ function renderListaPaises() {
     const elegidosCods = yaElegidos.map(c => String(c));
 
     // Construir opciones: incluir el propio valor + los no elegidos en otras entradas
-    let opciones = '<option value="">— Seleccione país —</option>';
+    const usaEN = document.documentElement.lang === 'en';
+    let opciones = `<option value="">${typeof t==='function'?t('select_ph_pais'):'— Seleccione país —'}</option>`;
     todosPaises.forEach(p => {
       const pCod         = String(p.COD_PAIS);
       const ocupadoPorOtro = elegidosCods.includes(pCod) && pCod !== entradaCod;
       if (!ocupadoPorOtro) {
-        const sel = pCod === entradaCod ? ' selected' : '';
-        opciones += `<option value="${pCod}"${sel}>${p.NOM_PAIS}</option>`;
+        const sel      = pCod === entradaCod ? ' selected' : '';
+        const nomPais  = usaEN && p.NOM_EN ? p.NOM_EN : p.NOM_PAIS;
+        opciones += `<option value="${pCod}"${sel}>${nomPais}</option>`;
       }
     });
 
@@ -68,7 +70,7 @@ function renderListaPaises() {
                 onchange="onPaisOperacionChange(${idx}, this.value)">
           ${opciones}
         </select>
-        <span class="error-msg">Seleccione un país</span>
+        <span class="error-msg" data-i18n="sec4_err_pais">${typeof t==='function'?t('sec4_err_pais'):'Seleccione un país'}</span>
       </div>
       <button class="btn-eliminar-pais"
               onclick="eliminarPais(${idx})"
@@ -146,13 +148,13 @@ function validarSeccionPaises() {
 function validarYContinuarPaises() {
   if (!validarSeccionPaises()) {
     document.getElementById('accordion-paises').classList.remove('collapsed');
-    mostrarToast('Seleccione un país en cada entrada o elimine las vacías.', 'error');
+    mostrarToast(typeof t==='function'?t('sec4_err_pais_vacia'):'Seleccione un país en cada entrada o elimine las vacías.', 'error');
     const primerError = document.querySelector('#accordion-paises .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
-  mostrarToast('Sección 4 completa. Continúe con la siguiente sección.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_ok'):'Sección 4 completa.', 'success');
   document.getElementById('accordion-paises').classList.add('collapsed');
   const acc5 = document.getElementById('accordion-cumplimiento');
   acc5.classList.remove('collapsed');
@@ -164,5 +166,5 @@ function validarYContinuarPaises() {
 function limpiarSeccionPaises() {
   formData.paises = [{ COD_PAIS: null }];
   renderListaPaises();
-  mostrarToast('Sección limpiada.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_clear'):'Sección limpiada.', 'success');
 }

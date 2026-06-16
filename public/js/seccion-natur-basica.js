@@ -220,11 +220,11 @@ function onTipTercChange(val) {
 
     const selDept = document.getElementById('cod_dept_exp');
     const selMpio = document.getElementById('cod_mpio_exp');
-    selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+    selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
     selMpio.disabled  = true;
 
     if (!codPais) {
-      selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
+      selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>';
       selDept.disabled  = true;
       return;
     }
@@ -232,7 +232,7 @@ function onTipTercChange(val) {
       selDept.disabled = false;
       await cargarCatalogo(
         '/api/catalogo/departamentos', 'cod_dept_exp',
-        'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',
+        'COD_DEPT', 'NOM_DEPT', 'select_ph_dept',
         { cod_pais: codPais }
       );
     } else {
@@ -243,7 +243,7 @@ function onTipTercChange(val) {
       selMpio.disabled  = false;
       await cargarCatalogo(
         '/api/catalogo/ciudades', 'cod_mpio_exp',
-        'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+        'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
         { cod_pais: codPais }
       );
       selMpio.onchange = e => {
@@ -276,7 +276,7 @@ function onTipTercChange(val) {
 
     await cargarCatalogo(
       '/api/catalogo/ciudades', 'cod_mpio_exp',
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+      'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
       { cod_dept: codDept, cod_pais: codPais }
     );
     selMpio.disabled = false;
@@ -402,12 +402,12 @@ async function inicializarNaturBasica() {
     // Nacionalidad — reutiliza el catálogo de países (ya en cache)
     cargarCatalogo(
       '/api/catalogo/paises', 'cod_nacio_n',
-      'COD_PAIS', 'NOM_PAIS', '— Seleccione —'
+      'COD_PAIS', 'NOM_PAIS', 'select_placeholder'
     ),
     // CIIU para Natural — select buscable, mismo catálogo que Jurídica
     cargarCatalogo(
       '/api/catalogo/ciiu', 'cod_ciiu_n',
-      'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
+      'COD_CIIU', 'NOM_CIIU', 'select_ph_act',
       {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
     ).then(() => {
       const sel = document.getElementById('cod_ciiu_n');

@@ -31,7 +31,7 @@
  */
 async function cargarCatalogo(
   endpoint, selectId, valField, txtField,
-  placeholder = '— Seleccione —', params = {}, formatText = null
+  placeholder = 'select_placeholder', params = {}, formatText = null
 ) {
   const sel = document.getElementById(selectId);
   if (!sel) return [];
@@ -40,9 +40,12 @@ async function cargarCatalogo(
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const cacheKey = url.toString();
 
+  // Helpers i18n: usa t() si está disponible, si no, usa el string tal cual
+  const _t = key => (typeof t === 'function' ? t(key) || key : key);
+
   let datos = catalogCache[cacheKey];
   if (!datos) {
-    sel.innerHTML = '<option value="">Cargando…</option>';
+    sel.innerHTML = `<option value="">${_t('select_loading')}</option>`;
     try {
       const resp = await fetch(cacheKey);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -55,11 +58,17 @@ async function cargarCatalogo(
     }
   }
 
-  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  sel.innerHTML = `<option value="">${_t(placeholder)}</option>`;
   datos.forEach(row => {
     const opt = document.createElement('option');
-    opt.value       = row[valField];
-    opt.textContent = formatText ? formatText(row) : row[txtField];
+    opt.value = row[valField];
+    if (formatText) {
+      opt.textContent = formatText(row);
+    } else if (window._currentLang === 'en' && row.NOM_EN) {
+      opt.textContent = row.NOM_EN;
+    } else {
+      opt.textContent = row[txtField];
+    }
     sel.appendChild(opt);
   });
 
@@ -123,9 +132,13 @@ async function cargarDatalist(endpoint, datalistId, valField, txtField, params =
 function getOpcionesHTML(endpoint, valField, txtField, placeholder, params = {}) {
   const url = new URL(endpoint, window.location.origin);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const _t = key => (typeof t === 'function' ? t(key) || key : key);
   const datos = catalogCache[url.toString()] || [];
-  let html = `<option value="">${placeholder}</option>`;
-  datos.forEach(d => { html += `<option value="${d[valField]}">${d[txtField]}</option>`; });
+  let html = `<option value="">${_t(placeholder)}</option>`;
+  datos.forEach(d => {
+    const txt = (window._currentLang === 'en' && d.NOM_EN) ? d.NOM_EN : d[txtField];
+    html += `<option value="${d[valField]}">${txt}</option>`;
+  });
   return html;
 }
 
@@ -200,7 +213,9 @@ function convertirABuscable(selectId) {
     if (!opts.length) {
       const em = document.createElement('div');
       em.className   = 'sb-item sb-empty';
-      em.textContent = q ? 'Sin resultados' : '— Sin opciones —';
+      em.textContent = q
+        ? (typeof t === 'function' ? t('sin_resultados') : 'Sin resultados')
+        : (typeof t === 'function' ? t('sin_opciones')   : '— Sin opciones —');
       drop.appendChild(em);
     } else {
       opts.slice(0, 100).forEach(o => {
@@ -262,7 +277,7 @@ function convertirABuscable(selectId) {
       inp.placeholder  = (sel.options[0] && sel.options[0].textContent) || '—';
     } else {
       inp.style.cursor = 'pointer';
-      inp.placeholder  = '— Seleccione —';
+      inp.placeholder  = (typeof t === 'function' ? t('select_placeholder') : null) || '— Seleccione —';
     }
   }
 
@@ -496,7 +511,7 @@ function agregarOpcionOtroAlSelect(selOrId) {
   if (!sel.querySelector('option[value="OTRO"]')) {
     const opt = document.createElement('option');
     opt.value       = 'OTRO';
-    opt.textContent = 'Otro pa\xEDs (no listado)';
+    opt.textContent = typeof t === 'function' ? t('otro_pais_opt') : 'Otro pa\xEDs (no listado)';
     sel.appendChild(opt);
   }
 }
@@ -510,7 +525,7 @@ function agregarOpcionOtroAlTipdoc(selOrId) {
   if (!sel || sel.querySelector('option[value="OTR_TPDOC"]')) return;
   const opt = document.createElement('option');
   opt.value       = 'OTR_TPDOC';
-  opt.textContent = 'Sin asignar / Otro tipo';
+  opt.textContent = typeof t === 'function' ? t('otro_tipdoc_opt') : 'Sin asignar / Otro tipo';
   sel.appendChild(opt);
 }
 
@@ -525,7 +540,7 @@ function agregarOpcionOtroAlTipdoc(selOrId) {
 function _autoNoAplicaCiudad(selMpio) {
   const realCities = Array.from(selMpio.options).filter(o => o.value !== '' && o.value !== 'NA');
   if (realCities.length === 0) {
-    selMpio.innerHTML = '<option value="NA">No aplica</option>';
+    selMpio.innerHTML = '<option value="NA">' + (typeof t === 'function' ? t('no_aplica') : 'No aplica') + '</option>';
     selMpio.disabled = true;
     return true;
   }

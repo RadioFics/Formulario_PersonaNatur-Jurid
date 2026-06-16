@@ -50,7 +50,7 @@ function actualizarTituloRF(id) {
   const rol = r.TIP_REPR === 'S' ? 'Suplente' : 'Principal';
   const nombre = [(r.NOM_REVI || '').trim(), (r.APE_REVI || '').trim()].filter(Boolean).join(' ');
   const el = document.getElementById(`rf_titulo_${id}`);
-  if (el) el.textContent = `Revisor ${pos} (${rol})${nombre ? ' — ' + nombre : ''}`;
+  if (el) el.innerHTML = `<span data-i18n="card_revisor">${typeof t==='function'?t('card_revisor'):'Revisor'}</span> ${pos} (<span data-i18n="${rol==='S'?'role_suplente':'role_principal'}">${typeof t==='function'?(rol==='S'?t('role_suplente'):t('role_principal')):rol}</span>)${nombre ? ' — ' + nombre : ''}`;
 }
 function _rfRenumerarTodos() {
   formData.revisores.revisores.forEach(r => actualizarTituloRF(r._id));
@@ -117,7 +117,7 @@ function _rfFiltrarTipoDoc(id, soloNit) {
   const endpointBase = soloNit
     ? '/api/catalogo/tipos-documento'
     : '/api/catalogo/tipos-documento?todos=1';
-  const optsHtml = getOpcionesHTML(endpointBase, 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+  const optsHtml = getOpcionesHTML(endpointBase, 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder');
   const current  = sel.value;
   sel.innerHTML  = optsHtml;
   // Si el tipo actual sigue siendo válido, restaurarlo
@@ -147,9 +147,9 @@ function onTieneFirmaChange(id, valor) {
 }
 
 /* ── Opciones de catálogo ────────────────────────────────────────────────────── */
-function _rfTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
-function _rfTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
-function _rfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —'); }
+function _rfTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
+function _rfTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
+function _rfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_placeholder'); }
 
 /* ── HTML de un revisor ──────────────────────────────────────────────────────── */
 function _rfMiembroHTML(r) {
@@ -161,7 +161,7 @@ function _rfMiembroHTML(r) {
 
   return `
     <div class="grupo-header" onclick="toggleGrupoRF(${id})">
-      <span class="grupo-titulo" id="rf_titulo_${id}">Revisor ${_rfPos(id)+1}</span>
+      <span class="grupo-titulo" id="rf_titulo_${id}"><span data-i18n="card_revisor">${typeof t==='function'?t('card_revisor'):'Revisor'}</span> ${_rfPos(id)+1}</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarRF(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="rf_body_${id}">
@@ -169,93 +169,93 @@ function _rfMiembroHTML(r) {
       <!-- Rol, Nombres, Apellidos, Fecha expedición -->
       <div class="grid-4">
         <div class="field">
-          <label>Rol <span class="req">*</span></label>
+          <label><span data-i18n="field_rol">${typeof t==='function'?t('field_rol'):'Rol'}</span> <span class="req">*</span></label>
           <select id="rf_${id}_tipRepr"
                   onchange="actualizarRF(${id},'TIP_REPR',this.value);actualizarTituloRF(${id})">
-            <option value="P" ${selP}>Principal</option>
-            <option value="S" ${selS}>Suplente</option>
+            <option value="P" ${selP}><span data-i18n="role_principal">${typeof t==='function'?t('role_principal'):'Principal'}</span></option>
+            <option value="S" ${selS}><span data-i18n="role_suplente">${typeof t==='function'?t('role_suplente'):'Suplente'}</span></option>
           </select>
         </div>
         <div class="field" id="field-rf_${id}_nom">
-          <label>Nombres <span class="req">*</span></label>
-          <input type="text" id="rf_${id}_nom" maxlength="100" placeholder="Nombres completos"
+          <label><span data-i18n="field_nombres">${typeof t==='function'?t('field_nombres'):'Nombres'}</span> <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_nom" maxlength="100" data-i18n-ph="ph_nombres" placeholder="${typeof t==='function'?t('ph_nombres'):'Nombres completos'}"
                  oninput="actualizarRF(${id},'NOM_REVI',this.value);actualizarTituloRF(${id});limpiarError('field-rf_${id}_nom')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_ape">
-          <label>Apellidos <span class="req">*</span></label>
-          <input type="text" id="rf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+          <label><span data-i18n="field_apellidos">${typeof t==='function'?t('field_apellidos'):'Apellidos'}</span> <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_ape" maxlength="100" data-i18n-ph="ph_apellidos" placeholder="${typeof t==='function'?t('ph_apellidos'):'Apellidos completos'}"
                  oninput="actualizarRF(${id},'APE_REVI',this.value);limpiarError('field-rf_${id}_ape')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_fec">
-          <label>Fecha expedición doc. <span class="req">*</span></label>
+          <label><span data-i18n="field_fec_expe_doc">${typeof t==='function'?t('field_fec_expe_doc'):'Fecha expedición doc.'}</span> <span class="req">*</span></label>
           <input type="date" id="rf_${id}_fec"
                  onchange="actualizarRF(${id},'FEC_EXPE',this.value);limpiarError('field-rf_${id}_fec')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
 
       <!-- TIP_DOCU, NUM_DOCU, CEL -->
       <div class="grid-3">
         <div class="field" id="field-rf_${id}_tipdoc">
-          <label>Tipo de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_tip_doc">${typeof t==='function'?t('field_tip_doc'):'Tipo de documento'}</span> <span class="req">*</span></label>
           <select id="rf_${id}_tipdoc"
                   onchange="onRFTipdocChange(${id},this.value);actualizarRF(${id},'TIP_DOCU',this.value);limpiarError('field-rf_${id}_tipdoc')">
             ${td}
           </select>
           <input type="text" id="rf_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                 placeholder="Especifique el tipo de documento"
+                 data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
                  oninput="actualizarRF(${id},'OTR_TPDOC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_numdoc">
-          <label>Número de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_num_doc">${typeof t==='function'?t('field_num_doc'):'Número de documento'}</span> <span class="req">*</span></label>
           <input type="text" id="rf_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU',this.value);limpiarError('field-rf_${id}_numdoc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_cel">
-          <label>Celular <span class="req">*</span></label>
+          <label><span data-i18n="field_celular">${typeof t==='function'?t('field_celular'):'Celular'}</span> <span class="req">*</span></label>
           <input type="tel" id="rf_${id}_cel" maxlength="20"
                  oninput="actualizarRF(${id},'CEL_REVI',this.value);limpiarError('field-rf_${id}_cel')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
 
       <!-- País / Dept / Ciudad / Dirección -->
       <div class="grid-4">
         <div class="field" id="field-rf_${id}_pais">
-          <label>País <span class="req">*</span></label>
+          <label><span data-i18n="field_pais">${typeof t==='function'?t('field_pais'):'País'}</span> <span class="req">*</span></label>
           <select id="rf_${id}_pais"
                   onchange="onRFPaisChange(${id},this.value);limpiarError('field-rf_${id}_pais')">
             ${pa}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_pais_otro" style="display:none">
-          <label>Especifique el país <span class="req">*</span></label>
-          <input type="text" id="rf_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+          <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
+          <input type="text" id="rf_${id}_pais_otro" maxlength="100" data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del país'}"
                  oninput="actualizarRF(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-rf_${id}_dept">
-          <label>Departamento <span class="req">*</span></label>
+          <label><span data-i18n="field_dept">${typeof t==='function'?t('field_dept'):'Departamento'}</span> <span class="req">*</span></label>
           <select id="rf_${id}_dept" disabled
                   onchange="onRFDeptChange(${id},this.value);limpiarError('field-rf_${id}_dept')">
-            <option value="">— Seleccione país primero —</option>
+            <option value="" data-i18n="select_first_country">${typeof t==='function'?t('select_first_country'):'— Seleccione país primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-rf_${id}_mpio">
-          <label>Ciudad <span class="req">*</span></label>
+          <label><span data-i18n="field_ciudad">${typeof t==='function'?t('field_ciudad'):'Ciudad'}</span> <span class="req">*</span></label>
           <select id="rf_${id}_mpio" disabled
                   onchange="actualizarRF(${id},'COD_MPIO',this.value);limpiarError('field-rf_${id}_mpio')">
-            <option value="">— Seleccione departamento primero —</option>
+            <option value="" data-i18n="select_first_dept">${typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Dirección</label>
+          <label><span data-i18n="field_dir_simple">${typeof t==='function'?t('field_dir_simple'):'Dirección'}</span></label>
           <input type="text" id="rf_${id}_dir" maxlength="255"
                  oninput="actualizarRF(${id},'DIR_REVI',this.value)" />
         </div>
@@ -264,20 +264,20 @@ function _rfMiembroHTML(r) {
       <!-- Tel / Mail / Obs -->
       <div class="grid-4">
         <div class="field">
-          <label>Teléfono fijo</label>
+          <label><span data-i18n="field_tel">${typeof t==='function'?t('field_tel'):'Teléfono fijo'}</span></label>
           <input type="tel" id="rf_${id}_tel" maxlength="20"
                  oninput="actualizarRF(${id},'TEL_REVI',this.value)" />
         </div>
         <div class="field" id="field-rf_${id}_mail">
-          <label>Correo electrónico <span class="req">*</span></label>
+          <label><span data-i18n="field_mail">${typeof t==='function'?t('field_mail'):'Correo electrónico'}</span> <span class="req">*</span></label>
           <input type="email" id="rf_${id}_mail" maxlength="100"
                  oninput="actualizarRF(${id},'MAIL_REVI',this.value);limpiarError('field-rf_${id}_mail')" />
-          <span class="error-msg">Email inválido o vacío</span>
+          <span class="error-msg" data-i18n="invalid_email">${typeof t==='function'?t('invalid_email'):'Email inválido o vacío'}</span>
         </div>
         <div class="field col-full">
-          <label>Observaciones</label>
+          <label><span data-i18n="field_obs">${typeof t==='function'?t('field_obs'):'Observaciones'}</span></label>
           <textarea id="rf_${id}_obs" rows="2" maxlength="500"
-                    placeholder="Observaciones adicionales (opcional)"
+                    data-i18n-ph="field_obs_ph" placeholder="${typeof t==='function'?t('field_obs_ph'):'Observaciones adicionales (opcional)'}"
                     oninput="actualizarRF(${id},'OBS_REVI',this.value)"></textarea>
         </div>
       </div>
@@ -285,15 +285,15 @@ function _rfMiembroHTML(r) {
       <!-- Firma auditora -->
       <hr class="rl-divider">
       <div class="field field-radio">
-        <label>¿El revisor está designado por una firma auditora? <span class="req">*</span></label>
+        <label><span data-i18n="rf_firm_asked">${typeof t==='function'?t('rf_firm_asked'):'¿El revisor está designado por una firma auditora?'}</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="rf_firma_${id}" value="S"
-                   onchange="onTieneFirmaChange(${id},'S')"> Sí
+                   onchange="onTieneFirmaChange(${id},'S')"> <span><span data-i18n="yes">${typeof t==='function'?t('yes'):'Sí'}</span></span>
           </label>
           <label class="radio-option">
             <input type="radio" name="rf_firma_${id}" value="N" checked
-                   onchange="onTieneFirmaChange(${id},'N')"> No
+                   onchange="onTieneFirmaChange(${id},'N')"> <span><span data-i18n="no">${typeof t==='function'?t('no'):'No'}</span></span>
           </label>
         </div>
       </div>
@@ -301,24 +301,24 @@ function _rfMiembroHTML(r) {
            style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s,max-height .3s">
         <div class="grid-4">
           <div class="field col-full" id="field-rf_${id}_firma_raz">
-            <label>Razón social de la firma <span class="req">*</span></label>
+            <label><span data-i18n="rf_firm_raz">${typeof t==='function'?t('rf_firm_raz'):'Razón social de la firma'}</span> <span class="req">*</span></label>
             <input type="text" id="rf_${id}_firma_raz" maxlength="255"
                    oninput="actualizarRF(${id},'RAZ_FIRMA',this.value);limpiarError('field-rf_${id}_firma_raz')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_tipdoc">
-            <label>Tipo de documento de la firma<span class="req">*</span></label>
+            <label><span data-i18n="rf_firm_tipdoc">${typeof t==='function'?t('rf_firm_tipdoc'):'Tipo de documento de la firma'}</span><span class="req">*</span></label>
             <select id="rf_${id}_firma_tipdoc"
                     onchange="actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
               ${_rfTdOpts()}
             </select>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_numdoc">
-            <label>Número de documento de la firma<span class="req">*</span></label>
+            <label><span data-i18n="rf_firm_numdoc">${typeof t==='function'?t('rf_firm_numdoc'):'Número de documento de la firma'}</span><span class="req">*</span></label>
             <input type="text" id="rf_${id}_firma_numdoc" maxlength="20" inputmode="numeric"
                    oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
         </div>
       </div>
@@ -486,13 +486,13 @@ async function onRFPaisChange(id, codPais) {
 
   const selDept = document.getElementById(`rf_${id}_dept`);
   const selMpio = document.getElementById(`rf_${id}_mpio`);
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
   limpiarError(`field-rf_${id}_dept`);
   limpiarError(`field-rf_${id}_mpio`);
 
   if (!codPais) {
-    selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
+    selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>';
     selDept.disabled  = true; return;
   }
 
@@ -515,7 +515,7 @@ async function onRFPaisChange(id, codPais) {
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `rf_${id}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+      'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
     selDept.innerHTML = '<option value="NA">No aplica</option>';
     selDept.value = 'NA'; selDept.disabled = true;
@@ -523,7 +523,7 @@ async function onRFPaisChange(id, codPais) {
     selMpio.disabled = false;
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+      'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
     selMpio.onchange = e => {
       r.COD_MPIO = e.target.value ? String(e.target.value) : null;
       limpiarError(`field-rf_${id}_mpio`);
@@ -543,7 +543,7 @@ async function onRFDeptChange(id, codDept) {
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
   await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+    'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
   selMpio.onchange = e => {
     r.COD_MPIO = e.target.value ? String(e.target.value) : null;

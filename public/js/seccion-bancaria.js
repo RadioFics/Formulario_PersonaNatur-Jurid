@@ -44,11 +44,11 @@ function actualizarTituloBanco(id) {
   if (!el) return;
   const sel = document.getElementById(`banco_${id}_banco`);
   const nom = sel ? (sel.options[sel.selectedIndex]?.text || '') : '';
-  const lbl = nom && nom !== '— Seleccione entidad —' ? ` — ${nom}` : '';
+  const lbl = nom && nom !== 'select_ph_entidad' ? ` — ${nom}` : '';
   if (pos === 1) {
-    el.innerHTML = `Cuenta principal — Certificaci\xF3n bancaria${lbl} <span class="ic-info" data-tip="Esta es la cuenta donde se realizar\xE1 el pago. Debe coincidir con la certificaci\xF3n bancaria adjuntada en los documentos.">i</span>`;
+    el.innerHTML = `${typeof t==='function'?t('card_cuenta_princ'):'Cuenta principal — Certificación bancaria'}${lbl} <span class="ic-info" data-tip="${typeof t==='function'?t('sec11_cert_tip'):'Esta es la cuenta donde se realizará el pago. Debe coincidir con la certificación bancaria adjuntada en los documentos.'}">i</span>`;
   } else {
-    el.textContent = `Cuenta ${pos}${lbl}`;
+    el.innerHTML = `<span data-i18n="card_cuenta">${typeof t==='function'?t('card_cuenta'):'Cuenta'}</span> ${pos}${lbl}`;
   }
 }
 function _bancoRenumerarTodos() {
@@ -126,13 +126,13 @@ function _bancoPaisOtroChange(id, codPais) {
 
 /* ── Opciones desde caché ────────────────────────────────────────────────────── */
 function _bancoBancoOpts() {
-  return getOpcionesHTML('/api/catalogo/bancos', 'COD_BANCO', 'NOM_BANCO', '— Seleccione entidad —');
+  return getOpcionesHTML('/api/catalogo/bancos', 'COD_BANCO', 'NOM_BANCO', 'select_ph_entidad');
 }
 function _bancoTipCtaOpts() {
-  return getOpcionesHTML('/api/catalogo/tipos-cuenta', 'COD_TPCTA', 'NOM_TPCTA', '— Seleccione tipo —');
+  return getOpcionesHTML('/api/catalogo/tipos-cuenta', 'COD_TPCTA', 'NOM_TPCTA', 'select_ph_tipo');
 }
 function _bancoPaisOpts() {
-  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione país —');
+  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_ph_pais');
 }
 
 /* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
@@ -147,56 +147,56 @@ function _crearGrupoBancoEl(cuenta) {
   el.id        = `banco_grupo_${id}`;
   el.innerHTML = `
     <div class="grupo-header" onclick="toggleGrupoBanco(${id})">
-      <span class="grupo-titulo" id="banco_titulo_${id}">Cuenta ${pos}</span>
+      <span class="grupo-titulo" id="banco_titulo_${id}"><span data-i18n="card_cuenta">${typeof t==='function'?t('card_cuenta'):'Cuenta'}</span> ${pos}</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarBanco(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="banco_body_${id}">
       <div class="grid-4">
         <div class="field col-full" id="field-banco_${id}_banco">
-          <label>Entidad bancaria <span class="req">*</span></label>
+          <label><span data-i18n="sec11_entidad">${typeof t==='function'?t('sec11_entidad'):'Entidad bancaria'}</span> <span class="req">*</span></label>
           <select id="banco_${id}_banco"
                   onchange="actualizarBanco(${id},'COD_BANCO',this.value);actualizarTituloBanco(${id});limpiarError('field-banco_${id}_banco');_bancoOtrosChange(${id},'banco')">
             ${bo}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-banco_${id}_banco_otro" style="display:none; grid-column: span 2">
-          <label>Especifique la entidad bancaria <span class="req">*</span></label>
+          <label><span data-i18n="field_especif_banco">${typeof t==='function'?t('field_especif_banco'):'Especifique la entidad bancaria'}</span> <span class="req">*</span></label>
           <input type="text" id="banco_${id}_otr_banco" maxlength="255" placeholder="Nombre de la entidad"
                  oninput="actualizarBanco(${id},'OTR_BANCO',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-banco_${id}_tipcuen">
-          <label>Tipo de cuenta <span class="req">*</span></label>
+          <label><span data-i18n="sec11_tip_cuen">${typeof t==='function'?t('sec11_tip_cuen'):'Tipo de cuenta'}</span> <span class="req">*</span></label>
           <select id="banco_${id}_tipcuen"
                   onchange="actualizarBanco(${id},'TIP_CUEN',this.value);limpiarError('field-banco_${id}_tipcuen');_bancoOtrosChange(${id},'cuen')">
             ${to}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-banco_${id}_tipcuen_otro" style="display:none">
-          <label>Especifique el tipo de cuenta <span class="req">*</span></label>
+          <label><span data-i18n="field_especif_tipcuen">${typeof t==='function'?t('field_especif_tipcuen'):'Especifique el tipo de cuenta'}</span> <span class="req">*</span></label>
           <input type="text" id="banco_${id}_otr_cuen" maxlength="255" placeholder="Ej: cuenta fiduciaria, CDT…"
                  oninput="actualizarBanco(${id},'OTR_CUEN',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-banco_${id}_numcuen">
-          <label>Número de cuenta <span class="req">*</span></label>
+          <label><span data-i18n="sec11_num_cuen">${typeof t==='function'?t('sec11_num_cuen'):'Número de cuenta'}</span> <span class="req">*</span></label>
           <input type="text" id="banco_${id}_numcuen" maxlength="30" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\\D/g,'');actualizarBanco(${id},'NUM_CUEN',this.value);limpiarError('field-banco_${id}_numcuen')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
       <div class="field field-radio">
-        <label>¿La empresa posee cuentas en el extranjero? <span class="req">*</span></label>
+        <label><span data-i18n="sec11_cuen_extr">${typeof t==='function'?t('sec11_cuen_extr'):'¿La empresa posee cuentas en el extranjero?'}</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="banco_extr_${id}" value="S"
-                   onchange="onTieneExtranjeraChange(${id},'S')"> Sí
+                   onchange="onTieneExtranjeraChange(${id},'S')"> ${typeof t==='function'?t('yes'):'Sí'}
           </label>
           <label class="radio-option">
             <input type="radio" name="banco_extr_${id}" value="N" checked
-                   onchange="onTieneExtranjeraChange(${id},'N')"> No
+                   onchange="onTieneExtranjeraChange(${id},'N')"> ${typeof t==='function'?t('no'):'No'}
           </label>
         </div>
       </div>
@@ -204,32 +204,30 @@ function _crearGrupoBancoEl(cuenta) {
            style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s ease, max-height .2s ease;">
         <div class="grid-4">
           <div class="field" id="field-banco_${id}_ext_pais">
-            <label>Pa&#xED;s de la cuenta <span class="req">*</span></label>
+            <label><span data-i18n="sec11_pais_ext">${typeof t==='function'?t('sec11_pais_ext'):'País de la cuenta'}</span> <span class="req">*</span></label>
             <select id="banco_${id}_ext_pais"
                     onchange="actualizarBanco(${id},'COD_PAIS_EXT',this.value);_bancoPaisOtroChange(${id},this.value);limpiarError('field-banco_${id}_ext_pais')">
               ${pa}
             </select>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
-          <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
-            <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-            <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
-                   oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
-          </div>
-        </div>
-        <div class="grid-4">
           <div class="field" id="field-banco_${id}_ext_nom">
-            <label>Nombre de la entidad extranjera <span class="req">*</span></label>
+            <label><span data-i18n="sec11_nom_ext">${typeof t==='function'?t('sec11_nom_ext'):'Nombre de la entidad extranjera'}</span> <span class="req">*</span></label>
             <input type="text" id="banco_${id}_ext_nom" maxlength="255"
                    oninput="actualizarBanco(${id},'NOM_ENT_EXT',this.value);limpiarError('field-banco_${id}_ext_nom')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
           <div class="field" id="field-banco_${id}_ext_tip">
-            <label>Tipo de cuenta extranjera <span class="req">*</span></label>
+            <label><span data-i18n="sec11_tip_ext">${typeof t==='function'?t('sec11_tip_ext'):'Tipo de cuenta extranjera'}</span> <span class="req">*</span></label>
             <input type="text" id="banco_${id}_ext_tip" maxlength="100"
                    placeholder="Ej: Savings, Checking&#x2026;"
                    oninput="actualizarBanco(${id},'TIP_CUE_EXT',this.value);limpiarError('field-banco_${id}_ext_tip')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+          </div>
+          <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
+            <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
+            <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+                   oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
           </div>
         </div>
       </div>

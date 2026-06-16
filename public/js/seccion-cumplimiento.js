@@ -47,9 +47,9 @@ function actualizarTituloCump(id) {
   // TIP_REPR siempre refleja la posición actual
   o.TIP_REPR = pos === 0 ? 'P' : 'S';
   const nom = [(o.NOM_RESP || '').trim(), (o.APE_RESP || '').trim()].filter(Boolean).join(' ');
-  const rol = pos === 0 ? 'Principal' : 'Suplente';
+  const roleLabel = typeof t==='function'?(pos===0?t('role_principal'):t('role_suplente')):(pos===0?'Principal':'Suplente');
   const el  = document.getElementById(`cump_titulo_${id}`);
-  if (el) el.textContent = `Oficial ${pos + 1} (${rol})${nom ? ' — ' + nom : ''}`;
+  if (el) el.innerHTML = `<span data-i18n="card_oficial">${typeof t==='function'?t('card_oficial'):'Oficial'}</span> ${pos + 1} (<span data-i18n="${pos===0?'role_principal':'role_suplente'}">${roleLabel}</span>)${nom ? ' — ' + nom : ''}`;
 }
 function _cumpRenumerarTodos() {
   formData.cumplimiento.oficiales.forEach(o => actualizarTituloCump(o._id));
@@ -110,11 +110,181 @@ function onTieNormChange(valor) {
   }
 }
 
-function onSistPreveChange(valor) {
-  actualizarCump('SIS_PREVE', valor || null);
+/**
+ * Carga los checkboxes de "Tipo de sistema implementado" desde el catálogo.
+ * Usa catalogCache para evitar fetch duplicado. Restaura el estado actual.
+ */
+async function cargarCheckboxesSisPrev() {
+  const wrap = document.getElementById('cump_sis_preve_checks');
+  if (!wrap) return;
+
+  const endpoint = '/api/catalogo/sistemas-prevencion';
+  const cacheKey = new URL(endpoint, window.location.origin).toString();
+
+  let datos = catalogCache[cacheKey];
+  if (!datos) {
+    try {
+      const resp = await fetch(cacheKey);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      datos = await resp.json();
+      catalogCache[cacheKey] = datos;
+    } catch (e) {
+      console.error('cargarCheckboxesSisPrev:', e);
+      wrap.innerHTML = '<span style="color:var(--color-error);font-size:.85rem">⚠ Error al cargar opciones</span>';
+      return;
+    }
+  }
+
+  window._sistPrevDatos = datos;
+  _buildSistPrevMultiselect(wrap, datos);
+}
+
+/* ── Multi-select helpers ────────────────────────────────────────────────── */
+function _htmlEsc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function _buildSistPrevMultiselect(wrap, datos) {
+  const seleccionados = formData.cumplimiento.SIS_PREVE
+    ? String(formData.cumplimiento.SIS_PREVE).split(',').filter(Boolean)
+    : [];
+  const hasOtr = seleccionados.includes('OTR');
+  const lang = window._currentLang || 'es';
+  const placeholder = typeof t === 'function' ? t('sec5_select_ph') : 'Seleccione uno o varios...';
+
+  const labelText = seleccionados.length
+    ? datos.filter(r => seleccionados.includes(r.COD_ABREV))
+           .map(r => (lang === 'en' && r.NOM_EN) ? r.NOM_EN : r.NOM_SIST)
+           .join(', ')
+    : placeholder;
+
+  const isEmpty = seleccionados.length === 0;
+
+  wrap.innerHTML = `
+    <div class="ms-wrap" id="cump_sis_preve_ms">
+      <button type="button" class="ms-trigger" id="cump_sis_preve_btn"
+              onclick="toggleSistPrevPanel(event)">
+        <span class="ms-label${isEmpty ? ' ms-empty' : ''}" id="cump_sis_preve_label">${_htmlEsc(labelText)}</span>
+        <span class="ms-arrow" aria-hidden="true">&#9660;</span>
+      </button>
+      <div class="ms-panel" id="cump_sis_preve_panel" style="display:none">
+        ${datos.map(row => {
+          const lbl = (lang === 'en' && row.NOM_EN) ? row.NOM_EN : row.NOM_SIST;
+          const chk = seleccionados.includes(row.COD_ABREV) ? 'checked' : '';
+          const dis = (hasOtr && row.COD_ABREV !== 'OTR') ? 'ms-disabled' : '';
+          const disAttr = (hasOtr && row.COD_ABREV !== 'OTR') ? 'disabled' : '';
+          return `<label class="ms-option ${dis}" id="ms-opt-${row.COD_ABREV}">
+            <input type="checkbox" value="${row.COD_ABREV}" ${chk} ${disAttr}
+                   onchange="onSistPreveChange('${row.COD_ABREV}',this.checked);limpiarError('field-cump_sis_preve')">
+            <span>${_htmlEsc(lbl)}</span>
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  // Close when clicking outside
+  document.removeEventListener('click', _closeSistPrevOnOutside);
+  document.addEventListener('click', _closeSistPrevOnOutside);
+}
+
+function toggleSistPrevPanel(e) {
+  e.stopPropagation();
+  const panel = document.getElementById('cump_sis_preve_panel');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  const btn = document.getElementById('cump_sis_preve_btn');
+  if (btn) btn.classList.toggle('ms-open', !isOpen);
+}
+
+function _closeSistPrevOnOutside(e) {
+  const wrap = document.getElementById('cump_sis_preve_ms');
+  if (!wrap || wrap.contains(e.target)) return;
+  const panel = document.getElementById('cump_sis_preve_panel');
+  if (panel) panel.style.display = 'none';
+  const btn = document.getElementById('cump_sis_preve_btn');
+  if (btn) btn.classList.remove('ms-open');
+}
+
+function _updateSistPrevTrigger() {
+  const datos = window._sistPrevDatos || [];
+  const lang = window._currentLang || 'es';
+  const seleccionados = formData.cumplimiento.SIS_PREVE
+    ? String(formData.cumplimiento.SIS_PREVE).split(',').filter(Boolean)
+    : [];
+  const placeholder = typeof t === 'function' ? t('sec5_select_ph') : 'Seleccione uno o varios...';
+  const labelEl = document.getElementById('cump_sis_preve_label');
+  if (!labelEl) return;
+  if (seleccionados.length) {
+    labelEl.textContent = datos
+      .filter(r => seleccionados.includes(r.COD_ABREV))
+      .map(r => (lang === 'en' && r.NOM_EN) ? r.NOM_EN : r.NOM_SIST)
+      .join(', ');
+    labelEl.classList.remove('ms-empty');
+  } else {
+    labelEl.textContent = placeholder;
+    labelEl.classList.add('ms-empty');
+  }
+}
+
+function refreshSistPrevLabels() {
+  const datos = window._sistPrevDatos;
+  if (!datos) return;
+  const lang = window._currentLang || 'es';
+  datos.forEach(row => {
+    const optEl = document.getElementById(`ms-opt-${row.COD_ABREV}`);
+    if (!optEl) return;
+    const spanEl = optEl.querySelector('span');
+    if (spanEl) spanEl.textContent = (lang === 'en' && row.NOM_EN) ? row.NOM_EN : row.NOM_SIST;
+  });
+  _updateSistPrevTrigger();
+}
+window.refreshSistPrevLabels = refreshSistPrevLabels;
+window.toggleSistPrevPanel   = toggleSistPrevPanel;
+
+/**
+ * Llamado por onchange de cada checkbox de "Tipo de sistema implementado".
+ * Acumula/elimina el valor en SIS_PREVE (CSV) y controla el campo "Otro".
+ * @param {string}  codAbrev — COD_ABREV del sistema (p. ej. 'OTR', 'SAGRILAFT')
+ * @param {boolean} checked  — si el checkbox fue marcado o desmarcado
+ */
+function onSistPreveChange(codAbrev, checked) {
+  let vals = formData.cumplimiento.SIS_PREVE
+    ? String(formData.cumplimiento.SIS_PREVE).split(',').filter(Boolean)
+    : [];
+
+  if (checked) {
+    if (!vals.includes(codAbrev)) vals.push(codAbrev);
+  } else {
+    vals = vals.filter(v => v !== codAbrev);
+  }
+
+  // OTR logic: when Otro is selected, uncheck & disable all other options
+  const hasOtr = vals.includes('OTR');
+  const panel = document.getElementById('cump_sis_preve_panel');
+  if (panel) {
+    panel.querySelectorAll('.ms-option').forEach(opt => {
+      const inp = opt.querySelector('input[type="checkbox"]');
+      if (!inp || inp.value === 'OTR') return;
+      opt.classList.toggle('ms-disabled', hasOtr);
+      inp.disabled = hasOtr;
+      if (hasOtr && inp.checked) {
+        inp.checked = false;
+        vals = vals.filter(v => v !== inp.value);
+      }
+    });
+  }
+
+  actualizarCump('SIS_PREVE', vals.length ? vals.join(',') : null);
+  _updateSistPrevTrigger();
+
   const fieldOtro = document.getElementById('field-cump_sis_preve_otro');
   if (!fieldOtro) return;
-  if (valor === 'OTRO') {
+  if (vals.includes('OTR')) {
     fieldOtro.style.display = '';
   } else {
     fieldOtro.style.display = 'none';
@@ -126,115 +296,116 @@ function onSistPreveChange(valor) {
 
 /* ── Opciones de catálogo ────────────────────────────────────────────────────── */
 function _cumpTdOpts() {
-  return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+  return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder');
 }
 function _cumpPaOpts() {
-  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —');
+  return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_placeholder');
 }
 
 /* ── HTML de un oficial ──────────────────────────────────────────────────────── */
 function _cumpOficialHTML(o) {
   const id  = o._id;
   const pos = _cumpPos(id);
-  const rol = pos === 0 ? 'Principal' : 'Suplente';
+  const roleLabel = typeof t==='function'?(pos===0?t('role_principal'):t('role_suplente')):(pos===0?'Principal':'Suplente');
   const td  = _cumpTdOpts();
   const pa  = _cumpPaOpts();
   return `
     <div class="grupo-header" onclick="toggleGrupoCump(${id})">
-      <span class="grupo-titulo" id="cump_titulo_${id}">Oficial ${pos + 1} (${rol})</span>
+      <span class="grupo-titulo" id="cump_titulo_${id}"><span data-i18n="card_oficial">${typeof t==='function'?t('card_oficial'):'Oficial'}</span> ${pos + 1} (<span data-i18n="${pos===0?'role_principal':'role_suplente'}">${roleLabel}</span>)</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarCump(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="cump_body_${id}">
       <div class="grid-4">
         <div class="field" id="field-cump_${id}_nom">
-          <label>Nombres <span class="req">*</span></label>
+          <label><span data-i18n="field_nombres">${typeof t==='function'?t('field_nombres'):'Nombres'}</span> <span class="req">*</span></label>
           <input type="text" id="cump_${id}_nom" maxlength="100"
                  oninput="actualizarOficial(${id},'NOM_RESP',this.value);actualizarTituloCump(${id});limpiarError('field-cump_${id}_nom')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_ape">
-          <label>Apellidos <span class="req">*</span></label>
+          <label><span data-i18n="field_apellidos">${typeof t==='function'?t('field_apellidos'):'Apellidos'}</span> <span class="req">*</span></label>
           <input type="text" id="cump_${id}_ape" maxlength="100"
                  oninput="actualizarOficial(${id},'APE_RESP',this.value);limpiarError('field-cump_${id}_ape')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_tipdoc">
-          <label>Tipo de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_tip_doc">${typeof t==='function'?t('field_tip_doc'):'Tipo de documento'}</span> <span class="req">*</span></label>
           <select id="cump_${id}_tipdoc"
                   onchange="onCumpTipdocChange(${id},this.value);actualizarOficial(${id},'TIP_DOCU',this.value);limpiarError('field-cump_${id}_tipdoc')">
             ${td}
           </select>
           <input type="text" id="cump_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                 placeholder="Especifique el tipo de documento"
+                 data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
                  oninput="actualizarOficial(${id},'OTR_TPDOC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_numdoc">
-          <label>Número de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_num_doc">${typeof t==='function'?t('field_num_doc'):'Número de documento'}</span> <span class="req">*</span></label>
           <input type="text" id="cump_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\D/g,'');actualizarOficial(${id},'NUM_DOCU',this.value);limpiarError('field-cump_${id}_numdoc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
       <div class="grid-4">
         <div class="field" id="field-cump_${id}_fec">
-          <label>Fecha de expedición <span class="req">*</span></label>
+          <label><span data-i18n="field_fec_expe">${typeof t==='function'?t('field_fec_expe'):'Fecha de expedición'}</span> <span class="req">*</span></label>
           <input type="date" id="cump_${id}_fec"
                  onchange="actualizarOficial(${id},'FEC_EXPE',this.value);limpiarError('field-cump_${id}_fec')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_pais">
-          <label>País <span class="req">*</span></label>
+          <label><span data-i18n="field_pais">${typeof t==='function'?t('field_pais'):'País'}</span> <span class="req">*</span></label>
           <select id="cump_${id}_pais"
                   onchange="onCumpPaisChange(${id},this.value);limpiarError('field-cump_${id}_pais')">
             ${pa}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_pais_otro" style="display:none">
-          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-          <input type="text" id="cump_${id}_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+          <label><span data-i18n="specify_country">${typeof t==='function'?t('specify_country'):'Especifique el pa\xEDs'}</span> <span class="req">*</span></label>
+          <input type="text" id="cump_${id}_pais_otro" maxlength="100"
+                 data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del pa\xEDs'}"
                  oninput="actualizarOficial(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-cump_${id}_dept">
-          <label>Departamento <span class="req">*</span></label>
+          <label><span data-i18n="field_dept">${typeof t==='function'?t('field_dept'):'Departamento'}</span> <span class="req">*</span></label>
           <select id="cump_${id}_dept" disabled
                   onchange="onCumpDeptChange(${id},this.value);limpiarError('field-cump_${id}_dept')">
-            <option value="">— Seleccione país primero —</option>
+            <option value="" data-i18n="select_first_country">${typeof t==='function'?t('select_first_country'):'— Seleccione país primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-cump_${id}_mpio">
-          <label>Ciudad <span class="req">*</span></label>
+          <label><span data-i18n="field_ciudad">${typeof t==='function'?t('field_ciudad'):'Ciudad'}</span> <span class="req">*</span></label>
           <select id="cump_${id}_mpio" disabled
                   onchange="actualizarOficial(${id},'COD_MPIO',this.value);limpiarError('field-cump_${id}_mpio')">
-            <option value="">— Seleccione departamento primero —</option>
+            <option value="" data-i18n="select_first_dept">${typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
       <div class="grid-4">
         <div class="field">
-          <label>Dirección domicilio</label>
+          <label><span data-i18n="field_dir">${typeof t==='function'?t('field_dir'):'Dirección domicilio'}</span></label>
           <input type="text" id="cump_${id}_dir" maxlength="255"
                  oninput="actualizarOficial(${id},'DIR_RESP',this.value)" />
         </div>
         <div class="field" id="field-cump_${id}_cel">
-          <label>Celular <span class="req">*</span></label>
+          <label><span data-i18n="field_celular">${typeof t==='function'?t('field_celular'):'Celular'}</span> <span class="req">*</span></label>
           <input type="tel" id="cump_${id}_cel" maxlength="20"
                  oninput="actualizarOficial(${id},'CEL_RESP',this.value);limpiarError('field-cump_${id}_cel')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Teléfono fijo</label>
+          <label><span data-i18n="field_tel">${typeof t==='function'?t('field_tel'):'Teléfono fijo'}</span></label>
           <input type="tel" id="cump_${id}_tel" maxlength="20"
                  oninput="actualizarOficial(${id},'TEL_RESP',this.value)" />
         </div>
         <div class="field" id="field-cump_${id}_mail">
-          <label>Correo electrónico <span class="req">*</span></label>
+          <label><span data-i18n="field_mail">${typeof t==='function'?t('field_mail'):'Correo electrónico'}</span> <span class="req">*</span></label>
           <input type="email" id="cump_${id}_mail" maxlength="100"
                  oninput="actualizarOficial(${id},'MAIL_RESP',this.value);limpiarError('field-cump_${id}_mail')" />
-          <span class="error-msg">Email inválido o vacío</span>
+          <span class="error-msg" data-i18n="invalid_email">${typeof t==='function'?t('invalid_email'):'Email inválido o vacío'}</span>
         </div>
       </div>
     </div>`;
@@ -351,18 +522,21 @@ function validarSeccionCumplimiento() {
       limpiarError('field-cump_desc_norm');
     }
 
-    // Si tiene sistema implementado, validar tipo y oficiales
+    // Si tiene sistema implementado, validar tipo (multiselect) y oficiales
     if (c.TIE_JUNTA === 'S') {
-      if (!c.SIS_PREVE) {
+      const sistemasMarcados = c.SIS_PREVE
+        ? String(c.SIS_PREVE).split(',').filter(Boolean)
+        : [];
+      if (sistemasMarcados.length === 0) {
         mostrarError('field-cump_sis_preve');
         ok = false;
       }
-      if (c.SIS_PREVE === 'OTRO' && (!c.OTR_PREVE || !String(c.OTR_PREVE).trim())) {
+      if (sistemasMarcados.includes('OTR') && (!c.OTR_PREVE || !String(c.OTR_PREVE).trim())) {
         mostrarError('field-cump_sis_preve_otro');
         ok = false;
       }
       if (!Array.isArray(c.oficiales) || c.oficiales.length === 0) {
-        mostrarToast('Agregue al menos un oficial de cumplimiento.', 'error');
+        mostrarToast(typeof t==='function'?t('sec5_need_oficial'):'Agregue al menos un oficial de cumplimiento.', 'error');
         ok = false;
       } else {
         for (const o of c.oficiales) {
@@ -409,7 +583,7 @@ function validarYContinuarCumplimiento() {
     }
     return;
   }
-  mostrarToast('Sección 5 completa. Continúe con la siguiente sección.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_ok'):'Sección 5 completa.', 'success');
   document.getElementById('accordion-cumplimiento').classList.add('collapsed');
   const acc6 = document.getElementById('accordion-jd');
   if (acc6) {
@@ -450,9 +624,31 @@ function limpiarSeccionCumplimiento() {
   const radioNo = document.querySelector('input[name="cump_tie_sist"][value="N"]');
   if (radioNo) radioNo.checked = true;
 
+  // Resetear multi-select de tipo de sistema
+  const sisPanel = document.getElementById('cump_sis_preve_panel');
+  if (sisPanel) {
+    sisPanel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+      cb.disabled = false;
+    });
+    sisPanel.querySelectorAll('.ms-option').forEach(o => o.classList.remove('ms-disabled'));
+    sisPanel.style.display = 'none';
+  }
+  const sisBtn = document.getElementById('cump_sis_preve_btn');
+  if (sisBtn) sisBtn.classList.remove('ms-open');
+  const sisLabel = document.getElementById('cump_sis_preve_label');
+  if (sisLabel) {
+    sisLabel.textContent = typeof t === 'function' ? t('sec5_select_ph') : 'Seleccione uno o varios...';
+    sisLabel.classList.add('ms-empty');
+  }
+  const fieldOtroSis = document.getElementById('field-cump_sis_preve_otro');
+  if (fieldOtroSis) fieldOtroSis.style.display = 'none';
+  const otrPreve = document.getElementById('otr_preve');
+  if (otrPreve) otrPreve.value = '';
+
   document.querySelectorAll('#accordion-cumplimiento .field.error')
     .forEach(f => f.classList.remove('error'));
-  mostrarToast('Sección limpiada.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_clear'):'Sección limpiada.', 'success');
 }
 
 /* ── Cascadas ────────────────────────────────────────────────────────────────── */
@@ -469,7 +665,7 @@ async function onCumpPaisChange(id, codPais) {
   const fieldDept  = document.getElementById(`field-cump_${id}_dept`);
   const fieldMpio  = document.getElementById(`field-cump_${id}_mpio`);
 
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
   limpiarError(`field-cump_${id}_dept`);
   limpiarError(`field-cump_${id}_mpio`);
@@ -492,7 +688,7 @@ async function onCumpPaisChange(id, codPais) {
   if (fieldMpio) fieldMpio.style.display = '';
 
   if (!codPais) {
-    selDept.innerHTML = '<option value="">— Seleccione pa&#xED;s primero —</option>';
+    selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione pa\xEDs primero —') + '</option>';
     selDept.disabled  = true;
     return;
   }
@@ -500,15 +696,15 @@ async function onCumpPaisChange(id, codPais) {
   if (codPais === COD_COLOMBIA) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `cump_${id}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+      'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + (typeof t==='function'?t('no_aplica'):'No aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     o.COD_DEPT = 'NA';
     selMpio.disabled = false;
-    selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+    selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('loading_cities'):'Cargando ciudades…') + '</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `cump_${id}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+      'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
     if (_autoNoAplicaCiudad(selMpio)) {
       actualizarOficial(id, 'COD_MPIO', 'NA');
     } else {
@@ -524,11 +720,11 @@ async function onCumpDeptChange(id, codDept) {
   o.COD_MPIO = null;
   const selMpio = document.getElementById(`cump_${id}_mpio`);
   const codPais = document.getElementById(`cump_${id}_pais`).value;
-  selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('loading_cities'):'Cargando ciudades…') + '</option>';
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
   await cargarCatalogo('/api/catalogo/ciudades', `cump_${id}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+    'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
   selMpio.onchange = e => { actualizarOficial(id, 'COD_MPIO', e.target.value); limpiarError(`field-cump_${id}_mpio`); };
 }

@@ -35,7 +35,7 @@ async function inicializar() {
       // Al arrancar siempre estamos en modo Jurídica → pre-seleccionar NIT (COD_TPDOC=8).
       cargarCatalogo(
         '/api/catalogo/tipos-documento?todos=1', 'cod_tpdoc',
-        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
+        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'
       ).then(() => {
         // Modo inicial = Jurídica → mostrar solo NIT y auto-seleccionar
         _repoblarTipoDocumento('J');
@@ -44,19 +44,19 @@ async function inicializar() {
       // Tipos de vinculación
       cargarCatalogo(
         '/api/catalogo/vinculaciones', 'cod_vinc',
-        'COD_VINC', 'NOM_VINC', '— Seleccione tipo de vinculación —'
+        'COD_VINC', 'NOM_VINC', 'select_ph_vinc'
       ),
 
       // Países (Colombia primero)
       cargarCatalogo(
         '/api/catalogo/paises', 'cod_pais_exp',
-        'COD_PAIS', 'NOM_PAIS', '— Seleccione país —'
+        'COD_PAIS', 'NOM_PAIS', 'select_ph_pais'
       ),
 
       // Actividades CIIU — select buscable, muestra "COD — Nombre"
       cargarCatalogo(
         '/api/catalogo/ciiu', 'cod_ciiu',
-        'COD_CIIU', 'NOM_CIIU', '— Seleccione actividad —',
+        'COD_CIIU', 'NOM_CIIU', 'select_ph_act',
         {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
       ).then(() => {
         const sel = document.getElementById('cod_ciiu');
@@ -69,35 +69,29 @@ async function inicializar() {
 
       // ── Sección 2: Representante Legal ─────────────────────────────────────
 
-      // Tipos de documento (todos) — Principal; se clona al Suplente
+      // Tipos de documento (todos) — Principal
       cargarCatalogo(
         '/api/catalogo/tipos-documento?todos=1', 'rl_p_tipdoc',
-        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
+        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'
       ).then(() => {
         agregarOpcionOtroAlTipdoc('rl_p_tipdoc');
-        const src  = document.getElementById('rl_p_tipdoc');
-        const dest = document.getElementById('rl_s_tipdoc');
-        if (src && dest) { dest.innerHTML = src.innerHTML; }
       }),
 
-      // Países — Principal; se clona al Suplente
+      // Países — Principal
       cargarCatalogo(
         '/api/catalogo/paises', 'rl_p_pais',
-        'COD_PAIS', 'NOM_PAIS', '— Seleccione —'
-      ).then(() => {
-        const src  = document.getElementById('rl_p_pais');
-        const dest = document.getElementById('rl_s_pais');
-        if (src && dest) dest.innerHTML = src.innerHTML;
-      }),
+        'COD_PAIS', 'NOM_PAIS', 'select_placeholder'
+      ),
 
       // Países para el desplegable del campo "País" en sección 3
       cargarCatalogo(
         '/api/catalogo/paises', 'soc_pais',
-        'COD_PAIS', 'NOM_PAIS', '— Seleccione país —'
+        'COD_PAIS', 'NOM_PAIS', 'select_ph_pais'
       ),
 
       // ── Sección 5: Sistema de cumplimiento ────────────────────────────────
-      // cump_sis_preve tiene opciones estáticas en HTML; no se carga por catálogo.
+      // Carga los checkboxes de sistemas de prevención.
+      cargarCheckboxesSisPrev(),
       // Los campos de oficiales son dinámicos (renderListaCump); no hay IDs estáticos.
 
       // ── Secciones 6–8 (JD / RF / AC) ─────────────────────────────────────
@@ -191,12 +185,9 @@ function _activarCamposOtros() {
     const el = document.getElementById('rl_p_tipdoc_otro'); if (el) el.value = '';
   });
 
-  // cump_sis_preve — el onchange en HTML llama onSistPreveChange(); no se necesita _activarSiblingOtro.
-  // Si SIS_PREVE='OTRO' fue hidratado desde BD, activar manualmente:
-  if (formData.cumplimiento.SIS_PREVE === 'OTRO') {
-    const fieldOtro = document.getElementById('field-cump_sis_preve_otro');
-    if (fieldOtro) fieldOtro.style.display = '';
-  }
+  // cump_sis_preve — checkboxes: cargarCheckboxesSisPrev() restaura el estado
+  // desde formData.cumplimiento.SIS_PREVE al renderizar.
+  // No se necesita acción adicional aquí.
 }
 
 /* ── "Otro país" — inyectar opción en todos los selects de país ─────────────── */
@@ -209,11 +200,11 @@ function _activarCamposOtros() {
 function _agregarOtroPais() {
   const cacheKey = new URL('/api/catalogo/paises', window.location.origin).toString();
   if (catalogCache[cacheKey] && !catalogCache[cacheKey].find(p => p.COD_PAIS === 'OTRO')) {
-    catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)' });
+    catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)', NOM_EN: 'Other country (not listed)' });
   }
   // Añadir a todos los selects estáticos de país ya presentes en el DOM
-  // (cump_p_pais / cump_s_pais ya no existen — los oficiales son dinámicos)
-  ['cod_pais_exp', 'rl_p_pais', 'rl_s_pais', 'soc_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
+  // (cump_p_pais / cump_s_pais ya no existen — los oficiales son dinámicos; rl_s_* tampoco existe)
+  ['cod_pais_exp', 'rl_p_pais', 'soc_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
   // La lógica de mostrar/ocultar el campo libre de sección 1 está en _handlePaisExpChange.
 }
 
@@ -265,11 +256,73 @@ function _activarBuscadores() {
   // Sección 3 — Sociedad
   ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_pais'].forEach(convertirABuscable);
 
-  // Sección 5 — Cumplimiento (solo cump_sis_preve es estático; campos de oficiales son dinámicos)
-  ['cump_sis_preve'].forEach(convertirABuscable);
+  // Sección 5 — Cumplimiento: cump_sis_preve es ahora checkboxes; no usa convertirABuscable.
 
   // Sección 13 — Firma
   ['firma_tipdoc'].forEach(convertirABuscable);
+}
+
+/* ── Recarga de catálogos al cambiar de idioma ───────────────────────────────
+ * Llamado desde applyLang() en i18n.js cuando el usuario alterna ES ↔ EN.
+ * Re-renderiza los <select> estáticos desde el cache existente (sin peticiones
+ * HTTP adicionales) usando NOM_EN cuando el idioma activo es inglés.
+ */
+async function recargarCatalogosIdioma() {
+  // Definición de cada select estático con su endpoint y columnas.
+  // Debe mantenerse sincronizado con las llamadas en inicializar().
+  const selects = [
+    { endpoint: '/api/catalogo/tipos-documento?todos=1', id: 'cod_tpdoc',    val: 'COD_TPDOC', txt: 'NOM_TPDOC', ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/tipos-documento?todos=1', id: 'rl_p_tipdoc',  val: 'COD_TPDOC', txt: 'NOM_TPDOC', ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/vinculaciones',           id: 'cod_vinc',     val: 'COD_VINC',  txt: 'NOM_VINC',  ph: 'select_ph_vinc' },
+    { endpoint: '/api/catalogo/paises',                  id: 'cod_pais_exp', val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    { endpoint: '/api/catalogo/paises',                  id: 'rl_p_pais',    val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/paises',                  id: 'soc_pais',     val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    { endpoint: '/api/catalogo/paises',                  id: 'cod_nacio_n',  val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    // cump_sis_preve es checkboxes; se re-renderiza con cargarCheckboxesSisPrev() abajo.
+    { endpoint: '/api/catalogo/tipos-cuenta',            id: 'cod_tpcta',    val: 'COD_TPCTA', txt: 'NOM_TPCTA', ph: 'select_placeholder' },
+  ];
+
+  for (const cfg of selects) {
+    const sel = document.getElementById(cfg.id);
+    if (!sel) continue;
+    const valActual = sel.value;
+    // cargarCatalogo re-renderiza desde cache (sin fetch si ya está cacheado)
+    await cargarCatalogo(cfg.endpoint, cfg.id, cfg.val, cfg.txt, cfg.ph);
+    if (valActual) sel.value = valActual; // restaurar selección
+  }
+
+  // Restaurar "Otro tipo doc" en selects de tipo de documento (no está en el catálogo de BD)
+  const rlTipdocSel = document.getElementById('rl_p_tipdoc');
+  if (rlTipdocSel) agregarOpcionOtroAlTipdoc(rlTipdocSel);
+
+  // Re-aplicar el filtro de tipo de documento según el tipo de persona activo
+  if (typeof _repoblarTipoDocumento === 'function') {
+    const tipTerc = (document.getElementById('tip_terc') || {}).value || formData.basica?.TIP_TERC || 'J';
+    _repoblarTipoDocumento(tipTerc);
+  }
+
+  // Re-renderizar checkboxes de SIS_PREVE (usan NOM_EN si idioma = en)
+  await cargarCheckboxesSisPrev();
+
+  // Actualizar títulos de fichas dinámicas (Principal / Suplente → Primary / Alternate)
+  if (typeof _cumpRenumerarTodos  === 'function') _cumpRenumerarTodos();
+  if (typeof _jdRenumerarTodos    === 'function') _jdRenumerarTodos();
+  if (typeof _rfRenumerarTodos    === 'function') _rfRenumerarTodos();
+  if (typeof _bancoRenumerarTodos === 'function') _bancoRenumerarTodos();
+  // Re-renderizar campos de documentos de RL en sección 14
+  if (typeof renderDocRLFields    === 'function') renderDocRLFields();
+  // Re-renderizar lista de países de operación (Sección 4) con NOM_EN
+  if (typeof renderListaPaises    === 'function') await renderListaPaises();
+  // Forzar refresco visual de selects estáticos con opciones data-i18n
+  // (algunos navegadores no actualizan el texto seleccionado con sólo cambiar textContent)
+  document.querySelectorAll('select').forEach(sel => {
+    if (sel.disabled || !sel.id) return;
+    if (sel.querySelector('option[data-i18n]')) {
+      const v = sel.value;
+      sel.value = '\x00';   // valor inexistente → fuerza repintado
+      sel.value = v;
+    }
+  });
 }
 
 /* ── Arranque ───────────────────────────────────────────────────────────────── */
@@ -333,6 +386,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const inp = sel.parentElement && sel.parentElement.querySelector('.sb-input');
     if (inp && cur && cur.value) inp.value = cur.textContent;
   });
+
+  // Inicializar idioma (restaura preferencia guardada en localStorage).
+  if (typeof initLang === 'function') initLang();
 
   // Guardado automático de borrador al interactuar con el formulario.
   document.body.addEventListener('input', guardarBorradorDebounced);
@@ -519,7 +575,7 @@ async function hidratarFormularioVisual() {
         if (inp) inp.value = formData.basica.OTR_PAIS_EXP || '';
       } else if (cpe) {
         await cargarCatalogo('/api/catalogo/departamentos', 'cod_dept_exp',
-          'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: cpe });
+          'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: cpe });
         const selDept = document.getElementById('cod_dept_exp');
         if (selDept) {
           selDept.disabled = false;
@@ -527,7 +583,7 @@ async function hidratarFormularioVisual() {
             selDept.value = formData.basica.COD_DEPT_EXP;
             if (formData.basica.COD_MPIO_EXP) {
               await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
-                'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+                'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
                 { cod_dept: formData.basica.COD_DEPT_EXP, cod_pais: cpe });
               const selMpio = document.getElementById('cod_mpio_exp');
               if (selMpio) { selMpio.disabled = false; selMpio.value = formData.basica.COD_MPIO_EXP; }
@@ -537,27 +593,24 @@ async function hidratarFormularioVisual() {
       }
     }
 
-    // Sección 2: Representante Legal
-    const rlMap = [
+    // Sección 2: Representante Legal Principal (idx 0 — bloque estático)
+    // Los suplentes/extras (idx ≥ 1) los maneja renderListaRL() con _rlExtraHTML().
+    const rlPrincipalMap = [
       ['rl_p_nom', 'NOM_REPR'], ['rl_p_ape', 'APE_REPR'], ['rl_p_tipdoc', 'TIP_DOCU'],
       ['rl_p_numdoc', 'NUM_DOCU'], ['rl_p_fec', 'FEC_EXPE'], ['rl_p_pais', 'COD_PAIS'],
       ['rl_p_dept', 'COD_DEPT'], ['rl_p_mpio', 'COD_MPIO'], ['rl_p_dir', 'DIR_REPR'],
       ['rl_p_cel', 'CEL_REPR'], ['rl_p_tel', 'TEL_REPR'], ['rl_p_mail', 'MAIL_REPR'],
-      ['rl_s_nom', 'NOM_REPR'], ['rl_s_ape', 'APE_REPR'], ['rl_s_tipdoc', 'TIP_DOCU'],
-      ['rl_s_numdoc', 'NUM_DOCU'], ['rl_s_fec', 'FEC_EXPE'], ['rl_s_pais', 'COD_PAIS'],
-      ['rl_s_dept', 'COD_DEPT'], ['rl_s_mpio', 'COD_MPIO'], ['rl_s_dir', 'DIR_REPR'],
-      ['rl_s_cel', 'CEL_REPR'], ['rl_s_tel', 'TEL_REPR'], ['rl_s_mail', 'MAIL_REPR'],
     ];
-    for (let index = 0; index < 2; index += 1) {
-      const rep = formData.representantes[index];
-      if (!rep) continue;
-      const prefix = index === 0 ? 'rl_p_' : 'rl_s_';
-      rlMap.filter(([id]) => id.startsWith(prefix)).forEach(([id, key]) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.value = rep[key] || '';
-      });
-      await _hydrateGeoCascade(prefix, rep);
+    {
+      const rep = formData.representantes[0];
+      if (rep) {
+        rlPrincipalMap.forEach(([id, key]) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.value = rep[key] || '';
+        });
+        await _hydrateGeoCascade('rl_p_', rep);
+      }
     }
 
     // Sección 3: Sociedad
@@ -617,16 +670,10 @@ async function hidratarFormularioVisual() {
       if (cumpRadio) cumpRadio.checked = true;
       if (formData.cumplimiento.TIE_JUNTA === 'S') {
         onTieneSistemaChange('S');
-        const selSist = document.getElementById('cump_sis_preve');
-        if (selSist) {
-          selSist.value = formData.cumplimiento.SIS_PREVE || '';
-          if (formData.cumplimiento.SIS_PREVE === 'OTRO') {
-            const fo = document.getElementById('field-cump_sis_preve_otro');
-            if (fo) fo.style.display = '';
-            const inp = document.getElementById('otr_preve');
-            if (inp) inp.value = formData.cumplimiento.OTR_PREVE || '';
-          }
-        }
+        // Checkboxes — re-renderizar con el estado cargado desde la BD
+        await cargarCheckboxesSisPrev();
+        const inp = document.getElementById('otr_preve');
+        if (inp) inp.value = formData.cumplimiento.OTR_PREVE || '';
       }
     }
 
@@ -701,7 +748,7 @@ async function _hydrateGeoCascade(prefix, item) {
   } else if (item.COD_PAIS === COD_COLOMBIA) {
     await cargarCatalogo(
       '/api/catalogo/departamentos', `${prefix}dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',
+      'COD_DEPT', 'NOM_DEPT', 'select_ph_dept',
       { cod_pais: item.COD_PAIS }
     );
     selDept.disabled = false;
@@ -721,7 +768,7 @@ async function _hydrateGeoCascade(prefix, item) {
 
   await cargarCatalogo(
     '/api/catalogo/ciudades', `${prefix}mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+    'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
     params
   );
   selMpio.disabled = false;

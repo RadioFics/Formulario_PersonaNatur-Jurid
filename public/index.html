@@ -5,7 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SAGRILAFT — Inicio</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <!-- i18n debe cargarse primero para que initLang() esté disponible -->
+  <script src="js/i18n.js"></script>
   <style>
+    /* ── Botón de idioma ─────────────────────────────────────────────── */
+    #lang-toggle-btn {
+      position: fixed;
+      top: 14px;
+      right: 18px;
+      z-index: 9999;
+      background: #fff;
+      border: 1.5px solid var(--color-accent, #00897b);
+      color: var(--color-accent, #00897b);
+      border-radius: 20px;
+      padding: 5px 16px;
+      font-size: .78rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: .03em;
+      transition: background .18s, color .18s;
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+    #lang-toggle-btn:hover {
+      background: var(--color-accent, #00897b);
+      color: #fff;
+    }
+
     .landing-wrapper {
       max-width: 700px;
       margin: 60px auto;
@@ -135,31 +160,34 @@
     .landing-footer { font-size: 0.78rem; color: #9e9e9e; text-align: center; }
   </style>
 </head>
-<body>
+<body onload="initLang()">
+
+<!-- Botón de idioma (fijo, visible en todo momento) -->
+<button id="lang-toggle-btn" onclick="toggleLang()" title="Switch to English">English</button>
 
 <div class="landing-wrapper">
 
   <div class="landing-header">
-    <h1>Registro - Persona Jurídica y Natural</h1>
-    <p>Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo</p>
+    <h1 data-i18n="idx_title">Registro — Persona Jurídica y Natural</h1>
+    <p data-i18n="idx_subtitle">Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo</p>
   </div>
 
   <!-- T&C -->
   <div class="terms-box">
     <div class="terms-policy-preview">
-      <p><strong>Política de tratamiento de datos personales:</strong> En cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015, la información recopilada mediante este formulario será utilizada exclusivamente para los procesos de vinculación y gestión de riesgos en el marco del Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SAGRILAFT).</p>
-      <p>Sus datos serán tratados con estricta confidencialidad y solo serán compartidos con autoridades competentes cuando así lo exija la normativa vigente. Como titular, usted tiene derecho a conocer, actualizar, rectificar y suprimir su información personal. Para ejercer estos derechos o presentar quejas, puede comunicarse directamente con el oficial de cumplimiento de la entidad.</p>
+      <p><strong data-i18n="idx_tc_title">Política de tratamiento de datos personales:</strong><span data-i18n="idx_tc_para1"> En cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015, la información recopilada mediante este formulario será utilizada exclusivamente para los procesos de vinculación y gestión de riesgos en el marco del Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SAGRILAFT).</span></p>
+      <p data-i18n="idx_tc_para2">Sus datos serán tratados con estricta confidencialidad y solo serán compartidos con autoridades competentes cuando así lo exija la normativa vigente. Como titular, usted tiene derecho a conocer, actualizar, rectificar y suprimir su información personal. Para ejercer estos derechos o presentar quejas, puede comunicarse directamente con el oficial de cumplimiento de la entidad.</p>
     </div>
     <label>
       <input type="checkbox" id="chk-terms" onchange="onTermsChange(this.checked)" />
       <span>
-        He leído y acepto la
-        <a href="#" onclick="abrirModalPolitica(event)">Política de tratamiento de datos personales</a>
-        y autorizo el uso de mis datos conforme a los términos indicados.
+        <span data-i18n="idx_terms_read">He leído y acepto la</span>
+        <a href="#" onclick="abrirModalPolitica(event)" data-i18n="idx_terms_policy_link">Política de tratamiento de datos personales</a>
+        <span data-i18n="idx_terms_authorize">y autorizo el uso de mis datos conforme a los términos indicados.</span>
       </span>
     </label>
     <div class="terms-badge" id="terms-badge">
-      ✅ Términos aceptados — puede continuar
+      <span data-i18n="idx_terms_badge">✅ Términos aceptados — puede continuar</span>
     </div>
   </div>
 
@@ -168,40 +196,40 @@
     <a class="landing-card locked" id="card-crear" href="formulario.html"
        onclick="return onCardClick(event, 'formulario.html')">
       <div class="landing-card-icon">📋</div>
-      <h2>Crear registro</h2>
-      <p>Diligencie el formulario completo para registrar una nueva persona natural o jurídica en el sistema.</p>
+      <h2 data-i18n="idx_card_create_title">Crear registro</h2>
+      <p data-i18n="idx_card_create_desc">Diligencie el formulario completo para registrar una nueva persona natural o jurídica en el sistema.</p>
       <button class="btn-landing btn-crear" type="button"
               onclick="event.stopPropagation(); onCardClick(event, 'formulario.html')">
-        Ir al formulario
+        <span data-i18n="idx_card_create_btn">Ir al formulario</span>
       </button>
     </a>
 
     <div class="landing-card locked" id="card-actualizar" onclick="onActualizarClick()">
       <div class="landing-card-icon">🔄</div>
-      <h2>Actualizar registro</h2>
-      <p>Busque un registro existente por número de documento para revisar o actualizar su información.</p>
+      <h2 data-i18n="idx_card_update_title">Actualizar registro</h2>
+      <p data-i18n="idx_card_update_desc">Busque un registro existente por número de documento para revisar o actualizar su información.</p>
       <button class="btn-landing btn-actualizar" type="button"
               onclick="event.stopPropagation(); onActualizarClick()">
-        Buscar registro
+        <span data-i18n="idx_card_update_btn">Buscar registro</span>
       </button>
     </div>
   </div>
 
   <!-- Consolidados -->
   <div class="consolidado-section">
-    <h3>📥 Descargar consolidado de registros</h3>
+    <h3 data-i18n="idx_consol_title">📥 Descargar consolidado de registros</h3>
     <div class="consolidado-btns">
       <button class="btn-consolidado" type="button" onclick="descargarConsolidado('natural')">
-        ⬇ Consolidado Persona Natural
+        <span data-i18n="idx_consol_nat_btn">⬇ Consolidado Persona Natural</span>
       </button>
       <button class="btn-consolidado btn-consolidado-sec" type="button" onclick="descargarConsolidado('juridica')">
-        ⬇ Consolidado Persona Jurídica
+        <span data-i18n="idx_consol_jur_btn">⬇ Consolidado Persona Jurídica</span>
       </button>
     </div>
   </div>
 
   <div class="landing-footer">
-    SAGRILAFT &mdash; Persona Natural y Jurídica &nbsp;|&nbsp; Solo para uso interno
+    <span data-i18n="idx_footer">SAGRILAFT &mdash; Persona Natural y Jurídica &nbsp;|&nbsp; Solo para uso interno</span>
   </div>
 
 </div>
@@ -210,7 +238,7 @@
 <div class="modal-overlay" id="modal-politica">
   <div class="modal-card">
     <div class="modal-card-header">
-      <h3>Política de tratamiento de datos</h3>
+      <h3 data-i18n="idx_modal_pol_title">Política de tratamiento de datos</h3>
       <button class="modal-close-btn" onclick="cerrarModalPolitica()" title="Cerrar">✕</button>
     </div>
     <div class="modal-policy-body">
@@ -219,8 +247,12 @@
       <p><strong>Para que lo tomes en cuenta =P.</strong></p>
     </div>
     <div class="modal-actions">
-      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalPolitica()">Cerrar</button>
-      <button class="btn-sm btn-sm-primary" onclick="aceptarDesdeModal()">Acepto la política</button>
+      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalPolitica()">
+        <span data-i18n="idx_modal_pol_close">Cerrar</span>
+      </button>
+      <button class="btn-sm btn-sm-primary" onclick="aceptarDesdeModal()">
+        <span data-i18n="idx_modal_pol_accept">Acepto la política</span>
+      </button>
     </div>
   </div>
 </div>
@@ -229,21 +261,28 @@
 <div class="modal-overlay" id="modal-actualizar">
   <div class="modal-card">
     <div class="modal-card-header">
-      <h3>🔍 Buscar registro existente</h3>
+      <h3 data-i18n="idx_modal_upd_title">🔍 Buscar registro existente</h3>
       <button class="modal-close-btn" onclick="cerrarModalActualizar()" title="Cerrar">✕</button>
     </div>
-    <p>Ingrese el número de documento (cédula, NIT, etc.) del tercero que desea actualizar.</p>
+    <p data-i18n="idx_modal_upd_body">Ingrese el número de documento (cédula, NIT, etc.) del tercero que desea actualizar.</p>
     <div class="search-row">
       <input type="text" id="buscar-num-iden"
+             data-i18n-ph="idx_modal_upd_ph"
              placeholder="Ej: 900123456" inputmode="numeric" maxlength="20"
              oninput="this.value=this.value.replace(/\D/g,'')"
              onkeydown="if(event.key==='Enter') buscarTercero()" />
-      <button onclick="buscarTercero()">Buscar</button>
+      <button onclick="buscarTercero()">
+        <span data-i18n="idx_modal_upd_search">Buscar</span>
+      </button>
     </div>
     <div id="actualizar-resultado"></div>
     <div class="modal-actions">
-      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">Cancelar</button>
-      <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled onclick="irAActualizar()">Abrir registro</button>
+      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">
+        <span data-i18n="idx_modal_upd_cancel">Cancelar</span>
+      </button>
+      <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled onclick="irAActualizar()">
+        <span data-i18n="idx_modal_upd_open">Abrir registro</span>
+      </button>
     </div>
   </div>
 </div>

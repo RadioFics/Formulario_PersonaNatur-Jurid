@@ -42,7 +42,7 @@ function actualizarTituloJD(id) {
   const nom = [(m.NOM_MIEM || '').trim(), (m.APE_MIEM || '').trim()].filter(Boolean).join(' ');
   const rol = pos === 0 ? 'Principal' : 'Suplente';
   const el  = document.getElementById(`jd_titulo_${id}`);
-  if (el) el.textContent = `Miembro ${pos + 1} (${rol})${nom ? ' — ' + nom : ''}`;
+  if (el) el.innerHTML = `<span data-i18n="card_miembro">${typeof t==='function'?t('card_miembro'):'Miembro'}</span> ${pos + 1} (<span data-i18n="${pos===0?'role_principal':'role_suplente'}">${typeof t==='function'?(pos===0?t('role_principal'):t('role_suplente')):rol}</span>)${nom ? ' — ' + nom : ''}`;
 }
 function _jdRenumerarTodos() {
   formData.juntaDirectiva.miembros.forEach(m => actualizarTituloJD(m._id));
@@ -71,8 +71,8 @@ function onTieneJuntaChange(valor) {
   }
 }
 
-function _jdTdOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1','COD_TPDOC','NOM_TPDOC','— Seleccione —'); }
-function _jdPaOpts() { return getOpcionesHTML('/api/catalogo/paises','COD_PAIS','NOM_PAIS','— Seleccione —'); }
+function _jdTdOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1','COD_TPDOC','NOM_TPDOC','select_placeholder'); }
+function _jdPaOpts() { return getOpcionesHTML('/api/catalogo/paises','COD_PAIS','NOM_PAIS','select_placeholder'); }
 
 function _jdMiembroHTML(m) {
   const id  = m._id;
@@ -82,34 +82,34 @@ function _jdMiembroHTML(m) {
   const pa  = _jdPaOpts();
   return `
     <div class="grupo-header" onclick="toggleGrupoJD(${id})">
-      <span class="grupo-titulo" id="jd_titulo_${id}">Miembro ${pos + 1} (${rol})</span>
+      <span class="grupo-titulo" id="jd_titulo_${id}"><span data-i18n="card_miembro">${typeof t==='function'?t('card_miembro'):'Miembro'}</span> ${pos + 1} (<span data-i18n="${pos===0?'role_principal':'role_suplente'}">${typeof t==='function'?(pos===0?t('role_principal'):t('role_suplente')):rol}</span>)</span>
       <button class="btn-eliminar-grupo" type="button" onclick="eliminarJD(event,${id})" title="Eliminar">✕</button>
     </div>
     <div class="grupo-body" id="jd_body_${id}">
       <div class="grid-4">
         <div class="field" style="grid-column: span 2" id="field-jd_${id}_tipmiem">
-          <label>Tipo de miembro <span class="req">*</span></label>
+          <label><span data-i18n="field_tip_miembro">${typeof t==='function'?t('field_tip_miembro'):'Tipo de miembro'}</span> <span class="req">*</span></label>
           <input type="text" id="jd_${id}_tipmiem" maxlength="100"
-                 placeholder="Ej: Titular, Suplente de consejo…"
+                 data-i18n-ph="field_tip_miembro_ph" placeholder="${typeof t==='function'?t('field_tip_miembro_ph'):'Ej: Titular, Suplente de consejo…'}"
                  oninput="actualizarJDMiem(${id},'TIP_MIEM',this.value);limpiarError('field-jd_${id}_tipmiem')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_nom">
-          <label>Nombres <span class="req">*</span></label>
+          <label><span data-i18n="field_nombres">${typeof t==='function'?t('field_nombres'):'Nombres'}</span> <span class="req">*</span></label>
           <input type="text" id="jd_${id}_nom" maxlength="100"
                  oninput="actualizarJDMiem(${id},'NOM_MIEM',this.value);actualizarTituloJD(${id});limpiarError('field-jd_${id}_nom')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_ape">
-          <label>Apellidos <span class="req">*</span></label>
+          <label><span data-i18n="field_apellidos">${typeof t==='function'?t('field_apellidos'):'Apellidos'}</span> <span class="req">*</span></label>
           <input type="text" id="jd_${id}_ape" maxlength="100"
                  oninput="actualizarJDMiem(${id},'APE_MIEM',this.value);limpiarError('field-jd_${id}_ape')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
       <div class="grid-3">
         <div class="field" id="field-jd_${id}_tipdoc">
-          <label>Tipo de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_tip_doc">${typeof t==='function'?t('field_tip_doc'):'Tipo de documento'}</span> <span class="req">*</span></label>
           <select id="jd_${id}_tipdoc"
                   onchange="onJDTipdocChange(${id},this.value);actualizarJDMiem(${id},'TIP_DOCU',this.value);limpiarError('field-jd_${id}_tipdoc')">
             ${td}
@@ -117,74 +117,74 @@ function _jdMiembroHTML(m) {
           <input type="text" id="jd_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
                  placeholder="Especifique el tipo de documento"
                  oninput="actualizarJDMiem(${id},'OTR_TPDOC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_numdoc">
-          <label>Número de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_num_doc">${typeof t==='function'?t('field_num_doc'):'Número de documento'}</span> <span class="req">*</span></label>
           <input type="text" id="jd_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\D/g,'');actualizarJDMiem(${id},'NUM_DOCU',this.value);limpiarError('field-jd_${id}_numdoc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_fec">
-          <label>Fecha de expedición <span class="req">*</span></label>
+          <label><span data-i18n="field_fec_expe">${typeof t==='function'?t('field_fec_expe'):'Fecha de expedición'}</span> <span class="req">*</span></label>
           <input type="date" id="jd_${id}_fec"
                  onchange="actualizarJDMiem(${id},'FEC_EXPE',this.value);limpiarError('field-jd_${id}_fec')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
       <div class="grid-4">
         <div class="field" id="field-jd_${id}_pais">
-          <label>País <span class="req">*</span></label>
+          <label><span data-i18n="field_pais">${typeof t==='function'?t('field_pais'):'País'}</span> <span class="req">*</span></label>
           <select id="jd_${id}_pais"
                   onchange="onJDPaisChange(${id},this.value);limpiarError('field-jd_${id}_pais')">
             ${pa}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_pais_otro" style="display:none">
-          <label>Especifique el país <span class="req">*</span></label>
+          <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
           <input type="text" id="jd_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
                  oninput="actualizarJDMiem(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-jd_${id}_dept">
-          <label>Departamento <span class="req">*</span></label>
+          <label><span data-i18n="field_dept">${typeof t==='function'?t('field_dept'):'Departamento'}</span> <span class="req">*</span></label>
           <select id="jd_${id}_dept" disabled
                   onchange="onJDDeptChange(${id},this.value);limpiarError('field-jd_${id}_dept')">
-            <option value="">— Seleccione país primero —</option>
+            <option value="" data-i18n="select_first_country">${typeof t==='function'?t('select_first_country'):'— Seleccione país primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_mpio">
-          <label>Ciudad <span class="req">*</span></label>
+          <label><span data-i18n="field_ciudad">${typeof t==='function'?t('field_ciudad'):'Ciudad'}</span> <span class="req">*</span></label>
           <select id="jd_${id}_mpio" disabled
                   onchange="actualizarJDMiem(${id},'COD_MPIO',this.value);limpiarError('field-jd_${id}_mpio')">
-            <option value="">— Seleccione departamento primero —</option>
+            <option value="" data-i18n="select_first_dept">${typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Dirección domicilio</label>
+          <label><span data-i18n="field_dir">${typeof t==='function'?t('field_dir'):'Dirección domicilio'}</span></label>
           <input type="text" id="jd_${id}_dir" maxlength="255"
                  oninput="actualizarJDMiem(${id},'DIR_MIEM',this.value)" />
         </div>
       </div>
       <div class="grid-3">
         <div class="field" id="field-jd_${id}_cel">
-          <label>Celular <span class="req">*</span></label>
+          <label><span data-i18n="field_celular">${typeof t==='function'?t('field_celular'):'Celular'}</span> <span class="req">*</span></label>
           <input type="tel" id="jd_${id}_cel" maxlength="20"
                  oninput="actualizarJDMiem(${id},'CEL_MIEM',this.value);limpiarError('field-jd_${id}_cel')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Teléfono fijo</label>
+          <label><span data-i18n="field_tel">${typeof t==='function'?t('field_tel'):'Teléfono fijo'}</span></label>
           <input type="tel" id="jd_${id}_tel" maxlength="20"
                  oninput="actualizarJDMiem(${id},'TEL_MIEM',this.value)" />
         </div>
         <div class="field" id="field-jd_${id}_mail">
-          <label>Correo electrónico <span class="req">*</span></label>
+          <label><span data-i18n="field_mail">${typeof t==='function'?t('field_mail'):'Correo electrónico'}</span> <span class="req">*</span></label>
           <input type="email" id="jd_${id}_mail" maxlength="100"
                  oninput="actualizarJDMiem(${id},'MAIL_MIEM',this.value);limpiarError('field-jd_${id}_mail')" />
-          <span class="error-msg">Email inválido o vacío</span>
+          <span class="error-msg" data-i18n="invalid_email">${typeof t==='function'?t('invalid_email'):'Email inválido o vacío'}</span>
         </div>
       </div>
     </div>`;
@@ -324,11 +324,11 @@ async function onJDPaisChange(id, codPais) {
   m.COD_MPIO = null;
   const selDept = document.getElementById(`jd_${id}_dept`);
   const selMpio = document.getElementById(`jd_${id}_mpio`);
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
   limpiarError(`field-jd_${id}_dept`);
   limpiarError(`field-jd_${id}_mpio`);
-  if (!codPais) { selDept.innerHTML = '<option value="">— Seleccione país primero —</option>'; selDept.disabled = true; return; }
+  if (!codPais) { selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>'; selDept.disabled = true; return; }
 
   if (String(codPais) === 'OTRO' || String(codPais) === '52') {
     const fieldOtroJD = document.getElementById(`field-jd_${id}_pais_otro`);
@@ -348,13 +348,13 @@ async function onJDPaisChange(id, codPais) {
 
   if (String(codPais) === COD_COLOMBIA) {
     selDept.disabled = false;
-    await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_dept`, 'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais });
+    await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_dept`, 'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
     selDept.innerHTML = '<option value="NA">No aplica</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     m.COD_DEPT = 'NA';
     selMpio.disabled = false;
-    await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais });
+    await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
     selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
   }
 }
@@ -369,7 +369,7 @@ async function onJDDeptChange(id, codDept) {
   selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
-  await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_dept: codDept, cod_pais: codPais });
+  await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_dept: codDept, cod_pais: codPais });
   selMpio.disabled = false;
   selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
 }

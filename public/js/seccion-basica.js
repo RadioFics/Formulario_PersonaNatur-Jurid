@@ -45,11 +45,11 @@ async function onPaisChange(codPais) {
   const selDept = document.getElementById('cod_dept_exp');
   const selMpio = document.getElementById('cod_mpio_exp');
 
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
 
   if (!codPais) {
-    selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
+    selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>';
     selDept.disabled  = true;
     return;
   }
@@ -58,7 +58,7 @@ async function onPaisChange(codPais) {
     selDept.disabled = false;
     await cargarCatalogo(
       '/api/catalogo/departamentos', 'cod_dept_exp',
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —',
+      'COD_DEPT', 'NOM_DEPT', 'select_ph_dept',
       { cod_pais: codPais }
     );
   } else {
@@ -72,7 +72,7 @@ async function onPaisChange(codPais) {
     selMpio.disabled = false;
     await cargarCatalogo(
       '/api/catalogo/ciudades', 'cod_mpio_exp',
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+      'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
       { cod_pais: codPais }
     );
     if (_autoNoAplicaCiudad(selMpio)) {
@@ -106,7 +106,7 @@ async function onDeptChange(codDept) {
 
   await cargarCatalogo(
     '/api/catalogo/ciudades', 'cod_mpio_exp',
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+    'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
     { cod_dept: codDept, cod_pais: codPais }
   );
   selMpio.disabled = false;
@@ -202,9 +202,9 @@ function limpiarSeccionBasica() {
 
   const selDept = document.getElementById('cod_dept_exp');
   const selMpio = document.getElementById('cod_mpio_exp');
-  selDept.innerHTML = '<option value="">— Seleccione país primero —</option>';
+  selDept.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>';
   selDept.disabled  = true;
-  selMpio.innerHTML = '<option value="">— Seleccione departamento primero —</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
 
   body.querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));

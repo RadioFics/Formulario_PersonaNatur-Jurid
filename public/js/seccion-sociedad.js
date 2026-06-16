@@ -53,7 +53,7 @@ function onUbicacionChange(ubic) {
   } else {
     // Nacional / SC: restaurar soc_pais completo (con Colombia) si fue removida
     if (selPais && !selPais.querySelector(`option[value="${COD_COLOMBIA}"]`)) {
-      selPais.innerHTML = getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione país —');
+      selPais.innerHTML = getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_ph_pais');
       agregarOpcionOtroAlSelect(selPais);
     }
     fieldPais.style.display = 'none';

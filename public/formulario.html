@@ -5,6 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Formulario SAGRILAFT</title>
   <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    /* ── Botón de idioma ─────────────────────────────────────────────── */
+    #lang-toggle-btn {
+      position: fixed;
+      top: 14px;
+      right: 18px;
+      z-index: 9999;
+      background: #fff;
+      border: 1.5px solid var(--color-accent, #00897b);
+      color: var(--color-accent, #00897b);
+      border-radius: 20px;
+      padding: 5px 16px;
+      font-size: .78rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: .03em;
+      transition: background .18s, color .18s;
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+    #lang-toggle-btn:hover {
+      background: var(--color-accent, #00897b);
+      color: #fff;
+    }
+  </style>
   <script>
     /* Gate: redirigir al inicio si no se aceptaron los T&C */
     (function() {
@@ -13,8 +37,13 @@
       }
     })();
   </script>
+  <!-- i18n debe cargarse antes que app.js -->
+  <script src="js/i18n.js"></script>
 </head>
 <body>
+
+<!-- Botón de idioma (fijo, visible en todo momento) -->
+<button id="lang-toggle-btn" onclick="toggleLang()" title="Switch to English">English</button>
 
 <!-- Spinner de carga global -->
 <div class="loading-overlay" id="loadingOverlay">
@@ -28,10 +57,10 @@
 <!--  Encabezado de página                                                  -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <header class="page-header">
-  <h1 id="page-title">Registro SAGRILAFT — Persona Jurídica</h1>
-  <p>Complete todos los campos obligatorios marcados con
+  <h1 id="page-title" data-i18n="page_title_juridica">Registro SAGRILAFT — Persona Jurídica</h1>
+  <p><span data-i18n="page_subtitle">Complete todos los campos obligatorios marcados con</span>
      <span style="color:#c62828">*</span>.
-     Los datos se guardarán al finalizar el formulario completo.</p>
+     <span data-i18n="page_subtitle2">Los datos se guardarán al finalizar el formulario completo.</span></p>
 </header>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -45,7 +74,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-basica')">
       <span class="accordion-title">
         <span class="section-num">1</span>
-        <span id="section1-label">Información básica de la empresa</span>
+        <span id="section1-label" data-i18n="sec1_title">Información básica de la empresa</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -56,33 +85,33 @@
       <div class="grid-4-1">
 
         <div class="field">
-          <label>Tipo de persona</label>
+          <label><span data-i18n="sec1_tip_terc">Tipo de persona</span></label>
           <select id="tip_terc" onchange="onTipTercChange(this.value)">
-            <option value="J" selected>Persona jurídica</option>
-            <option value="N">Persona natural</option>
+            <option value="J" selected data-i18n="sec1_juridica">Persona jurídica</option>
+            <option value="N" data-i18n="sec1_natural">Persona natural</option>
           </select>
         </div>
 
         <div class="field" id="field-cod_vinc">
-          <label for="cod_vinc">Tipo de vinculación <span class="req">*</span></label>
+          <label for="cod_vinc"><span data-i18n="sec1_cod_vinc">Tipo de vinculación</span> <span class="req">*</span></label>
           <select id="cod_vinc"
                   onchange="actualizarFormData('basica','COD_VINC',this.value); limpiarError('field-cod_vinc')">
             <option value="">— Seleccione —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-cod_tpdoc">
-          <label for="cod_tpdoc">Tipo de documento <span class="req">*</span></label>
+          <label for="cod_tpdoc"><span data-i18n="sec1_cod_tpdoc">Tipo de documento</span> <span class="req">*</span></label>
           <select id="cod_tpdoc"
                   onchange="actualizarFormData('basica','COD_TPDOC',this.value); limpiarError('field-cod_tpdoc')">
             <option value="">— Seleccione —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-num_iden">
-          <label for="num_iden">Número de documento <span class="req">*</span></label>
+          <label for="num_iden"><span data-i18n="sec1_num_iden">Número de documento</span> <span class="req">*</span></label>
           <input type="text" id="num_iden" maxlength="20"
                  placeholder="Ej: 900123456"
                  inputmode="numeric" pattern="[0-9]*"
@@ -90,7 +119,7 @@
                           actualizarFormData('basica','NUM_IDEN',this.value);
                           limpiarError('field-num_iden')"
                  onblur="verificarDuplicado(this.value)" />
-          <span class="error-msg">Campo requerido y solo numérico</span>
+          <span class="error-msg"><span data-i18n="required_field_num">Campo requerido y solo numérico</span></span>
         </div>
 
         <!-- Dígito de verificación — columna propia (solo Jurídica) -->
@@ -98,8 +127,9 @@
           <label for="dig_veri" style="font-size:.72rem;font-weight:600;color:#424242;
                  text-transform:uppercase;letter-spacing:.02em;
                  display:flex;align-items:center;gap:3px;white-space:nowrap">
-            Díg. verif.
+            <span data-i18n="sec1_dig_veri">Díg. verif.</span>
             <span class="ic-info"
+                  data-i18n-tip="sec1_dig_veri_tip"
                   data-tip="Número después del guión en el NIT. Ej: en 900.123.456-7, el dígito es 7. Puede calcularlo con la fórmula DIAN o dejarlo en 0.">i</span>
           </label>
           <input type="text" id="dig_veri" maxlength="1"
@@ -115,148 +145,148 @@
       <!-- Fila 1.3 — Otro tipo de vinculación (sibling row, sin animación) -->
       <div class="grid-4" id="row-vinc-otro" style="display:none">
         <div class="field" id="field-cod_vinc_otro" style="grid-column: span 2">
-          <label>Especifique el tipo de vinculación <span class="req">*</span></label>
+          <label><span data-i18n="sec1_otr_vinc">Especifique el tipo de vinculación</span> <span class="req">*</span></label>
           <input type="text" id="otr_vinc" maxlength="255" placeholder="Describa el tipo de vinculación"
                  oninput="actualizarFormData('basica','OTR_VINC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
 
       <!-- Fila 1.5N — Fecha de expedición del documento (solo Natural) -->
       <div class="grid-4 solo-natural" style="display:none">
         <div class="field" id="field-fec_expe_n">
-          <label for="fec_expe_n">Fecha de expedición del documento <span class="req">*</span></label>
+          <label for="fec_expe_n"><span data-i18n="sec1_fec_expe">Fecha de expedición del documento</span> <span class="req">*</span></label>
           <input type="date" id="fec_expe_n"
                  oninput="actualizarNatur('FEC_EXPE',this.value); limpiarError('field-fec_expe_n')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
 
       <!-- Fila 2J — Razón social (solo Jurídica) -->
       <div class="grid-4 solo-juridica">
         <div class="field col-full" id="field-nom_comp">
-          <label for="nom_comp">Razón social <span class="req">*</span></label>
+          <label for="nom_comp"><span data-i18n="sec1_nom_comp">Razón social</span> <span class="req">*</span></label>
           <input type="text" id="nom_comp" maxlength="255"
-                 placeholder="Nombre completo o razón social de la empresa"
+                 data-i18n-ph="sec1_nom_comp_ph" placeholder="Nombre completo o razón social de la empresa"
                  oninput="actualizarFormData('basica','NOM_COMP',this.value); limpiarError('field-nom_comp')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
 
       <!-- Fila 2N — Nombres desglosados (solo Natural) -->
       <div class="grid-4 solo-natural" style="display:none">
         <div class="field" id="field-nom_terc_n">
-          <label for="nom_terc_n">Primer nombre <span class="req">*</span></label>
+          <label for="nom_terc_n"><span data-i18n="sec1_primer_nombre">Primer nombre</span> <span class="req">*</span></label>
           <input type="text" id="nom_terc_n" maxlength="40"
                  placeholder="Primer nombre"
                  oninput="actualizarNatur('NOM_TERC',this.value); limpiarError('field-nom_terc_n')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
         <div class="field">
-          <label for="seg_nomb_n">Segundo nombre</label>
+          <label for="seg_nomb_n"><span data-i18n="sec1_seg_nombre">Segundo nombre</span></label>
           <input type="text" id="seg_nomb_n" maxlength="40"
                  placeholder="Segundo nombre (opcional)"
                  oninput="actualizarNatur('SEG_NOMB',this.value)" />
         </div>
         <div class="field" id="field-ape_terc_n">
-          <label for="ape_terc_n">Primer apellido <span class="req">*</span></label>
+          <label for="ape_terc_n"><span data-i18n="sec1_primer_ape">Primer apellido</span> <span class="req">*</span></label>
           <input type="text" id="ape_terc_n" maxlength="40"
                  placeholder="Primer apellido"
                  oninput="actualizarNatur('APE_TERC',this.value); limpiarError('field-ape_terc_n')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
         <div class="field">
-          <label for="seg_apel_n">Segundo apellido</label>
+          <label for="seg_apel_n"><span data-i18n="sec1_seg_ape">Segundo apellido</span></label>
           <input type="text" id="seg_apel_n" maxlength="40"
                  placeholder="Segundo apellido (opcional)"
                  oninput="actualizarNatur('SEG_APEL',this.value)" />
         </div>
       </div>
 
-      <div class="section-divider" id="divider-geo">Lugar de domicilio principal</div>
+      <div class="section-divider" id="divider-geo" data-i18n="sec1_div_geo">Lugar de domicilio principal</div>
 
       <!-- Fila 3 — Cascada geográfica -->
       <div class="grid-4">
 
         <div class="field" id="field-cod_pais_exp">
-          <label for="cod_pais_exp">País <span class="req">*</span></label>
+          <label for="cod_pais_exp"><span data-i18n="sec1_pais">País</span> <span class="req">*</span></label>
           <select id="cod_pais_exp"
                   onchange="_handlePaisExpChange(this.value); limpiarError('field-cod_pais_exp')">
             <option value="">— Seleccione —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-pais_exp_otro" style="display:none">
-          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-          <input type="text" id="pais_exp_otro_txt" maxlength="100" placeholder="Nombre del pa&#xED;s"
+          <label><span data-i18n="field_specify_pais">Especifique el país</span> <span class="req">*</span></label>
+          <input type="text" id="pais_exp_otro_txt" maxlength="100" data-i18n-ph="country_name_ph" placeholder="Nombre del país"
                  oninput="actualizarFormData('basica','OTR_PAIS_EXP',this.value); actualizarNatur('OTR_PAIS_EXP',this.value)" />
         </div>
 
         <div class="field" id="field-cod_dept_exp">
-          <label for="cod_dept_exp">Departamento <span class="req">*</span></label>
+          <label for="cod_dept_exp"><span data-i18n="sec1_dept">Departamento</span> <span class="req">*</span></label>
           <select id="cod_dept_exp" disabled
                   onchange="onDeptChange(this.value); limpiarError('field-cod_dept_exp')">
-            <option value="">— Seleccione país primero —</option>
+            <option value="" data-i18n="select_first_country">— Seleccione país primero —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-cod_mpio_exp">
-          <label for="cod_mpio_exp">Ciudad <span class="req">*</span></label>
+          <label for="cod_mpio_exp"><span data-i18n="sec1_ciudad">Ciudad</span> <span class="req">*</span></label>
           <select id="cod_mpio_exp" disabled
                   onchange="actualizarFormData('basica','COD_MPIO_EXP',this.value); limpiarError('field-cod_mpio_exp')">
-            <option value="">— Seleccione departamento primero —</option>
+            <option value="" data-i18n="select_first_dept">— Seleccione departamento primero —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-dir_terc">
-          <label for="dir_terc"><span id="dir_terc_label">Dirección oficina principal (Registrada la sociedad)</span> <span class="req">*</span></label>
+          <label for="dir_terc"><span id="dir_terc_label" data-i18n="sec3_dir_oficina">Dirección oficina principal (Registrada la sociedad)</span> <span class="req">*</span></label>
           <input type="text" id="dir_terc" maxlength="255"
-                 placeholder="Ej: Cra 7 # 45-12 Of. 301"
+                 data-i18n-ph="sec3_dir_oficina_ph" placeholder="Ej: Cra 7 # 45-12 Of. 301"
                  oninput="actualizarFormData('basica','DIR_TERC',this.value); limpiarError('field-dir_terc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
 
-      <div class="section-divider">Datos de contacto</div>
+      <div class="section-divider" data-i18n="sec1_div_contact">Datos de contacto</div>
 
       <!-- Fila 4 — Teléfonos y correos -->
       <div class="grid-4">
 
         <div class="field">
-          <label for="tel_terc2">Teléfono fijo</label>
+          <label for="tel_terc2"><span data-i18n="sec1_tel">Teléfono fijo</span></label>
           <input type="tel" id="tel_terc2" maxlength="20"
                  placeholder="Ej: 6011234567"
                  oninput="actualizarFormData('basica','TEL_TERC2',this.value)" />
         </div>
 
         <div class="field" id="field-tel_terc">
-          <label for="tel_terc">Teléfono celular <span class="req">*</span></label>
+          <label for="tel_terc"><span data-i18n="sec1_cel">Teléfono celular</span> <span class="req">*</span></label>
           <input type="tel" id="tel_terc" maxlength="20"
                  placeholder="Ej: 3001234567"
                  oninput="actualizarFormData('basica','TEL_TERC',this.value); limpiarError('field-tel_terc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-dir_mail">
-          <label for="dir_mail">Email
-            <span class="ic-info" data-tip="Puede ser correo corporativo o personal.">i</span>
+          <label for="dir_mail"><span data-i18n="sec1_mail">Correo electrónico</span>
+            <span class="ic-info" data-i18n-tip="sec1_email_tip" data-tip="Puede ser correo corporativo o personal.">i</span>
             <span class="req">*</span></label>
           <input type="email" id="dir_mail" maxlength="100"
                  placeholder="contacto@empresa.com"
                  oninput="actualizarFormData('basica','DIR_MAIL',this.value); limpiarError('field-dir_mail')" />
-          <span class="error-msg">Email inválido o vacío</span>
+          <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
         </div>
 
         <!-- Jurídica: email SAGRILAFT va en GN_JURID -->
         <div class="field solo-juridica" id="field-mail_sarl">
-          <label for="mail_sarl">Email gestión SAGRILAFT <span class="req">*</span></label>
+          <label for="mail_sarl"><span data-i18n="sec1_mail_sarl">Email gestión SAGRILAFT</span> <span class="req">*</span></label>
           <input type="email" id="mail_sarl" maxlength="100"
                  placeholder="SAGRILAFT@empresa.com"
                  oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
-          <span class="error-msg">Email inválido o vacío</span>
+          <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
         </div>
       </div>
 
@@ -264,7 +294,7 @@
       <div class="grid-2 solo-juridica">
 
         <div class="field" id="field-cod_ciiu">
-          <label for="cod_ciiu">Actividad principal CIIU <span class="req">*</span></label>
+          <label for="cod_ciiu"><span data-i18n="sec1_ciiu">Actividad principal CIIU</span> <span class="req">*</span></label>
           <select id="cod_ciiu"
                   onchange="actualizarFormData('basica','COD_CIIU',this.value); limpiarError('field-cod_ciiu')">
             <option value="">— Seleccione actividad —</option>
@@ -277,11 +307,11 @@
           <label>Describa la actividad <span class="req">*</span></label>
           <input type="text" id="otr_ciiu" maxlength="255" placeholder="Describa la actividad econ&#xF3;mica"
                  oninput="actualizarFormData('basica','OTR_CIIU',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field">
-          <label for="url_web">P&#xE1;gina web</label>
+          <label for="url_web"><span data-i18n="sec1_url">Página web</span></label>
           <input type="url" id="url_web" maxlength="255"
                  placeholder="https://www.empresa.com"
                  oninput="actualizarFormData('basica','URL_WEB',this.value)" />
@@ -292,30 +322,30 @@
       <div class="grid-4 solo-natural" style="display:none">
 
         <div class="field" id="field-cod_nacio_n">
-          <label for="cod_nacio_n">Nacionalidad <span class="req">*</span></label>
+          <label for="cod_nacio_n"><span data-i18n="sec1_nacio">Nacionalidad</span> <span class="req">*</span></label>
           <select id="cod_nacio_n"
                   onchange="actualizarNatur('COD_NACIO',this.value); limpiarError('field-cod_nacio_n'); onNacioNChange(this.value)">
             <option value="">— Seleccione —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-cod_nacio_n_otro" style="display:none">
           <label>Especifique la nacionalidad <span class="req">*</span></label>
           <input type="text" id="nacio_n_otro_txt" maxlength="100" placeholder="Pa&#xED;s o nacionalidad"
                  oninput="actualizarNatur('OTR_NACIO',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field">
-          <label for="act_princ_n">Actividad económica principal</label>
+          <label for="act_princ_n"><span data-i18n="sec1_act_princ">Actividad económica principal</span></label>
           <input type="text" id="act_princ_n" maxlength="100"
                  placeholder="Descripción breve de la actividad"
                  oninput="actualizarNatur('ACT_PRINC',this.value)" />
         </div>
 
         <div class="field" id="field-cod_ciiu_n">
-          <label for="cod_ciiu_n">Actividad CIIU <span class="req">*</span></label>
+          <label for="cod_ciiu_n"><span data-i18n="sec1_ciiu">Actividad CIIU</span> <span class="req">*</span></label>
           <select id="cod_ciiu_n"
                   onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n'); onCiiuNChange(this.value)">
             <option value="">— Seleccione actividad —</option>
@@ -328,15 +358,15 @@
           <input type="text" id="ciiu_n_otro_txt" maxlength="255"
                  placeholder="Describa la actividad econ&#xF3;mica"
                  oninput="actualizarNatur('OTR_CIIU',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionBasica()">Limpiar sección</button>
+                onclick="limpiarSeccionBasica()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button" id="btn-continuar-basica"
-                onclick="validarYContinuar()">Continuar → Sección 2</button>
+                onclick="validarYContinuar()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 2</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -348,7 +378,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-rl')">
       <span class="accordion-title">
         <span class="section-num">2</span>
-        Información del representante legal
+        <span data-i18n="sec2_title">Información del representante legal</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -360,49 +390,49 @@
 
         <div class="rl-block-header">
           <span class="rl-badge principal">P</span>
-          Representante Legal Principal
+          <span data-i18n="sec14_rl_principal">Representante Legal Principal</span>
         </div>
 
         <!-- Fila 1 -->
         <div class="grid-4">
 
           <div class="field" id="field-rl_p_nom">
-            <label for="rl_p_nom">Nombres <span class="req">*</span></label>
+            <label for="rl_p_nom"><span data-i18n="sec2_nombres">Nombres</span> <span class="req">*</span></label>
             <input type="text" id="rl_p_nom" maxlength="100"
-                   placeholder="Nombres completos"
+                   data-i18n-ph="ph_nombres" placeholder="Nombres completos"
                    oninput="actualizarRL(0,'NOM_REPR',this.value); limpiarError('field-rl_p_nom')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_ape">
-            <label for="rl_p_ape">Apellidos <span class="req">*</span></label>
+            <label for="rl_p_ape"><span data-i18n="sec2_apellidos">Apellidos</span> <span class="req">*</span></label>
             <input type="text" id="rl_p_ape" maxlength="100"
-                   placeholder="Apellidos completos"
+                   data-i18n-ph="ph_apellidos" placeholder="Apellidos completos"
                    oninput="actualizarRL(0,'APE_REPR',this.value); limpiarError('field-rl_p_ape')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_tipdoc">
-            <label for="rl_p_tipdoc">Tipo de documento <span class="req">*</span></label>
+            <label for="rl_p_tipdoc"><span data-i18n="field_tip_doc">Tipo de documento</span> <span class="req">*</span></label>
             <select id="rl_p_tipdoc"
                     onchange="actualizarRL(0,'TIP_DOCU',this.value); limpiarError('field-rl_p_tipdoc')">
               <option value="">— Seleccione —</option>
             </select>
             <input type="text" id="rl_p_tipdoc_otro" class="otro-inp" maxlength="100"
-                   style="display:none" placeholder="Especifique el tipo de documento"
+                   style="display:none" data-i18n-ph="field_specify_doc" placeholder="Especifique el tipo de documento"
                    oninput="actualizarRL(0,'OTR_TPDOC',this.value)" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_numdoc">
-            <label for="rl_p_numdoc">Número de documento <span class="req">*</span></label>
+            <label for="rl_p_numdoc"><span data-i18n="field_num_doc">Número de documento</span> <span class="req">*</span></label>
             <input type="text" id="rl_p_numdoc" maxlength="20"
                    placeholder="Ej: 12345678"
                    inputmode="numeric" pattern="[0-9]*"
                    oninput="this.value=this.value.replace(/\D/g,'');
                             actualizarRL(0,'NUM_DOCU',this.value);
                             limpiarError('field-rl_p_numdoc')" />
-            <span class="error-msg">Campo requerido y solo numérico</span>
+            <span class="error-msg"><span data-i18n="required_field_num">Campo requerido y solo numérico</span></span>
           </div>
         </div>
 
@@ -410,43 +440,43 @@
         <div class="grid-4">
 
           <div class="field" id="field-rl_p_fec">
-            <label for="rl_p_fec">Fecha de expedición <span class="req">*</span></label>
+            <label for="rl_p_fec"><span data-i18n="field_fec_expe">Fecha de expedición</span> <span class="req">*</span></label>
             <input type="date" id="rl_p_fec"
                    onchange="actualizarRL(0,'FEC_EXPE',this.value); limpiarError('field-rl_p_fec')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_pais">
-            <label for="rl_p_pais">País <span class="req">*</span></label>
+            <label for="rl_p_pais"><span data-i18n="field_pais">País</span> <span class="req">*</span></label>
             <select id="rl_p_pais"
                     onchange="onRLPaisChange(this.value,'rl_p',0); limpiarError('field-rl_p_pais')">
               <option value="">— Seleccione —</option>
             </select>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_pais_otro" style="display:none">
-            <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-            <input type="text" id="rl_p_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+            <label><span data-i18n="field_specify_pais">Especifique el país</span> <span class="req">*</span></label>
+            <input type="text" id="rl_p_pais_otro" maxlength="100" data-i18n-ph="country_name_ph" placeholder="Nombre del país"
                    oninput="actualizarRL(0,'OTR_PAIS',this.value)" />
           </div>
 
           <div class="field" id="field-rl_p_dept">
-            <label for="rl_p_dept">Departamento <span class="req">*</span></label>
+            <label for="rl_p_dept"><span data-i18n="field_dept">Departamento</span> <span class="req">*</span></label>
             <select id="rl_p_dept" disabled
                     onchange="onRLDeptChange(this.value,'rl_p',0); limpiarError('field-rl_p_dept')">
-              <option value="">— Seleccione país primero —</option>
+              <option value="" data-i18n="select_first_country">— Seleccione país primero —</option>
             </select>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_mpio">
-            <label for="rl_p_mpio">Ciudad <span class="req">*</span></label>
+            <label for="rl_p_mpio"><span data-i18n="field_ciudad">Ciudad</span> <span class="req">*</span></label>
             <select id="rl_p_mpio" disabled
                     onchange="actualizarRL(0,'COD_MPIO',this.value); limpiarError('field-rl_p_mpio')">
-              <option value="">— Seleccione departamento primero —</option>
+              <option value="" data-i18n="select_first_dept">— Seleccione departamento primero —</option>
             </select>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
         </div>
 
@@ -454,34 +484,34 @@
         <div class="grid-4">
 
           <div class="field" id="field-rl_p_dir">
-            <label for="rl_p_dir">Direcci&#xF3;n domicilio <span class="req">*</span></label>
+            <label for="rl_p_dir"><span data-i18n="field_dir">Dirección domicilio</span> <span class="req">*</span></label>
             <input type="text" id="rl_p_dir" maxlength="255"
                    placeholder="Ej: Cra 7 # 45-12"
                    oninput="actualizarRL(0,'DIR_REPR',this.value); limpiarError('field-rl_p_dir')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-rl_p_cel">
-            <label for="rl_p_cel">Celular <span class="req">*</span></label>
+            <label for="rl_p_cel"><span data-i18n="sec2_celular">Celular</span> <span class="req">*</span></label>
             <input type="tel" id="rl_p_cel" maxlength="20"
                    placeholder="Ej: 3001234567"
                    oninput="actualizarRL(0,'CEL_REPR',this.value); limpiarError('field-rl_p_cel')" />
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field">
-            <label for="rl_p_tel">Teléfono fijo</label>
+            <label for="rl_p_tel"><span data-i18n="field_tel">Teléfono fijo</span></label>
             <input type="tel" id="rl_p_tel" maxlength="20"
                    placeholder="Ej: 6011234567"
                    oninput="actualizarRL(0,'TEL_REPR',this.value)" />
           </div>
 
           <div class="field" id="field-rl_p_mail">
-            <label for="rl_p_mail">Correo electrónico <span class="req">*</span></label>
+            <label for="rl_p_mail"><span data-i18n="field_mail">Correo electrónico</span> <span class="req">*</span></label>
             <input type="email" id="rl_p_mail" maxlength="100"
                    placeholder="correo@dominio.com"
                    oninput="actualizarRL(0,'MAIL_REPR',this.value); limpiarError('field-rl_p_mail')" />
-            <span class="error-msg">Email inválido o vacío</span>
+            <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
           </div>
         </div>
 
@@ -493,15 +523,15 @@
       <!-- Botón agregar representante adicional -->
       <div class="grupo-add-row" style="margin-top:12px">
         <button class="btn-agregar-grupo" type="button" onclick="agregarRLExtra()">
-          + Agregar representante adicional
+          <span data-i18n="sec2_add_rl">＋ Agregar representante legal</span>
         </button>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionRL()">Limpiar sección</button>
+                onclick="limpiarSeccionRL()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarRL()">Continuar → Sección 3</button>
+                onclick="validarYContinuarRL()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 3</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -513,7 +543,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-sociedad')">
       <span class="accordion-title">
         <span class="section-num">3</span>
-        Información de la sociedad
+        <span data-i18n="sec3_title">Información de la sociedad</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -524,55 +554,56 @@
       <div class="grid-4" id="soc-campos-grid">
 
         <div class="field" id="field-soc_ubic">
-          <label for="soc_ubic">Ubicación de la sociedad <span class="req">*</span></label>
+          <label for="soc_ubic"><span data-i18n="sec3_ubicacion">Ubicación de la sociedad</span> <span class="req">*</span></label>
           <select id="soc_ubic"
                   onchange="onUbicacionChange(this.value); limpiarError('field-soc_ubic')">
-            <option value="N" selected>Nacional</option>
-            <option value="SC">Sucursal en Colombia</option>
-            <option value="E">Extranjera</option>
+            <option value="N" selected data-i18n="sec3_opt_nacional">Nacional</option>
+            <option value="SC" data-i18n="sec3_opt_sucursal">Sucursal en Colombia</option>
+            <option value="E" data-i18n="sec3_opt_extranjera">Extranjera</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <!-- País — visible solo cuando Ubicación = Extranjera -->
         <div class="field" id="campo-soc_pais" style="display:none">
-          <label for="soc_pais">País <span class="req">*</span></label>
+          <label for="soc_pais"><span data-i18n="sec1_pais">País</span> <span class="req">*</span></label>
           <select id="soc_pais"
                   onchange="onSocPaisChange(this.value); limpiarError('campo-soc_pais')">
-            <option value="">— Seleccione país —</option>
+            <option value="" data-i18n="select_ph_pais">— Seleccione país —</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <!-- Especifique el país — visible solo cuando soc_pais = OTRO -->
         <div class="field" id="field-soc_pais_otro" style="display:none">
-          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-          <input type="text" id="soc_pais_otro_txt" maxlength="100" placeholder="Nombre del pa&#xED;s"
+          <label><span data-i18n="field_specify_pais">Especifique el país</span> <span class="req">*</span></label>
+          <input type="text" id="soc_pais_otro_txt" maxlength="100" data-i18n-ph="country_name_ph"
+                 placeholder="Nombre del país"
                  oninput="actualizarSociedad('OTR_PAIS_SOC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-soc_tip_empr">
-          <label for="soc_tip_empr">Tipo de empresa <span class="req">*</span></label>
+          <label for="soc_tip_empr"><span data-i18n="sec3_tipo_empr">Tipo de empresa</span> <span class="req">*</span></label>
           <select id="soc_tip_empr"
                   onchange="actualizarSociedad('TIP_EMPR',this.value); limpiarError('field-soc_tip_empr')">
-            <option value="">— Seleccione —</option>
-            <option value="PUBLICA">Pública</option>
-            <option value="PRIVADA">Privada</option>
-            <option value="MIXTA">Mixta</option>
+            <option value="" data-i18n="select_placeholder">— Seleccione —</option>
+            <option value="PUBLICA" data-i18n="sec3_opt_publica">Pública</option>
+            <option value="PRIVADA" data-i18n="sec3_opt_privada">Privada</option>
+            <option value="MIXTA" data-i18n="sec3_opt_mixta">Mixta</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field" id="field-soc_grup_empr" style="grid-column: span 2">
-          <label for="soc_grup_empr">¿Pertenece a grupo empresarial? <span class="req">*</span></label>
+          <label for="soc_grup_empr"><span data-i18n="sec3_grupo">¿Pertenece a grupo empresarial?</span> <span class="req">*</span></label>
           <select id="soc_grup_empr"
                   onchange="actualizarSociedad('GRUP_EMPR',this.value); onGrupEmprChange(this.value); limpiarError('field-soc_grup_empr')">
-            <option value="">— Seleccione —</option>
-            <option value="S">Sí</option>
-            <option value="N">No</option>
+            <option value="" data-i18n="select_placeholder">— Seleccione —</option>
+            <option value="S" data-i18n="yes">Sí</option>
+            <option value="N" data-i18n="no">No</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
       </div>
@@ -583,23 +614,18 @@
 
         <!-- Pregunta 1: ¿Situaciones declaradas en el CERL? -->
         <div class="field field-radio" id="field-soc_ctrl_decla">
-          <label>
-            La(s) situación(es) de control y/o grupo empresarial aplicable(s) a la sociedad
-            se encuentra(n) debidamente registrada(s) y declarada(s) en el Certificado de
-            Existencia y Representación Legal que se adjunta al presente formulario
-            <span class="req">*</span>
-          </label>
+          <label><span data-i18n="sec3_ctrl_decla">La(s) situación(es) de control y/o grupo empresarial aplicable(s) a la sociedad se encuentra(n) debidamente registrada(s) y declarada(s) en el Certificado de Existencia y Representación Legal que se adjunta al presente formulario</span> <span class="req">*</span></label>
           <div class="radio-group">
             <label class="radio-option">
               <input type="radio" name="soc_ctrl_decla" value="S"
-                     onchange="actualizarSociedad('CTRL_DECLA','S');onCtrlDeclaChange('S');limpiarError('field-soc_ctrl_decla')"> Sí
+                     onchange="actualizarSociedad('CTRL_DECLA','S');onCtrlDeclaChange('S');limpiarError('field-soc_ctrl_decla')"> <span data-i18n="yes">Sí</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="soc_ctrl_decla" value="N"
-                     onchange="actualizarSociedad('CTRL_DECLA','N');onCtrlDeclaChange('N');limpiarError('field-soc_ctrl_decla')"> No
+                     onchange="actualizarSociedad('CTRL_DECLA','N');onCtrlDeclaChange('N');limpiarError('field-soc_ctrl_decla')"> <span data-i18n="no">No</span>
             </label>
           </div>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <!-- Sub-acordeón: visible solo cuando CTRL_DECLA = 'N' -->
@@ -609,31 +635,30 @@
           <div class="grid-2">
             <div class="field" id="field-soc_cal_grupo">
               <label for="soc_cal_grupo">
-                Calidad de la sociedad/sucursal dentro del grupo empresarial o situación de control
+                <span data-i18n="sec3_cal_grupo_lbl">Calidad de la sociedad/sucursal dentro del grupo empresarial o situación de control</span>
                 <span class="req">*</span>
               </label>
               <select id="soc_cal_grupo"
                       onchange="actualizarSociedad('CAL_GRUPO',this.value); limpiarError('field-soc_cal_grupo')">
-                <option value="">— Seleccione —</option>
-                <option value="MATRIZ">Matriz / Controlante</option>
-                <option value="FILIAL">Filial</option>
-                <option value="SUBSIDIARIA">Subsidiaria</option>
+                <option value="" data-i18n="select_placeholder">— Seleccione —</option>
+                <option value="MATRIZ" data-i18n="sec3_opt_matriz">Matriz / Controlante</option>
+                <option value="FILIAL" data-i18n="sec3_opt_filial">Filial</option>
+                <option value="SUBSIDIARIA" data-i18n="sec3_opt_subsidiaria">Subsidiaria</option>
               </select>
-              <span class="error-msg">Campo requerido</span>
+              <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
             </div>
           </div>
 
           <div class="field col-full" id="field-soc_desc_grupo">
             <label for="soc_desc_grupo">
-              Describa la estructura del grupo empresarial, indicando las sociedades que lo
-              conforman, el rol de cada una (matriz, filial, subsidiaria o subordinada), el
-              país de constitución y la relación de control existente entre ellas
+              <span data-i18n="sec3_desc_grupo_lbl">Describa la estructura del grupo empresarial, indicando las sociedades que lo conforman y la posición de la sociedad/sucursal dentro de él</span>
               <span class="req">*</span>
             </label>
             <textarea id="soc_desc_grupo" rows="4" maxlength="2000"
+                      data-i18n-ph="sec3_desc_grupo_ph"
                       placeholder="Describa la estructura del grupo empresarial…"
                       oninput="actualizarSociedad('DESC_GRUPO',this.value); limpiarError('field-soc_desc_grupo')"></textarea>
-            <span class="error-msg">Campo requerido</span>
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
         </div><!-- /soc_ctrl_no_wrap -->
@@ -641,9 +666,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionSociedad()">Limpiar sección</button>
+                onclick="limpiarSeccionSociedad()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarSociedad()">Continuar → Sección 4</button>
+                onclick="validarYContinuarSociedad()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 4</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -655,32 +680,29 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-paises')">
       <span class="accordion-title">
         <span class="section-num">4</span>
-        Países de operación
+        <span data-i18n="sec4_title">Países de operación</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <p style="font-size:.82rem;color:#616161;margin-bottom:4px">
-        Indique todos los países en los que la empresa opera o tiene presencia comercial.
-        Cada entrada debe tener un país diferente.
-      </p>
+      <p style="font-size:.82rem;color:#616161;margin-bottom:4px" data-i18n="sec4_hint">Indique todos los países en los que la empresa opera o tiene presencia comercial. Cada entrada debe tener un país diferente.</p>
 
       <!-- Lista dinámica — renderizada y gestionada por seccion-paises.js -->
       <div id="lista-paises-container" class="paises-lista"></div>
 
       <div class="pais-actions">
         <button class="btn-agregar-pais" type="button" onclick="agregarPais()">
-          ＋ Agregar país
+          <span data-i18n="sec4_add_btn">＋ Agregar país</span>
         </button>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionPaises()">Limpiar sección</button>
+                onclick="limpiarSeccionPaises()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarPaises()">Continuar → Sección 5</button>
+                onclick="validarYContinuarPaises()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 5</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -692,7 +714,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-cumplimiento')">
       <span class="accordion-title">
         <span class="section-num">5</span>
-        Información del Sistema de cumplimiento
+        <span data-i18n="sec5_title">Información del Sistema de cumplimiento</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -702,19 +724,17 @@
       <!-- ── Pregunta puerta: ¿Sujeta a normatividad? ──────────────────────── -->
       <div class="field field-radio" id="field-cump_tie_norm">
         <label>
-          ¿La sociedad está sujeta a alguna normatividad que la obligue a implementar
-          algún control para la prevención o gestión de riesgos de LA/FT, Fraude,
-          Corrupción y/o Soborno?
+          <span data-i18n="sec5_tie_norm">¿La sociedad está sujeta a alguna normatividad que la obligue a implementar algún control para la prevención o gestión de riesgos de LA/FT, Fraude, Corrupción y/o Soborno?</span>
           <span class="req">*</span>
         </label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="cump_tie_norm" value="S"
-                   onchange="onTieNormChange('S')"> Sí
+                   onchange="onTieNormChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="cump_tie_norm" value="N" checked
-                   onchange="onTieNormChange('N')"> No
+                   onchange="onTieNormChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
       </div>
@@ -726,38 +746,37 @@
         <!-- ¿Cuál es o son las regulaciones? -->
         <div class="field col-full" id="field-cump_desc_norm">
           <label for="cump_desc_norm">
-            ¿Cuál es o son estas regulaciones o normas?
+            <span data-i18n="sec5_desc_norm">¿Cuál es o son estas regulaciones o normas?</span>
             <span class="req">*</span>
           </label>
           <textarea id="cump_desc_norm" rows="3"
                     placeholder="Describa la normatividad aplicable…"
+                    data-i18n-ph="sec5_desc_norm_ph"
                     oninput="actualizarCump('DESC_NORM',this.value); limpiarError('field-cump_desc_norm')"></textarea>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
         <div class="field col-full" id="field-cump_norm_laft">
-          <label for="cump_norm_laft">
-            Referencia específica de normatividad LA/FT
-            <span style="font-size:.7rem;font-weight:400;text-transform:none">
-              (ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)
-            </span>
+          <label for="cump_norm_laft"><span data-i18n="sec5_norm_laft">Referencia específica de normatividad LA/FT</span>
+            <span style="font-size:.7rem;font-weight:400;text-transform:none">(ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)</span>
           </label>
           <input type="text" id="cump_norm_laft" maxlength="255"
                  placeholder="Nombre o número de la norma LA/FT aplicable"
+                 data-i18n-ph="sec5_norm_laft_ph"
                  oninput="actualizarCump('NORM_LAFT',this.value)" />
         </div>
 
         <!-- ¿Tiene sistema implementado? -->
         <div class="field field-radio">
-          <label>¿Tiene sistema de prevención de riesgos implementado? <span class="req">*</span></label>
+          <label><span data-i18n="sec5_tie_sist">¿Tiene sistema de prevención de riesgos implementado?</span> <span class="req">*</span></label>
           <div class="radio-group">
             <label class="radio-option">
               <input type="radio" name="cump_tie_sist" value="S"
-                     onchange="onTieneSistemaChange('S')"> Sí
+                     onchange="onTieneSistemaChange('S')"> <span data-i18n="yes">Sí</span>
             </label>
             <label class="radio-option">
               <input type="radio" name="cump_tie_sist" value="N" checked
-                     onchange="onTieneSistemaChange('N')"> No
+                     onchange="onTieneSistemaChange('N')"> <span data-i18n="no">No</span>
             </label>
           </div>
         </div>
@@ -767,46 +786,33 @@
              style="display:none;opacity:0;max-height:0">
 
           <div class="grid-2">
-            <div class="field" id="field-cump_sis_preve">
-              <label for="cump_sis_preve">Tipo de sistema implementado <span class="req">*</span></label>
-              <select id="cump_sis_preve"
-                      onchange="actualizarCump('SIS_PREVE',this.value); onSistPreveChange(this.value); limpiarError('field-cump_sis_preve')">
-                <option value="">— Seleccione —</option>
-                <option value="PTEE">PTEE</option>
-                <option value="PTEP">PTEP</option>
-                <option value="SAGRILAFT">SAGRILAFT</option>
-                <option value="SARLAFT">SARLAFT</option>
-                <option value="SIPLA">SIPLA</option>
-                <option value="SIPLAFT">SIPLAFT</option>
-                <option value="NA">N/A</option>
-                <option value="OTRO">Otro</option>
-              </select>
-              <span class="error-msg">Campo requerido</span>
+            <div class="field col-full" id="field-cump_sis_preve">
+              <label><span data-i18n="sec5_tip_sist">Tipo de sistema implementado</span> <span class="req">*</span></label>
+              <!-- Checkboxes cargados dinámicamente desde /api/catalogo/sistemas-prevencion -->
+              <div id="cump_sis_preve_checks" class="checkbox-multi-inline"></div>
+              <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
             </div>
 
             <!-- Texto libre para "Otro" sistema -->
             <div class="field" id="field-cump_sis_preve_otro" style="display:none">
-              <label>Especifique el sistema de prevención <span class="req">*</span></label>
+              <label><span data-i18n="sec5_otr_preve">Especifique el sistema de prevención</span> <span class="req">*</span></label>
               <input type="text" id="otr_preve" maxlength="255"
                      placeholder="Describa el sistema implementado"
+                     data-i18n-ph="sec5_otr_preve_ph"
                      oninput="actualizarCump('OTR_PREVE',this.value)" />
-              <span class="error-msg">Campo requerido</span>
+              <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
             </div>
           </div>
 
-          <p class="cump-note">
-            Esta información solo es requerida para las personas jurídicas obligadas a tener un
-            sistema de prevención de riesgos de lavado de activos y financiación de terrorismo
-            o similar.
-          </p>
+          <p class="cump-note" data-i18n="sec5_note">Esta información solo es requerida para las personas jurídicas obligadas a tener un sistema de prevención de riesgos de lavado de activos y financiación de terrorismo o similar.</p>
 
-          <p class="cump-subtitle">Información del oficial de cumplimiento</p>
+          <p class="cump-subtitle" data-i18n="sec5_oficial_sub">Información del oficial de cumplimiento</p>
 
           <div id="cump-oficiales-list" class="grupo-lista"></div>
 
           <div class="pais-actions" style="margin-top:10px">
             <button class="btn-agregar-pais" type="button" onclick="agregarCump()">
-              ＋ Agregar oficial
+              <span data-i18n="sec5_add_oficial">＋ Agregar oficial</span>
             </button>
           </div>
 
@@ -815,9 +821,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionCumplimiento()">Limpiar sección</button>
+                onclick="limpiarSeccionCumplimiento()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarCumplimiento()">Continuar → Sección 6</button>
+                onclick="validarYContinuarCumplimiento()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 6</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -829,7 +835,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-jd')">
       <span class="accordion-title">
         <span class="section-num">6</span>
-        Junta directiva / Consejo de administración
+        <span data-i18n="sec6_title">Junta directiva / Consejo de administración</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -838,15 +844,15 @@
 
       <!-- Booleano de cabecera -->
       <div class="field field-radio">
-        <label>¿La empresa tiene junta directiva o consejo de administración? <span class="req">*</span></label>
+        <label><span data-i18n="sec6_tie_junta">¿La empresa tiene junta directiva o consejo de administración?</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="jd_tie_junta" value="S"
-                   onchange="onTieneJuntaChange('S')"> Sí
+                   onchange="onTieneJuntaChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="jd_tie_junta" value="N" checked
-                   onchange="onTieneJuntaChange('N')"> No
+                   onchange="onTieneJuntaChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
       </div>
@@ -859,7 +865,7 @@
 
         <div class="pais-actions">
           <button class="btn-agregar-pais" type="button" onclick="agregarJD()">
-            ＋ Agregar miembro
+            <span data-i18n="sec6_add_btn">＋ Agregar miembro</span>
           </button>
         </div>
 
@@ -867,9 +873,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionJD()">Limpiar sección</button>
+                onclick="limpiarSeccionJD()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarJD()">Continuar → Sección 7</button>
+                onclick="validarYContinuarJD()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 7</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -881,7 +887,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-rf')">
       <span class="accordion-title">
         <span class="section-num">7</span>
-        Revisores fiscales
+        <span data-i18n="sec7_title">Revisores fiscales</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -890,15 +896,15 @@
 
       <!-- Booleano de cabecera -->
       <div class="field field-radio">
-        <label>¿La empresa tiene revisor fiscal? <span class="req">*</span></label>
+        <label><span data-i18n="sec7_tie_revis">¿La empresa tiene revisor fiscal?</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="rf_tie_revis" value="S"
-                   onchange="onTieneRevisorChange('S')"> Sí
+                   onchange="onTieneRevisorChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="rf_tie_revis" value="N" checked
-                   onchange="onTieneRevisorChange('N')"> No
+                   onchange="onTieneRevisorChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
       </div>
@@ -911,7 +917,7 @@
 
         <div class="pais-actions">
           <button class="btn-agregar-pais" type="button" onclick="agregarRF()">
-            ＋ Agregar revisor
+            <span data-i18n="sec7_add_btn">＋ Agregar revisor</span>
           </button>
         </div>
 
@@ -919,9 +925,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionRF()">Limpiar sección</button>
+                onclick="limpiarSeccionRF()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarRF()">Continuar → Sección 8</button>
+                onclick="validarYContinuarRF()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 8</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -933,31 +939,29 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-ac')">
       <span class="accordion-title">
         <span class="section-num">8</span>
-        Composición accionaria
+        <span data-i18n="sec8_title">Composición accionaria</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <p style="font-size:.82rem;color:#616161;margin-bottom:4px">
-        Registre todos los accionistas o socios de la empresa con su porcentaje de participación.
-      </p>
+      <p style="font-size:.82rem;color:#616161;margin-bottom:4px" data-i18n="sec8_hint">Registre todos los accionistas o socios de la empresa con su porcentaje de participación.</p>
 
       <!-- Lista de accionistas — renderizada por seccion-ac.js -->
       <div id="ac-grupos-list" class="grupo-lista"></div>
 
       <div class="pais-actions">
         <button class="btn-agregar-pais" type="button" onclick="agregarAC()">
-          ＋ Agregar accionista
+          <span data-i18n="sec8_add_btn">＋ Agregar accionista</span>
         </button>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionAC()">Limpiar sección</button>
+                onclick="limpiarSeccionAC()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarAC()">Continuar &#x2192; Sección 9</button>
+                onclick="validarYContinuarAC()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar &#x2192; Sección 9</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -969,32 +973,28 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-bf')">
       <span class="accordion-title">
         <span class="section-num">9</span>
-        Beneficiarios Finales
+        <span data-i18n="sec9_title">Beneficiarios Finales</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <p class="section-hint">
-        Identifique las personas naturales que poseen o controlan,
-        directa o indirectamente, el 5&#xA0;% o m&#xE1;s de la participaci&#xF3;n o votaci&#xF3;n
-        de la empresa, o que por otros medios ejercen control sobre ella.
-      </p>
+      <p class="section-hint" data-i18n="sec9_hint">Identifique las personas naturales que poseen o controlan, directa o indirectamente, el 5 % o más de la participación o votación de la empresa, o que por otros medios ejercen control sobre ella.</p>
 
       <div id="bf-grupos-list"><!-- renderListaBF() popula esta lista --></div>
 
       <div class="pais-actions">
         <button class="btn-agregar-grupo" type="button" onclick="agregarBF()">
-          &#43; Agregar beneficiario
+          <span data-i18n="sec9_add_btn">＋ Agregar beneficiario</span>
         </button>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionBF()">Limpiar secci&#xF3;n</button>
+                onclick="limpiarSeccionBF()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBF()">Continuar &#x2192; Secci&#xF3;n&#xA0;10</button>
+                onclick="validarYContinuarBF()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 10</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1006,7 +1006,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-financiera')">
       <span class="accordion-title">
         <span class="section-num">10</span>
-        Información financiera
+        <span data-i18n="sec10_title">Información financiera</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1014,16 +1014,14 @@
     <div class="accordion-body">
 
       <p class="section-hint" style="background:#E5F5FA;border-left:3px solid var(--color-accent);padding:8px 12px;border-radius:4px;margin-bottom:4px">
-        <strong>Nota:</strong> Los valores de ingresos, egresos y demás campos financieros
-        corresponden a cifras <strong>mensuales</strong> en pesos colombianos (COP),
-        salvo los totales de activos, pasivos y patrimonio que son valores de balance.
+        <strong data-i18n="nota_lbl">Nota:</strong> <span data-i18n="sec10_note">Los valores de ingresos, egresos y demás campos financieros corresponden a cifras mensuales en pesos colombianos (COP), salvo los totales de activos, pasivos y patrimonio que son valores de balance.</span>
       </p>
 
       <!-- Fila 1 — Activos / Ingresos mensuales / Pasivos -->
       <div class="grid-3">
 
         <div class="field" id="field-act_total">
-          <label for="act_total">Total activos (COP) <span class="req">*</span></label>
+          <label for="act_total"><span data-i18n="sec10_act_total">Total activos (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="act_total" inputmode="decimal" placeholder="0,00"
@@ -1033,7 +1031,7 @@
         </div>
 
         <div class="field" id="field-ing_mens">
-          <label for="ing_mens">Ingresos mensuales (COP) <span class="req">*</span></label>
+          <label for="ing_mens"><span data-i18n="sec10_ing_mens">Ingresos mensuales (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="ing_mens" inputmode="decimal" placeholder="0,00"
@@ -1043,7 +1041,7 @@
         </div>
 
         <div class="field" id="field-pas_total">
-          <label for="pas_total">Total pasivos (COP) <span class="req">*</span></label>
+          <label for="pas_total"><span data-i18n="sec10_pas_total">Total pasivos (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="pas_total" inputmode="decimal" placeholder="0,00"
@@ -1058,7 +1056,7 @@
       <div class="grid-3">
 
         <div class="field" id="field-egr_mens">
-          <label for="egr_mens">Egresos mensuales (COP) <span class="req">*</span></label>
+          <label for="egr_mens"><span data-i18n="sec10_egr_mens">Egresos mensuales (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="egr_mens" inputmode="decimal" placeholder="0,00"
@@ -1068,20 +1066,18 @@
         </div>
 
         <div class="field" id="field-patrimonio">
-          <label for="patrimonio">Patrimonio (COP) <span class="req">*</span></label>
+          <label for="patrimonio"><span data-i18n="sec10_patrimonio">Patrimonio (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="patrimonio" inputmode="decimal" placeholder="0,00"
                    oninput="onPatrimonioInput(this)"
                    onblur="onMonedaBlur('PATRIMONIO', this)" />
           </div>
-          <span class="campo-auto-hint" id="patrimonio-hint">
-            Calculado automáticamente: Activos &minus; Pasivos
-          </span>
+          <span class="campo-auto-hint" id="patrimonio-hint" data-i18n="sec10_patrimonio_hint">Calculado automáticamente: Activos − Pasivos</span>
         </div>
 
         <div class="field" id="field-otr_ing">
-          <label for="otr_ing">Otros ingresos (COP)</label>
+          <label for="otr_ing"><span data-i18n="sec10_otr_ing">Otros ingresos (COP)</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="otr_ing" inputmode="decimal" placeholder="0,00"
@@ -1094,9 +1090,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionFinanciera()">Limpiar sección</button>
+                onclick="limpiarSeccionFinanciera()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarFinanciera()">Continuar &#x2192; Secci&#xF3;n 11</button>
+                onclick="validarYContinuarFinanciera()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 11</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1108,7 +1104,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-bancaria')">
       <span class="accordion-title">
         <span class="section-num">11</span>
-        Información bancaria
+        <span data-i18n="sec11_title">Información bancaria</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1121,15 +1117,15 @@
       <!-- Botón agregar cuenta — deshabilitado para Jurídica -->
       <div class="pais-actions solo-juridica" style="display:none">
         <button class="btn-agregar-pais" type="button" onclick="agregarBanco()">
-          &#65291; Agregar cuenta bancaria
+          <span data-i18n="sec11_add_btn">＋ Agregar cuenta bancaria</span>
         </button>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="renderListaBancaria()">Limpiar sección</button>
+                onclick="renderListaBancaria()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarBancaria()">Continuar &#x2192; Secci&#xF3;n 12</button>
+                onclick="validarYContinuarBancaria()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 12</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1141,8 +1137,9 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-pep')">
       <span class="accordion-title">
         <span class="section-num">12</span>
-        PEP &#x2014; Exposici&#xF3;n pol&#xED;tica
-        <span class="ic-info" data-tip="PEP (Persona Expuesta Políticamente): persona que ejerce o ha ejercido cargos o funciones públicas prominentes en el país o en el exterior, como jefes de Estado, políticos, funcionarios judiciales, militares de alto rango, directivos de empresas públicas, o que tiene vínculos cercanos con dichas personas (familiares directos, asociados).">i</span>
+        <span data-i18n="sec12_title">PEP — Exposición política</span>
+        <span class="ic-info" data-tip="PEP (Persona Expuesta Políticamente): persona que ejerce o ha ejercido cargos o funciones públicas prominentes en el país o en el exterior, como jefes de Estado, políticos, funcionarios judiciales, militares de alto rango, directivos de empresas públicas, o que tiene vínculos cercanos con dichas personas (familiares directos, asociados)."
+              data-i18n-tip="sec12_tip">i</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1151,43 +1148,43 @@
 
       <!-- MAN_RPUB -->
       <div class="field field-radio" id="field-pep_man_rpub">
-        <label>&#191;Ha manejado o maneja recursos p&#xFA;blicos? <span class="req">*</span></label>
+        <label><span data-i18n="sec12_man_rpub">¿Ha manejado o maneja recursos públicos?</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="pep_man_rpub" value="S"
                    onchange="actualizarPEP('MAN_RPUB', this.value)" />
-            S&#xED;
+            <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="pep_man_rpub" value="N"
                    onchange="actualizarPEP('MAN_RPUB', this.value)" />
-            No
+            <span data-i18n="no">No</span>
           </label>
         </div>
       </div>
 
       <!-- CAR_PUBL -->
       <div class="field field-radio" id="field-pep_car_publ">
-        <label>¿Ejerce o ha ejercido un cargo p&#xFA;blico en los &#xFA;ltimos dos a&#xF1;os? <span class="req">*</span></label>
+        <label><span data-i18n="sec12_car_publ">¿Ejerce o ha ejercido un cargo público en los últimos dos años?</span> <span class="req">*</span></label>
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="pep_car_publ" value="S"
                    onchange="actualizarPEP('CAR_PUBL', this.value)" />
-            S&#xED;
+            <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="pep_car_publ" value="N"
                    onchange="actualizarPEP('CAR_PUBL', this.value)" />
-            No
+            <span data-i18n="no">No</span>
           </label>
         </div>
       </div>
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionPEP()">Limpiar secci&#xF3;n</button>
+                onclick="limpiarSeccionPEP()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarPEP()">Continuar &#x2192; Secci&#xF3;n 13</button>
+                onclick="validarYContinuarPEP()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 13</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1199,8 +1196,9 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-va')">
       <span class="accordion-title">
         <span class="section-num">13</span>
-        Actividades con activos virtuales
-        <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado.">i</span>
+        <span data-i18n="sec13_title">Actividades con activos virtuales</span>
+        <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado."
+              data-i18n-tip="sec13_tip">i</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1212,37 +1210,37 @@
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_va_fiat"
                  onchange="actualizarActividad('ACT_VA_FIAT', this.checked ? 'S' : 'N')" />
-          Intercambio entre activos virtuales y monedas fiduciarias (fiat)
+          <span data-i18n="sec13_act_fiat">Intercambio entre activos virtuales y monedas fiduciarias</span>
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_va_va"
                  onchange="actualizarActividad('ACT_VA_VA', this.checked ? 'S' : 'N')" />
-          Intercambio entre una o m&#xE1;s formas de activos virtuales
+          <span data-i18n="sec13_act_va">Intercambio entre una o más formas de activos virtuales</span>
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_trans"
                  onchange="actualizarActividad('ACT_TRANS', this.checked ? 'S' : 'N')" />
-          Transferencia de activos virtuales
+          <span data-i18n="sec13_act_trans">Transferencia de activos virtuales</span>
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_custo"
                  onchange="actualizarActividad('ACT_CUSTO', this.checked ? 'S' : 'N')" />
-          Custodia y/o administraci&#xF3;n de activos virtuales o instrumentos que permitan su control
+          <span data-i18n="sec13_act_custo">Custodia y/o administración de activos virtuales</span>
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_serv_fin"
                  onchange="actualizarActividad('ACT_SERV_FIN', this.checked ? 'S' : 'N')" />
-          Participaci&#xF3;n y prestaci&#xF3;n de servicios financieros relacionados con la oferta de un emisor
+          <span data-i18n="sec13_act_serv_fin">Participación en servicios financieros relacionados con activos virtuales</span>
         </label>
 
         <label class="checkbox-opcion">
           <input type="checkbox" id="act_serv_vap"
                  onchange="actualizarActividad('ACT_SERV_VAP', this.checked ? 'S' : 'N')" />
-          Servicios de proveedores de activos virtuales (VASP)
+          <span data-i18n="sec13_act_serv_vap">Servicios de proveedores de activos virtuales (VASP)</span>
         </label>
 
       </div>
@@ -1253,8 +1251,7 @@
           <label class="checkbox-opcion">
             <input type="checkbox" id="cert_info"
                    onchange="actualizarActividad('CERT_INFO', this.checked ? 'S' : 'N')" />
-            Certifico que la informaci&#xF3;n suministrada en el presente formulario es veraz, completa
-            y corresponde a la realidad. Me comprometo a notificar cualquier cambio de manera oportuna.
+            <span data-i18n="sec13_cert_info">Certifico que la información suministrada en el presente formulario es veraz, completa y corresponde a la realidad. Me comprometo a notificar cualquier cambio de manera oportuna.</span>
           </label>
         </div>
         <span class="error-msg">Debe certificar la veracidad de la informaci&#xF3;n para enviar.</span>
@@ -1262,9 +1259,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionVA()">Limpiar secci&#xF3;n</button>
+                onclick="limpiarSeccionVA()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button" id="btn-continuar-va"
-                onclick="validarYContinuarVA()">Continuar &#x2192; Secci&#xF3;n 14</button>
+                onclick="validarYContinuarVA()"><span data-i18n="btn_continuar" class="btn-continuar-txt">Continuar → Sección 14</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1276,7 +1273,7 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-docs')">
       <span class="accordion-title">
         <span class="section-num">14</span>
-        Documentos Requeridos
+        <span data-i18n="sec14_title">Documentos Requeridos</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1284,78 +1281,75 @@
     <div class="accordion-body">
 
       <!-- ── 13: Documentos requeridos (GN_TERCE_DOC) ──────────────────────── -->
-      <div class="sub-seccion-titulo">Documentos Requeridos</div>
+      <div class="sub-seccion-titulo" data-i18n="sec14_heading">Documentos Requeridos</div>
 
-      <p class="section-hint">
-        Adjunte los documentos solicitados. Los archivos se enviarán al confirmar el formulario.
-        Formato aceptado: PDF (máx. 10&#xA0;MB por archivo).
-      </p>
+      <p class="section-hint" data-i18n="sec14_instruction">Adjunte los documentos solicitados. Los archivos se enviarán al confirmar el formulario. Formato aceptado: PDF (máx. 10 MB por archivo).</p>
 
       <div class="doc-lista">
 
         <!-- RUT — aplica a ambos modos -->
         <div class="doc-item">
           <div class="doc-label">
-            RUT &#x2014; Registro &#xDA;nico Tributario
+            <span data-i18n="sec14_rut">RUT — Registro Único Tributario</span>
             <span class="ic-info" data-tip="Registro Único Tributario actualizado. Puede descargarlo desde el portal de la DIAN (www.dian.gov.co) o solicitarlo en cualquier punto de atención.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('RUT',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_rut">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_rut"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
         <!-- Certificación bancaria — aplica a ambos modos -->
         <div class="doc-item">
           <div class="doc-label">
-            Certificaci&#xF3;n bancaria
+            <span data-i18n="sec14_cert_banc">Certificación bancaria</span>
             <span class="ic-info" data-tip="Documento oficial emitido por la entidad bancaria que confirma la existencia y titularidad de la cuenta. Debe estar firmado y sellado por el banco, con fecha de expedición no mayor a 30 días.">i</span>
-            <small>(vigencia menor a 30 d&#xED;as)</small>
+            <small data-i18n="sec14_vigencia">(vigencia menor a 30 días)</small>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_BANC',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_banc">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_banc"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
         <!-- Certificado de existencia — solo Jurídica -->
         <div class="doc-item solo-juridica">
           <div class="doc-label">
-            Certificado de existencia y representaci&#xF3;n
+            <span data-i18n="sec14_cert_exis">Certificado de existencia y representación</span>
             <span class="ic-info" data-tip="Emitido por la Cámara de Comercio del domicilio principal. Acredita la existencia legal de la empresa, objeto social, representante legal y fecha de constitución. Expedición no mayor a 30 días.">i</span>
-            <small>(m&#xE1;x. 30 d&#xED;as de expedici&#xF3;n)</small>
+            <small data-i18n="sec14_max30">(máx. 30 días de expedición)</small>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_EXIS',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_exis">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_exis"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
         <!-- Documento de identidad — Natural: único; Jurídica: uno por RL (dinámico) -->
         <div class="doc-item solo-natural" style="display:none">
           <div class="doc-label">
-            Copia del documento de identidad de la persona natural
+            <span data-i18n="sec14_doc_id_rl">Copia del documento de identidad de la persona natural</span>
             <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('DOC_ID_RL',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_doc_id_rl"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
         <!-- Jurídica: contenedor dinámico generado por renderDocRLFields() -->
@@ -1364,42 +1358,42 @@
         <!-- Declaración de renta — solo Natural -->
         <div class="doc-item solo-natural" style="display:none">
           <div class="doc-label">
-            Declaraci&#xF3;n de renta o juramentada
+            <span data-i18n="sec14_decl_renta">Declaración de renta o juramentada</span>
             <span class="ic-info" data-tip="Declaración de renta del último año fiscal o declaración juramentada de ingresos si no está obligado a declarar renta.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('EST_FIN',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_est_fin">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_est_fin"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
         <!-- Estados financieros Año 1 y Año 2 — solo Jurídica, fila combinada -->
         <div class="doc-item solo-juridica">
           <div class="doc-label">
-            Estados financieros
-            <small>(pen&#xFA;ltimo y &#xFA;ltimo a&#xF1;o fiscal)</small>
+            <span data-i18n="sec14_est_fin_1">Estados financieros</span>
+            <small data-i18n="sec14_penultimo">(penúltimo y último año fiscal)</small>
             <span class="ic-info" data-tip="Balance general y estado de resultados de los dos últimos años fiscales, firmados por el Representante Legal y el Contador o Revisor Fiscal.">i</span>
           </div>
           <div class="doc-multi-upload">
             <div class="doc-upload-wrap">
               <label class="btn-upload" tabindex="0">
-                A&#xF1;o 1
+                <span data-i18n="sec14_year1">Año 1</span>
                 <input type="file" accept=".pdf" style="display:none"
                        onchange="onArchivoSeleccionado('EST_FIN_1',this)" />
               </label>
-              <span class="doc-archivo-nombre" id="doc_ind_est_fin_1">Ning&#xFA;n archivo seleccionado</span>
+              <span class="doc-archivo-nombre" id="doc_ind_est_fin_1"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
             </div>
             <div class="doc-upload-wrap">
               <label class="btn-upload" tabindex="0">
-                A&#xF1;o 2
+                <span data-i18n="sec14_year2">Año 2</span>
                 <input type="file" accept=".pdf" style="display:none"
                        onchange="onArchivoSeleccionado('EST_FIN_2',this)" />
               </label>
-              <span class="doc-archivo-nombre" id="doc_ind_est_fin_2">Ning&#xFA;n archivo seleccionado</span>
+              <span class="doc-archivo-nombre" id="doc_ind_est_fin_2"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
             </div>
           </div>
         </div>
@@ -1407,23 +1401,23 @@
         <!-- Certificado accionario — solo Jurídica -->
         <div class="doc-item solo-juridica">
           <div class="doc-label">
-            Certificado de composici&#xF3;n accionaria
+            <span data-i18n="sec14_cert_acci">Certificado de composición accionaria</span>
             <span class="ic-info" data-tip="Documento que refleja la estructura de capital: nombre, identificación y porcentaje de participación de cada socio o accionista. Puede emitirlo el Revisor Fiscal, Contador o el Representante Legal bajo su responsabilidad.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CERT_ACCI',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cert_acci">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cert_acci"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
         <!-- Carta de aceptación / Carta de declaración — etiqueta diferente según modo -->
         <div class="doc-item">
           <div class="doc-label solo-juridica">
-            Carta de aceptaci&#xF3;n y autorizaci&#xF3;n del Representante Legal
+            <span data-i18n="sec14_cart_acep">Carta de aceptación y autorización del Representante Legal</span>
             <span class="ic-info" data-tip="Carta firmada por el Representante Legal en la que autoriza el tratamiento de los datos suministrados, acepta las políticas SAGRILAFT de la empresa y confirma la veracidad de la información diligenciada en este formulario.">i</span>
           </div>
           <div class="doc-label solo-natural" style="display:none">
@@ -1432,11 +1426,11 @@
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
-              Seleccionar archivo
+              <span data-i18n="sec14_select_file">Seleccionar archivo</span>
               <input type="file" accept=".pdf" style="display:none"
                      onchange="onArchivoSeleccionado('CART_ACEP',this)" />
             </label>
-            <span class="doc-archivo-nombre" id="doc_ind_cart_acep">Ning&#xFA;n archivo seleccionado</span>
+            <span class="doc-archivo-nombre" id="doc_ind_cart_acep"><span data-i18n="sec14_no_file">Ningún archivo seleccionado</span></span>
           </div>
         </div>
 
@@ -1444,9 +1438,9 @@
 
       <div class="form-actions">
         <button class="btn btn-secondary" type="button"
-                onclick="limpiarSeccionDocs()">Limpiar sección</button>
+                onclick="limpiarSeccionDocs()"><span data-i18n="btn_clear">Limpiar sección</span></button>
         <button class="btn btn-primary" type="button"
-                onclick="validarYContinuarDocs()">Finalizar secci&#xF3;n&#xA0;14</button>
+                onclick="validarYContinuarDocs()"><span data-i18n="sec14_btn_final">Finalizar sección 14</span></button>
       </div>
 
     </div><!-- /accordion-body -->
@@ -1467,7 +1461,7 @@
   <div class="btn-submit-wrap">
     <button class="btn-submit" id="btn-submit" type="button"
             onclick="onSubmitClick()">
-      Enviar formulario
+      <span data-i18n="btn_submit">Enviar formulario</span>
     </button>
   </div>
 </div>
@@ -1695,4 +1689,4 @@ async function verificarDuplicado(numIden) {
 </script>
 
 </body>
-</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           

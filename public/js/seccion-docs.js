@@ -41,7 +41,7 @@ window.addEventListener('beforeunload', (e) => {
 async function initSeccionDocs() {
   await cargarCatalogo(
     '/api/catalogo/tipos-documento?todos=1', 'firma_tipdoc',
-    'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'
+    'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'
   );
 
   // Hidratar campos de texto desde el estado (borrador)
@@ -80,10 +80,10 @@ function renderDocRLFields() {
     const clave     = `DOC_ID_RL_${idx}`;
     const nombreRL  = [rl.NOM_REPR, rl.APE_REPR].filter(Boolean).join(' ');
     const tituloRL  = nombreRL ||
-                      (idx === 0 ? 'Representante Legal Principal' : `Representante Legal Suplente ${idx}`);
+                      (idx === 0 ? (typeof t==='function'?t('sec14_rl_principal'):'Representante Legal Principal') : `${typeof t==='function'?t('sec14_rl_suplente'):'Representante Legal Suplente'} ${idx}`);
     const labelBase = idx === 0
-      ? 'Copia del documento de identidad del Representante Legal'
-      : `Copia del documento de identidad del Representante Legal ${idx + 1}`;
+      ? (typeof t==='function'?t('sec14_rl_label'):'Copia del documento de identidad del Representante Legal')
+      : `${typeof t==='function'?t('sec14_rl_label'):'Copia del documento de identidad del Representante Legal'} ${idx + 1}`;
 
     const item = document.createElement('div');
     item.className = 'doc-item';
@@ -91,15 +91,15 @@ function renderDocRLFields() {
       <div class="doc-label">
         ${labelBase}
         <small>${tituloRL}</small>
-        <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
+        <span class="ic-info" data-i18n-tip="sec14_rl_id_tip" data-tip="${typeof t==='function'?t('sec14_rl_id_tip'):'Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.'}">i</span>
       </div>
       <div class="doc-upload-wrap">
         <label class="btn-upload" tabindex="0">
-          Seleccionar archivo
+          ${typeof t==='function'?t('sec14_select_file'):'Seleccionar archivo'}
           <input type="file" accept=".pdf" style="display:none"
                  onchange="onArchivoSeleccionado('${clave}',this)" />
         </label>
-        <span class="doc-archivo-nombre" id="doc_ind_${clave.toLowerCase()}">Ningún archivo seleccionado</span>
+        <span class="doc-archivo-nombre" id="doc_ind_${clave.toLowerCase()}">${typeof t==='function'?t('sec14_no_file'):'Ningún archivo seleccionado'}</span>
       </div>`;
     container.appendChild(item);
 
@@ -134,7 +134,7 @@ function onArchivoSeleccionado(clave, input) {
   if (file) {
     const esPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!esPDF) {
-      mostrarToast('Solo se aceptan archivos PDF. Seleccione un archivo .pdf.', 'error');
+      mostrarToast(typeof t==='function'?t('toast_pdf_only'):'Solo se aceptan archivos PDF. Seleccione un archivo .pdf.', 'error');
       input.value = '';
       return;
     }
@@ -158,7 +158,7 @@ function _actualizarIndicadorArchivo(clave, nombre) {
     // Si estaba marcado como faltante, quitarlo al seleccionar archivo
     ind.classList.remove('doc-faltante');
   } else {
-    ind.textContent = 'Ningún archivo seleccionado';
+    ind.textContent = typeof t==='function'?t('sec14_no_file'):'Ningún archivo seleccionado';
     ind.className   = 'doc-archivo-nombre';
   }
 }
@@ -260,12 +260,12 @@ function validarSeccionDocs() {
 function validarYContinuarDocs() {
   if (!validarSeccionDocs()) {
     document.getElementById('accordion-docs').classList.remove('collapsed');
-    mostrarToast('Corrija los campos marcados en rojo.', 'error');
+    mostrarToast(typeof t==='function'?t('toast_check_fields'):'Corrija los campos marcados en rojo.', 'error');
     const primerError = document.querySelector('#accordion-docs .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  mostrarToast('Sección 14 completa. Ya puede enviar el formulario.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_ok'):'Sección 14 completa.', 'success');
   document.getElementById('accordion-docs').classList.add('collapsed');
   const btnSubmit = document.getElementById('btn-submit');
   if (btnSubmit) btnSubmit.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -288,11 +288,11 @@ function limpiarSeccionDocs() {
   document.querySelectorAll('#accordion-docs input[type="file"]')
     .forEach(inp => { inp.value = ''; });
   document.querySelectorAll('#accordion-docs .doc-archivo-nombre')
-    .forEach(ind => { ind.textContent = 'Ningún archivo seleccionado'; ind.className = 'doc-archivo-nombre'; });
+    .forEach(ind => { ind.textContent = typeof t==='function'?t('sec14_no_file'):'Ningún archivo seleccionado'; ind.className = 'doc-archivo-nombre'; });
 
   // Errores
   document.querySelector('#accordion-docs .accordion-body')
     .querySelectorAll('.field.error').forEach(f => f.classList.remove('error'));
 
-  mostrarToast('Sección limpiada.', 'success');
+  mostrarToast(typeof t==='function'?t('toast_sec_clear'):'Sección limpiada.', 'success');
 }

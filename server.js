@@ -469,7 +469,7 @@ app.get('/api/catalogo/tipos-documento', async (req, res) => {
   try {
     const soloNit = req.query.todos !== '1';
     const rows = await query(
-      `SELECT COD_TPDOC, NOM_TPDOC, COD_ABREV
+      `SELECT COD_TPDOC, NOM_TPDOC, COD_ABREV, NOM_EN
          FROM MAE_TPDOC
         ${soloNit ? 'WHERE COD_TPDOC = 8' : 'WHERE COD_TPDOC > 0'}
         ORDER BY NOM_TPDOC`
@@ -488,7 +488,7 @@ app.get('/api/catalogo/tipos-documento', async (req, res) => {
 app.get('/api/catalogo/paises', async (req, res) => {
   try {
     const rows = await query(
-      `SELECT COD_PAIS, NOM_PAIS, IND_PRINCI
+      `SELECT COD_PAIS, NOM_PAIS, IND_PRINCI, NOM_EN
          FROM MAE_PAIS
         WHERE COD_PAIS > 0
         ORDER BY CASE WHEN IND_PRINCI = 'S' THEN 0 ELSE 1 END, NOM_PAIS`
@@ -562,15 +562,21 @@ app.get('/api/catalogo/ciudades', async (req, res) => {
 
 /**
  * GET /api/catalogo/vinculaciones
+ * Lee MAE_VINC completo desde la BD (incluye NOM_EN tras migración db_bilinguismo.sql).
  */
-app.get('/api/catalogo/vinculaciones', (req, res) => {
-  res.json([
-    { COD_VINC: 3,  NOM_VINC: 'Cliente' },
-    { COD_VINC: 4,  NOM_VINC: 'Contratista/Proveedor' },
-    { COD_VINC: 10, NOM_VINC: 'Vinculación laboral' },
-    { COD_VINC: 11, NOM_VINC: 'Aliados institucionales y comunitarios' },
-    { COD_VINC: 9,  NOM_VINC: 'Otro' },
-  ]);
+app.get('/api/catalogo/vinculaciones', async (req, res) => {
+  try {
+    const rows = await query(
+      `SELECT COD_VINC, NOM_VINC, COD_ABREV, NOM_EN
+         FROM MAE_VINC
+        WHERE COD_VINC IN (3, 4, 9, 10, 11)
+        ORDER BY COD_VINC`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('vinculaciones:', err);
+    _responderError(res, err, req);
+  }
 });
 
 /**
@@ -603,10 +609,10 @@ app.get('/api/catalogo/tipos-sociedad', async (req, res) => {
   else if (ubicacion === 'E') where = "WHERE UBIC_SOCIE IN ('E','A')";
   try {
     const rows = await query(
-      `SELECT COD_SOCIE, NOM_SOCIE, UBIC_SOCIE
+      `SELECT COD_SOCIE, NOM_SOCIE, UBIC_SOCIE, NOM_EN
          FROM MAE_TIP_SOCIE
         ${where}
-        ORDER BY NOM_SOCIE`
+        ORDER BY COD_SOCIE`
     );
     res.json(rows);
   } catch (err) {
@@ -618,13 +624,14 @@ app.get('/api/catalogo/tipos-sociedad', async (req, res) => {
 /**
  * GET /api/catalogo/sistemas-prevencion
  * Devuelve los sistemas de prevención LA/FT registrados en MAE_SIST_PREV.
+ * NOM_EN disponible desde migración db_bilinguismo.sql.
  */
 app.get('/api/catalogo/sistemas-prevencion', async (req, res) => {
   try {
     const rows = await query(
-      `SELECT COD_SIST, NOM_SIST, COD_ABREV
+      `SELECT COD_SIST, NOM_SIST, COD_ABREV, NOM_EN
          FROM MAE_SIST_PREV
-        ORDER BY NOM_SIST`
+        ORDER BY COD_SIST`
     );
     res.json(rows);
   } catch (err) {
@@ -887,7 +894,7 @@ app.post('/api/cumplimiento', async (req, res) => {
     r0.input('NUM_IDEN',  sql.VarChar(20),       NUM_IDEN);
     r0.input('DESC_NORM', sql.VarChar(sql.MAX),  DESC_NORM || null);
     r0.input('TIE_JUNTA', sql.Char(1),            TIE_JUNTA || 'N');
-    r0.input('SIS_PREVE', sql.VarChar(10),        TIE_JUNTA === 'S' ? (SIS_PREVE || null) : null);
+    r0.input('SIS_PREVE', sql.VarChar(255),       TIE_JUNTA === 'S' ? (SIS_PREVE || null) : null);
 
     await r0.query(`
       INSERT INTO GN_JURID_CUMP (NUM_IDEN, DESC_NORM, TIE_JUNTA, SIS_PREVE)
@@ -1161,7 +1168,7 @@ app.get('/api/catalogo/bancos', async (req, res) => {
 app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
   try {
     const rows = await query(
-      `SELECT COD_TPCTA, NOM_TPCTA FROM MAE_TPCTA ORDER BY NOM_TPCTA`
+      `SELECT COD_TPCTA, NOM_TPCTA, NOM_EN FROM MAE_TPCTA ORDER BY COD_TPCTA`
     );
     res.json(rows);
   } catch (err) {

@@ -46,7 +46,7 @@ function actualizarTituloBF(id) {
   const pos = _bfPos(id) + 1;
   const nombre = [(b.NOM_BENE || '').trim(), (b.APE_BENE || '').trim()].filter(Boolean).join(' ').slice(0, 45);
   const el = document.getElementById(`bf_titulo_${id}`);
-  if (el) el.textContent = `Beneficiario ${pos}${nombre ? ' — ' + nombre : ''}`;
+  if (el) el.innerHTML = `<span data-i18n="card_beneficiario">${typeof t==='function'?t('card_beneficiario'):'Beneficiario'}</span> ${pos}${nombre ? ' — ' + nombre : ''}`;
 }
 function _bfRenumerarTodos() {
   formData.beneficiarios.forEach(b => actualizarTituloBF(b._id));
@@ -95,7 +95,7 @@ function _bfFiltrarTipoDoc(id, soloNit) {
   const endpoint = soloNit
     ? '/api/catalogo/tipos-documento'
     : '/api/catalogo/tipos-documento?todos=1';
-  const optsHtml = getOpcionesHTML(endpoint, 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —');
+  const optsHtml = getOpcionesHTML(endpoint, 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder');
   const current  = sel.value;
   sel.innerHTML  = optsHtml;
   if (current && sel.querySelector(`option[value="${current}"]`)) {
@@ -107,9 +107,9 @@ function _bfFiltrarTipoDoc(id, soloNit) {
 }
 
 /* ── Opciones desde caché ────────────────────────────────────────────────────── */
-function _bfTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
-function _bfTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', '— Seleccione —'); }
-function _bfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', '— Seleccione —'); }
+function _bfTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
+function _bfTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
+function _bfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_placeholder'); }
 
 /* ── Crear elemento DOM de un grupo ──────────────────────────────────────────── */
 function _crearGrupoBFEl(beneficiario) {
@@ -122,7 +122,7 @@ function _crearGrupoBFEl(beneficiario) {
   el.id        = `bf_grupo_${id}`;
   el.innerHTML = `
     <div class="grupo-header" onclick="toggleGrupoBF(${id})">
-      <span class="grupo-titulo" id="bf_titulo_${id}">Beneficiario ${_bfPos(id)+1}</span>
+      <span class="grupo-titulo" id="bf_titulo_${id}"><span data-i18n="card_beneficiario">${typeof t==='function'?t('card_beneficiario'):'Beneficiario'}</span> ${_bfPos(id)+1}</span>
       <button class="btn-eliminar-grupo" type="button"
               onclick="eliminarBF(event,${id})" title="Eliminar">&#x2715;</button>
     </div>
@@ -209,7 +209,7 @@ function _crearGrupoBFEl(beneficiario) {
           <label>Ciudad <span class="req">*</span></label>
           <select id="bf_${id}_mpio" disabled
                   onchange="actualizarBF(${id},'COD_MPIO',this.value);limpiarError('field-bf_${id}_mpio')">
-            <option value="">&#x2014; Seleccione departamento primero &#x2014;</option>
+            <option value="" data-i18n="select_first_dept">${typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —'}</option>
           </select>
           <span class="error-msg">Campo requerido</span>
         </div>
@@ -338,7 +338,7 @@ async function onBFPaisChange(id, codPais) {
   const fieldDept  = document.getElementById(`field-bf_${id}_dept`);
   const fieldMpio  = document.getElementById(`field-bf_${id}_mpio`);
 
-  selMpio.innerHTML = '<option value="">&#x2014; Seleccione departamento primero &#x2014;</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —') + '</option>';
   selMpio.disabled  = true;
   limpiarError(`field-bf_${id}_dept`);
   limpiarError(`field-bf_${id}_mpio`);
@@ -372,7 +372,7 @@ async function onBFPaisChange(id, codPais) {
     selDept.disabled = false;
     await cargarCatalogo(
       '/api/catalogo/departamentos', `bf_${id}_dept`,
-      'COD_DEPT', 'NOM_DEPT', '— Seleccione departamento —', { cod_pais: codPais }
+      'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais }
     );
   } else {
     selDept.innerHTML = '<option value="NA">No aplica</option>';
@@ -383,7 +383,7 @@ async function onBFPaisChange(id, codPais) {
     selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
     await cargarCatalogo(
       '/api/catalogo/ciudades', `bf_${id}_mpio`,
-      'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —', { cod_pais: codPais }
+      'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais }
     );
     if (_autoNoAplicaCiudad(selMpio)) {
       b.COD_MPIO = 'NA';
@@ -410,7 +410,7 @@ async function onBFDeptChange(id, codDept) {
 
   await cargarCatalogo(
     '/api/catalogo/ciudades', `bf_${id}_mpio`,
-    'COD_MUNI', 'NOM_MUNI', '— Seleccione ciudad —',
+    'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
     { cod_dept: codDept, cod_pais: codPais }
   );
   selMpio.disabled = false;
