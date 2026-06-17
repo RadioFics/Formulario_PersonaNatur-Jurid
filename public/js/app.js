@@ -280,6 +280,9 @@ async function recargarCatalogosIdioma() {
     { endpoint: '/api/catalogo/paises',                  id: 'cod_nacio_n',  val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
     // cump_sis_preve es checkboxes; se re-renderiza con cargarCheckboxesSisPrev() abajo.
     { endpoint: '/api/catalogo/tipos-cuenta',            id: 'cod_tpcta',    val: 'COD_TPCTA', txt: 'NOM_TPCTA', ph: 'select_placeholder' },
+    // cod_ciiu / cod_ciiu_n requieren NOM_EN en MAE_CIIU (ver db_scripts/ciiu_nom_en.sql)
+    { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu',     val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu_n',   val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
   ];
 
   for (const cfg of selects) {
@@ -313,6 +316,15 @@ async function recargarCatalogosIdioma() {
   if (typeof renderDocRLFields    === 'function') renderDocRLFields();
   // Re-renderizar lista de países de operación (Sección 4) con NOM_EN
   if (typeof renderListaPaises    === 'function') await renderListaPaises();
+  // Re-renderizar secciones dinámicas (fichas BF, AC, JD, RF, Bancaria, RL)
+  // para que sus selects internos (tipo doc, país, etc.) reflejen el idioma activo
+  if (typeof renderListaBF        === 'function') await renderListaBF();
+  if (typeof renderListaAC        === 'function') await renderListaAC();
+  if (typeof renderListaJD        === 'function') await renderListaJD();
+  if (typeof renderListaRF        === 'function') await renderListaRF();
+  if (typeof renderListaBancaria  === 'function') await renderListaBancaria();
+  if (typeof renderListaRL        === 'function') await renderListaRL();
+  if (typeof renderListaCump      === 'function') await renderListaCump();
   // Forzar refresco visual de selects estáticos con opciones data-i18n
   // (algunos navegadores no actualizan el texto seleccionado con sólo cambiar textContent)
   document.querySelectorAll('select').forEach(sel => {
@@ -322,6 +334,20 @@ async function recargarCatalogosIdioma() {
       sel.value = '\x00';   // valor inexistente → fuerza repintado
       sel.value = v;
     }
+  });
+
+  // Sincronizar texto visible del sb-input tras reconstruir opciones y cambiar idioma.
+  // cargarCatalogo() dispara el MutationObserver que resetea el sb-input a '',
+  // y luego sel.value se restaura sin disparar 'change', por lo que hay que
+  // sincronizar manualmente aquí (igual que en DOMContentLoaded).
+  document.querySelectorAll('select[data-buscable="1"]').forEach(sel => {
+    sel.querySelectorAll('option[value="NA"]').forEach(opt => { opt.textContent = t('no_aplica'); });
+    const cur = sel.options[sel.selectedIndex];
+    const inp = sel.parentElement && sel.parentElement.querySelector('.sb-input');
+    if (!inp) return;
+    const phOpt = sel.querySelector('option[value=""]');
+    if (phOpt) inp.placeholder = phOpt.textContent.trim();
+    if (cur && cur.value) inp.value = cur.textContent.trim();
   });
 }
 
@@ -574,19 +600,38 @@ async function hidratarFormularioVisual() {
         const inp = document.getElementById('pais_exp_otro_txt');
         if (inp) inp.value = formData.basica.OTR_PAIS_EXP || '';
       } else if (cpe) {
-        await cargarCatalogo('/api/catalogo/departamentos', 'cod_dept_exp',
-          'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: cpe });
-        const selDept = document.getElementById('cod_dept_exp');
-        if (selDept) {
-          selDept.disabled = false;
-          if (formData.basica.COD_DEPT_EXP) {
-            selDept.value = formData.basica.COD_DEPT_EXP;
-            if (formData.basica.COD_MPIO_EXP) {
-              await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
-                'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
-                { cod_dept: formData.basica.COD_DEPT_EXP, cod_pais: cpe });
-              const selMpio = document.getElementById('cod_mpio_exp');
-              if (selMpio) { selMpio.disabled = false; selMpio.value = formData.basica.COD_MPIO_EXP; }
+        if (cpe === COD_COLOMBIA) {
+          await cargarCatalogo('/api/catalogo/departamentos', 'cod_dept_exp',
+            'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: cpe });
+          const selDept = document.getElementById('cod_dept_exp');
+          if (selDept) {
+            selDept.disabled = false;
+            if (formData.basica.COD_DEPT_EXP) {
+              selDept.value = formData.basica.COD_DEPT_EXP;
+              if (formData.basica.COD_MPIO_EXP) {
+                await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
+                  'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
+                  { cod_dept: formData.basica.COD_DEPT_EXP, cod_pais: cpe });
+                const selMpio = document.getElementById('cod_mpio_exp');
+                if (selMpio) { selMpio.disabled = false; selMpio.value = formData.basica.COD_MPIO_EXP; }
+              }
+            }
+          }
+        } else {
+          // País extranjero: dpto = NA, ciudades sin filtro de dpto
+          const selDept = document.getElementById('cod_dept_exp');
+          if (selDept) {
+            selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
+            selDept.value = 'NA'; selDept.disabled = true;
+          }
+          const selMpio2 = document.getElementById('cod_mpio_exp');
+          if (selMpio2) {
+            selMpio2.disabled = false;
+            await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
+              'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: cpe });
+            const hadNoCities2 = _autoNoAplicaCiudad(selMpio2);
+            if (!hadNoCities2 && formData.basica.COD_MPIO_EXP && formData.basica.COD_MPIO_EXP !== 'NA') {
+              selMpio2.value = formData.basica.COD_MPIO_EXP;
             }
           }
         }
@@ -753,7 +798,7 @@ async function _hydrateGeoCascade(prefix, item) {
     );
     selDept.disabled = false;
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.disabled = true;
   }
 
@@ -772,7 +817,8 @@ async function _hydrateGeoCascade(prefix, item) {
     params
   );
   selMpio.disabled = false;
-  if (item.COD_MPIO) {
+  const hadNoCities = _autoNoAplicaCiudad(selMpio);
+  if (!hadNoCities && item.COD_MPIO && item.COD_MPIO !== 'NA') {
     selMpio.value = item.COD_MPIO;
   }
 }

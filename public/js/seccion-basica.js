@@ -63,7 +63,7 @@ async function onPaisChange(codPais) {
     );
   } else {
     // País extranjero: Departamento no aplica
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value     = 'NA';
     selDept.disabled  = true;
     actualizarFormData('basica', 'COD_DEPT_EXP', 'NA');
@@ -172,7 +172,7 @@ function validarYContinuar() {
   if (!validarSeccionBasica()) {
     document.getElementById('accordion-basica').classList.remove('collapsed');
     const errCount = document.querySelectorAll('#accordion-basica .field.error').length;
-    mostrarToast(`Faltan ${errCount} campo(s) requerido(s) en la sección 1. Revise los campos en rojo.`, 'error');
+    mostrarToast(t('toast_fields_missing').replace('{n}', errCount), 'error');
     const primerError = document.querySelector('#accordion-basica .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;

@@ -146,7 +146,7 @@
       <div class="grid-4" id="row-vinc-otro" style="display:none">
         <div class="field" id="field-cod_vinc_otro" style="grid-column: span 2">
           <label><span data-i18n="sec1_otr_vinc">Especifique el tipo de vinculación</span> <span class="req">*</span></label>
-          <input type="text" id="otr_vinc" maxlength="255" placeholder="Describa el tipo de vinculación"
+          <input type="text" id="otr_vinc" maxlength="255" data-i18n-ph="ph_describe_vinc" placeholder="Describa el tipo de vinculación"
                  oninput="actualizarFormData('basica','OTR_VINC',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
@@ -178,27 +178,27 @@
         <div class="field" id="field-nom_terc_n">
           <label for="nom_terc_n"><span data-i18n="sec1_primer_nombre">Primer nombre</span> <span class="req">*</span></label>
           <input type="text" id="nom_terc_n" maxlength="40"
-                 placeholder="Primer nombre"
+                 data-i18n-ph="ph_primer_nombre" placeholder="Primer nombre"
                  oninput="actualizarNatur('NOM_TERC',this.value); limpiarError('field-nom_terc_n')" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
         <div class="field">
           <label for="seg_nomb_n"><span data-i18n="sec1_seg_nombre">Segundo nombre</span></label>
           <input type="text" id="seg_nomb_n" maxlength="40"
-                 placeholder="Segundo nombre (opcional)"
+                 data-i18n-ph="ph_seg_nombre" placeholder="Segundo nombre (opcional)"
                  oninput="actualizarNatur('SEG_NOMB',this.value)" />
         </div>
         <div class="field" id="field-ape_terc_n">
           <label for="ape_terc_n"><span data-i18n="sec1_primer_ape">Primer apellido</span> <span class="req">*</span></label>
           <input type="text" id="ape_terc_n" maxlength="40"
-                 placeholder="Primer apellido"
+                 data-i18n-ph="ph_primer_apellido" placeholder="Primer apellido"
                  oninput="actualizarNatur('APE_TERC',this.value); limpiarError('field-ape_terc_n')" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
         <div class="field">
           <label for="seg_apel_n"><span data-i18n="sec1_seg_ape">Segundo apellido</span></label>
           <input type="text" id="seg_apel_n" maxlength="40"
-                 placeholder="Segundo apellido (opcional)"
+                 data-i18n-ph="ph_seg_apellido" placeholder="Segundo apellido (opcional)"
                  oninput="actualizarNatur('SEG_APEL',this.value)" />
         </div>
       </div>
@@ -275,7 +275,7 @@
             <span class="ic-info" data-i18n-tip="sec1_email_tip" data-tip="Puede ser correo corporativo o personal.">i</span>
             <span class="req">*</span></label>
           <input type="email" id="dir_mail" maxlength="100"
-                 placeholder="contacto@empresa.com"
+                 data-i18n-ph="ph_email_contact" placeholder="contacto@empresa.com"
                  oninput="actualizarFormData('basica','DIR_MAIL',this.value); limpiarError('field-dir_mail')" />
           <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
         </div>
@@ -284,7 +284,7 @@
         <div class="field solo-juridica" id="field-mail_sarl">
           <label for="mail_sarl"><span data-i18n="sec1_mail_sarl">Email gestión SAGRILAFT</span> <span class="req">*</span></label>
           <input type="email" id="mail_sarl" maxlength="100"
-                 placeholder="SAGRILAFT@empresa.com"
+                 data-i18n-ph="sec1_mail_sarl_ph" placeholder="SAGRILAFT@empresa.com"
                  oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
           <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
         </div>
@@ -299,13 +299,14 @@
                   onchange="actualizarFormData('basica','COD_CIIU',this.value); limpiarError('field-cod_ciiu')">
             <option value="">— Seleccione actividad —</option>
           </select>
-          <span class="error-msg">Seleccione una actividad válida</span>
+          <span class="error-msg"><span data-i18n="error_select_ciiu">Seleccione una actividad válida</span></span>
         </div>
 
         <!-- Sibling CIIU — visible solo cuando se elige una actividad "Otros..." -->
         <div class="field" id="field-cod_ciiu_otro" style="display:none">
-          <label>Describa la actividad <span class="req">*</span></label>
-          <input type="text" id="otr_ciiu" maxlength="255" placeholder="Describa la actividad econ&#xF3;mica"
+          <label><span data-i18n="label_describe_ciiu">Describa la actividad</span> <span class="req">*</span></label>
+          <input type="text" id="otr_ciiu" maxlength="255"
+                 data-i18n-ph="ph_describe_ciiu" placeholder="Describa la actividad económica"
                  oninput="actualizarFormData('basica','OTR_CIIU',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
@@ -313,7 +314,7 @@
         <div class="field">
           <label for="url_web"><span data-i18n="sec1_url">Página web</span></label>
           <input type="url" id="url_web" maxlength="255"
-                 placeholder="https://www.empresa.com"
+                 data-i18n-ph="sec1_url_ph" placeholder="https://www.empresa.com"
                  oninput="actualizarFormData('basica','URL_WEB',this.value)" />
         </div>
       </div>
@@ -331,8 +332,9 @@
         </div>
 
         <div class="field" id="field-cod_nacio_n_otro" style="display:none">
-          <label>Especifique la nacionalidad <span class="req">*</span></label>
-          <input type="text" id="nacio_n_otro_txt" maxlength="100" placeholder="Pa&#xED;s o nacionalidad"
+          <label><span data-i18n="label_especif_nacio">Especifique la nacionalidad</span> <span class="req">*</span></label>
+          <input type="text" id="nacio_n_otro_txt" maxlength="100"
+                 data-i18n-ph="ph_pais_nacio" placeholder="País o nacionalidad"
                  oninput="actualizarNatur('OTR_NACIO',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
@@ -340,7 +342,7 @@
         <div class="field">
           <label for="act_princ_n"><span data-i18n="sec1_act_princ">Actividad económica principal</span></label>
           <input type="text" id="act_princ_n" maxlength="100"
-                 placeholder="Descripción breve de la actividad"
+                 data-i18n-ph="ph_act_princ" placeholder="Descripción breve de la actividad"
                  oninput="actualizarNatur('ACT_PRINC',this.value)" />
         </div>
 
@@ -350,13 +352,13 @@
                   onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n'); onCiiuNChange(this.value)">
             <option value="">— Seleccione actividad —</option>
           </select>
-          <span class="error-msg">Seleccione una actividad válida</span>
+          <span class="error-msg"><span data-i18n="error_select_ciiu">Seleccione una actividad válida</span></span>
         </div>
 
         <div class="field" id="field-cod_ciiu_n_otro" style="display:none">
-          <label>Describa la actividad <span class="req">*</span></label>
+          <label><span data-i18n="label_describe_ciiu">Describa la actividad</span> <span class="req">*</span></label>
           <input type="text" id="ciiu_n_otro_txt" maxlength="255"
-                 placeholder="Describa la actividad econ&#xF3;mica"
+                 data-i18n-ph="ph_describe_ciiu" placeholder="Describa la actividad económica"
                  oninput="actualizarNatur('OTR_CIIU',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
@@ -486,7 +488,7 @@
           <div class="field" id="field-rl_p_dir">
             <label for="rl_p_dir"><span data-i18n="field_dir">Dirección domicilio</span> <span class="req">*</span></label>
             <input type="text" id="rl_p_dir" maxlength="255"
-                   placeholder="Ej: Cra 7 # 45-12"
+                   data-i18n-ph="ph_dir_rl" placeholder="Ej: Cra 7 # 45-12"
                    oninput="actualizarRL(0,'DIR_REPR',this.value); limpiarError('field-rl_p_dir')" />
             <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
@@ -509,7 +511,7 @@
           <div class="field" id="field-rl_p_mail">
             <label for="rl_p_mail"><span data-i18n="field_mail">Correo electrónico</span> <span class="req">*</span></label>
             <input type="email" id="rl_p_mail" maxlength="100"
-                   placeholder="correo@dominio.com"
+                   data-i18n-ph="ph_email_contact" placeholder="correo@dominio.com"
                    oninput="actualizarRL(0,'MAIL_REPR',this.value); limpiarError('field-rl_p_mail')" />
             <span class="error-msg"><span data-i18n="invalid_email">Email inválido o vacío</span></span>
           </div>
@@ -758,7 +760,7 @@
 
         <div class="field col-full" id="field-cump_norm_laft">
           <label for="cump_norm_laft"><span data-i18n="sec5_norm_laft">Referencia específica de normatividad LA/FT</span>
-            <span style="font-size:.7rem;font-weight:400;text-transform:none">(ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)</span>
+            <span style="font-size:.7rem;font-weight:400;text-transform:none" data-i18n="sec5_norm_laft_eg">(ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)</span>
           </label>
           <input type="text" id="cump_norm_laft" maxlength="255"
                  placeholder="Nombre o número de la norma LA/FT aplicable"
@@ -1590,7 +1592,8 @@ function descargarExcel() {
   const endpoint = tipoTerc === 'N'
     ? '/api/exportar-excel-natural/'
     : '/api/exportar-excel/';
-  window.open(endpoint + encodeURIComponent(codTerc), '_blank');
+  const lang = window._currentLang || 'es';
+  window.open(endpoint + encodeURIComponent(codTerc) + '?lang=' + lang, '_blank');
 }
 
 /* ── Aviso de duplicado — modal flotante ─────────────────────────────────── */

@@ -517,17 +517,21 @@ async function onRFPaisChange(id, codPais) {
     await cargarCatalogo('/api/catalogo/departamentos', `rf_${id}_dept`,
       'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     r.COD_DEPT = 'NA';
     selMpio.disabled = false;
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `rf_${id}_mpio`,
       'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
-    selMpio.onchange = e => {
-      r.COD_MPIO = e.target.value ? String(e.target.value) : null;
-      limpiarError(`field-rf_${id}_mpio`);
-    };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      r.COD_MPIO = 'NA';
+    } else {
+      selMpio.onchange = e => {
+        r.COD_MPIO = e.target.value ? String(e.target.value) : null;
+        limpiarError(`field-rf_${id}_mpio`);
+      };
+    }
   }
 }
 

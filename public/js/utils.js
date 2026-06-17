@@ -421,7 +421,10 @@ function _activarSiblingOtro(selectId, siblingId, onHide) {
 
   function _evaluar() {
     const txt = (sel.options[sel.selectedIndex]?.textContent || '').trim();
-    if (/^otro|^sin\s/i.test(txt)) {
+    // Strip leading "CODE - " prefix added for CIIU display, then test description
+    const desc = txt.replace(/^\d[\w.]* - /, '');
+    const OTRO_RE = /^otro|^other|^sin\s|^unassigned/i;
+    if (OTRO_RE.test(txt) || OTRO_RE.test(desc)) {
       fld.style.display = '';
     } else {
       fld.style.display = 'none';
@@ -506,7 +509,7 @@ function agregarOpcionOtroAlSelect(selOrId) {
   // Eliminar entradas de catálogo que empiecen con "Otro/Otros" o "Sin asignar"
   // para evitar duplicados y registros placeholder en el selector de país.
   Array.from(sel.options).forEach(opt => {
-    if (/^otro|^sin\s/i.test(opt.textContent.trim())) sel.removeChild(opt);
+    if (/^otro|^other|^sin\s|^unassigned/i.test(opt.textContent.trim())) sel.removeChild(opt);
   });
   if (!sel.querySelector('option[value="OTRO"]')) {
     const opt = document.createElement('option');

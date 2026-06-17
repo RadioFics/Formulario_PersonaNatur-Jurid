@@ -134,7 +134,7 @@ const _TEST = {
 
   // Sección 12 — Beneficiarios finales
   BF: {
-    TIP_BENE:  'P',
+    TIP_BENE:  'N',
     NOM_BENE:  'Jorge Luis',
     APE_BENE:  'Ramírez López',
     NUM_DOCU:  '19456789',

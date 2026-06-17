@@ -577,7 +577,7 @@ function validarYContinuarCumplimiento() {
     document.getElementById('accordion-cumplimiento').classList.remove('collapsed');
     const errCount = document.querySelectorAll('#accordion-cumplimiento .field.error').length;
     if (errCount > 0) {
-      mostrarToast(`Faltan ${errCount} campo(s) en la sección 5. Revise los campos en rojo.`, 'error');
+      mostrarToast(t('toast_fields_missing').replace('{n}', errCount), 'error');
       const primerError = document.querySelector('#accordion-cumplimiento .field.error');
       if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }

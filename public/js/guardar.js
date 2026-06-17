@@ -95,19 +95,26 @@ function validarTodo() {
   }
 
   /* ── Sección 6: Junta directiva ──────────────────────────────────────── */
-  if (formData.juntaDirectiva.TIE_JUNTA === 'S' &&
-      formData.juntaDirectiva.miembros.length === 0)
-    errores.push('Junta directiva: Debe agregar al menos un miembro');
+  if (formData.juntaDirectiva.TIE_JUNTA === 'S') {
+    if (formData.juntaDirectiva.miembros.length === 0)
+      errores.push('Junta directiva: Debe agregar al menos un miembro');
+    else if (!validarSeccionJD())
+      errores.push('Junta directiva: Complete los campos obligatorios de cada miembro');
+  }
 
   /* ── Sección 7: Revisores fiscales ───────────────────────────────────── */
-  if (formData.revisores.TIE_REVIS === 'S' &&
-      formData.revisores.revisores.length === 0)
-    errores.push('Revisores fiscales: Debe agregar al menos un revisor');
+  if (formData.revisores.TIE_REVIS === 'S') {
+    if (formData.revisores.revisores.length === 0)
+      errores.push('Revisores fiscales: Debe agregar al menos un revisor');
+    else if (!validarSeccionRF())
+      errores.push('Revisores fiscales: Complete los campos obligatorios de cada revisor');
+  }
 
   /* ── Sección 8: Composición accionaria ──────────────────────────────── */
-  if (!formData.accionistas.length ||
-      (!formData.accionistas[0].NOM_ACCI && !formData.accionistas[0].RAZ_ACCI))
+  if (!formData.accionistas.length)
     errores.push('Composición accionaria: Registre al menos un accionista');
+  else if (!validarSeccionAC())
+    errores.push('Composición accionaria: Complete los campos obligatorios de cada accionista');
   // Sin restricción de suma al 100% — se acepta cualquier distribución.
 
   /* ── Sección 9: Financiera ───────────────────────────────────────────── */
@@ -139,26 +146,42 @@ function validarTodo() {
     errores.push('Certificación: Debe confirmar que la información es verídica');
 
   /* ── Sección 12: Beneficiarios finales ───────────────────────────────── */
-  if (!formData.beneficiarios.length ||
-      (!formData.beneficiarios[0].NOM_BENE && !formData.beneficiarios[0].RAZ_BENE))
+  if (!formData.beneficiarios.length)
     errores.push('Beneficiarios finales: Registre al menos un beneficiario final');
+  else if (!validarSeccionBF())
+    errores.push('Beneficiarios finales: Complete los campos obligatorios de cada beneficiario');
 
   /* ── Sección 13: Documentos obligatorios ────────────────────────────── */
-  // La firma del representante fue eliminada del formulario (sección 13A removida).
-  // Los documentos son ahora obligatorios para enviar.
-  const _docReqs = [
-    ['RUT',       'RUT — Registro Único Tributario'],
-    ['CERT_BANC', 'Certificación bancaria'],
-    ['CERT_EXIS', 'Certificado de existencia y representación'],
-    ['DOC_ID_RL', 'Documento de identidad del Representante Legal'],
-    ['EST_FIN',   'Estados financieros del último año fiscal'],
-    ['CERT_ACCI', 'Certificado de composición accionaria'],
-    ['CART_ACEP', 'Carta de aceptación y autorización'],
-  ];
-  _docReqs.forEach(([clave, label]) => {
-    if (typeof _archivos !== 'undefined' && !_archivos.has(clave))
-      errores.push(`Documentos: Adjunte "${label}"`);
-  });
+  if (typeof _archivos !== 'undefined') {
+    const _docReqsFijos = [
+      ['RUT',       'RUT — Registro Único Tributario'],
+      ['CERT_BANC', 'Certificación bancaria'],
+      ['CERT_EXIS', 'Certificado de existencia y representación'],
+      ['CERT_ACCI', 'Certificado de composición accionaria'],
+      ['CART_ACEP', 'Carta de aceptación y autorización'],
+    ];
+    _docReqsFijos.forEach(([clave, label]) => {
+      if (!_archivos.has(clave))
+        errores.push(`Documentos: Adjunte "${label}"`);
+    });
+
+    // Un doc. de identidad por cada RL registrado (claves dinámicas DOC_ID_RL_0, DOC_ID_RL_1, …)
+    const rls = Array.isArray(formData.representantes) ? formData.representantes : [];
+    rls.forEach((rl, idx) => {
+      const clave = `DOC_ID_RL_${idx}`;
+      if (!_archivos.has(clave)) {
+        const nom = [rl.NOM_REPR, rl.APE_REPR].filter(Boolean).join(' ') ||
+                    (idx === 0 ? 'RL Principal' : `RL Suplente ${idx}`);
+        errores.push(`Documentos: Adjunte "Documento de identidad del Representante Legal" (${nom})`);
+      }
+    });
+
+    // Estados financieros: Año 1 (penúltimo) y Año 2 (último) son obligatorios
+    if (!_archivos.has('EST_FIN_1'))
+      errores.push('Documentos: Adjunte "Estados financieros del penúltimo año fiscal"');
+    if (!_archivos.has('EST_FIN_2'))
+      errores.push('Documentos: Adjunte "Estados financieros del último año fiscal"');
+  }
 
   return errores;
 }

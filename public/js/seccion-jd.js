@@ -115,7 +115,7 @@ function _jdMiembroHTML(m) {
             ${td}
           </select>
           <input type="text" id="jd_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                 placeholder="Especifique el tipo de documento"
+                 data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
                  oninput="actualizarJDMiem(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
@@ -143,7 +143,8 @@ function _jdMiembroHTML(m) {
         </div>
         <div class="field" id="field-jd_${id}_pais_otro" style="display:none">
           <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
-          <input type="text" id="jd_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+          <input type="text" id="jd_${id}_pais_otro" maxlength="100"
+                 data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del país'}"
                  oninput="actualizarJDMiem(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-jd_${id}_dept">
@@ -350,12 +351,16 @@ async function onJDPaisChange(id, codPais) {
     selDept.disabled = false;
     await cargarCatalogo('/api/catalogo/departamentos', `jd_${id}_dept`, 'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     m.COD_DEPT = 'NA';
     selMpio.disabled = false;
     await cargarCatalogo('/api/catalogo/ciudades', `jd_${id}_mpio`, 'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
-    selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      m.COD_MPIO = 'NA';
+    } else {
+      selMpio.onchange = e => { m.COD_MPIO = e.target.value || null; limpiarError(`field-jd_${id}_mpio`); };
+    }
   }
 }
 

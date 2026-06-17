@@ -162,7 +162,8 @@ function _crearGrupoBancoEl(cuenta) {
         </div>
         <div class="field" id="field-banco_${id}_banco_otro" style="display:none; grid-column: span 2">
           <label><span data-i18n="field_especif_banco">${typeof t==='function'?t('field_especif_banco'):'Especifique la entidad bancaria'}</span> <span class="req">*</span></label>
-          <input type="text" id="banco_${id}_otr_banco" maxlength="255" placeholder="Nombre de la entidad"
+          <input type="text" id="banco_${id}_otr_banco" maxlength="255"
+                 data-i18n-ph="sec11_otr_banco_ph" placeholder="${typeof t==='function'?t('sec11_otr_banco_ph'):'Nombre de la entidad'}"
                  oninput="actualizarBanco(${id},'OTR_BANCO',this.value)" />
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
@@ -176,7 +177,8 @@ function _crearGrupoBancoEl(cuenta) {
         </div>
         <div class="field" id="field-banco_${id}_tipcuen_otro" style="display:none">
           <label><span data-i18n="field_especif_tipcuen">${typeof t==='function'?t('field_especif_tipcuen'):'Especifique el tipo de cuenta'}</span> <span class="req">*</span></label>
-          <input type="text" id="banco_${id}_otr_cuen" maxlength="255" placeholder="Ej: cuenta fiduciaria, CDT…"
+          <input type="text" id="banco_${id}_otr_cuen" maxlength="255"
+                 data-i18n-ph="field_tipcuen_ph" placeholder="${typeof t==='function'?t('field_tipcuen_ph'):'Ej: cuenta fiduciaria, CDT…'}"
                  oninput="actualizarBanco(${id},'OTR_CUEN',this.value)" />
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
@@ -192,11 +194,11 @@ function _crearGrupoBancoEl(cuenta) {
         <div class="radio-group">
           <label class="radio-option">
             <input type="radio" name="banco_extr_${id}" value="S"
-                   onchange="onTieneExtranjeraChange(${id},'S')"> ${typeof t==='function'?t('yes'):'Sí'}
+                   onchange="onTieneExtranjeraChange(${id},'S')"> <span data-i18n="yes">${typeof t==='function'?t('yes'):'Sí'}</span>
           </label>
           <label class="radio-option">
             <input type="radio" name="banco_extr_${id}" value="N" checked
-                   onchange="onTieneExtranjeraChange(${id},'N')"> ${typeof t==='function'?t('no'):'No'}
+                   onchange="onTieneExtranjeraChange(${id},'N')"> <span data-i18n="no">${typeof t==='function'?t('no'):'No'}</span>
           </label>
         </div>
       </div>
@@ -226,7 +228,8 @@ function _crearGrupoBancoEl(cuenta) {
           </div>
           <div class="field" id="field-banco_${id}_ext_pais_otro" style="display:none">
             <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
-            <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+            <input type="text" id="banco_${id}_ext_pais_otro" maxlength="100"
+                   data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del pa\xEDs'}"
                    oninput="actualizarBanco(${id},'OTR_PAIS_EXT',this.value)" />
           </div>
         </div>

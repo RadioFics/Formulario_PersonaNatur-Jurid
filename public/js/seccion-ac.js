@@ -182,7 +182,8 @@ function _crearGrupoACEl(accionista) {
           </div>
           <div class="field" id="field-ac_${id}_ape">
             <label><span data-i18n="field_apellidos">${typeof t==='function'?t('field_apellidos'):'Apellidos'}</span> <span class="req">*</span></label>
-            <input type="text" id="ac_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+            <input type="text" id="ac_${id}_ape" maxlength="100"
+                   data-i18n-ph="ph_apellidos" placeholder="${typeof t==='function'?t('ph_apellidos'):'Apellidos completos'}"
                    oninput="actualizarAC(${id},'APE_ACCI',this.value);limpiarError('field-ac_${id}_ape')" />
             <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
@@ -210,7 +211,7 @@ function _crearGrupoACEl(accionista) {
             ${td}
           </select>
           <input type="text" id="ac_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                 placeholder="Especifique el tipo de documento"
+                 data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
                  oninput="actualizarAC(${id},'OTR_TPDOC',this.value)" />
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
@@ -239,7 +240,8 @@ function _crearGrupoACEl(accionista) {
         </div>
         <div class="field" id="field-ac_${id}_pais_otro" style="display:none">
           <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
-          <input type="text" id="ac_${id}_pais_otro" maxlength="100" placeholder="Nombre del país"
+          <input type="text" id="ac_${id}_pais_otro" maxlength="100"
+                 data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del país'}"
                  oninput="actualizarAC(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-ac_${id}_dept">
@@ -443,17 +445,21 @@ async function onACPaisChange(id, codPais) {
     await cargarCatalogo('/api/catalogo/departamentos', `ac_${id}_dept`,
       'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     a.COD_DEPT = 'NA';
     selMpio.disabled = false;
     selMpio.innerHTML = '<option value="">Cargando ciudades…</option>';
     await cargarCatalogo('/api/catalogo/ciudades', `ac_${id}_mpio`,
       'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais });
-    selMpio.onchange = e => {
-      a.COD_MPIO = e.target.value || null;
-      limpiarError(`field-ac_${id}_mpio`);
-    };
+    if (_autoNoAplicaCiudad(selMpio)) {
+      a.COD_MPIO = 'NA';
+    } else {
+      selMpio.onchange = e => {
+        a.COD_MPIO = e.target.value || null;
+        limpiarError(`field-ac_${id}_mpio`);
+      };
+    }
   }
 }
 
@@ -541,7 +547,7 @@ function validarYContinuarAC() {
   if (!validarSeccionAC()) {
     document.getElementById('accordion-ac').classList.remove('collapsed');
     const errCount = document.querySelectorAll('#accordion-ac .field.error').length;
-    mostrarToast(`Faltan ${errCount} campo(s) en la sección 8. Revise los campos en rojo.`, 'error');
+    mostrarToast(t('toast_fields_missing').replace('{n}', errCount), 'error');
     const primerError = document.querySelector('#accordion-ac .field.error');
     if (primerError) primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;

@@ -301,7 +301,7 @@ async function onRLPaisChange(codPais, prefijo, idx) {
     await cargarCatalogo('/api/catalogo/departamentos', `${prefijo}_dept`,
       'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     actualizarRL(idx, 'COD_DEPT', 'NA');
     selMpio.disabled = false;
@@ -370,7 +370,7 @@ async function onRLExtraPaisChange(extraId, idx, codPais) {
     await cargarCatalogo('/api/catalogo/departamentos', `rl_x${extraId}_dept`,
       'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais });
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value = 'NA'; selDept.disabled = true;
     actualizarRL(idx, 'COD_DEPT', 'NA');
     selMpio.disabled = false;

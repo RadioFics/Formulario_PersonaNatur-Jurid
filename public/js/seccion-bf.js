@@ -131,90 +131,93 @@ function _crearGrupoBFEl(beneficiario) {
       <!-- Nombres, Apellidos, Fecha expedición -->
       <div class="grid-3">
         <div class="field" id="field-bf_${id}_nom">
-          <label>Nombres <span class="req">*</span></label>
-          <input type="text" id="bf_${id}_nom" maxlength="100" placeholder="Nombres completos"
+          <label><span data-i18n="field_nombres">${typeof t==='function'?t('field_nombres'):'Nombres'}</span> <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_nom" maxlength="100"
+                 data-i18n-ph="ph_nombres" placeholder="${typeof t==='function'?t('ph_nombres'):'Nombres completos'}"
                  oninput="actualizarBF(${id},'NOM_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_nom')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-bf_${id}_ape">
-          <label>Apellidos <span class="req">*</span></label>
-          <input type="text" id="bf_${id}_ape" maxlength="100" placeholder="Apellidos completos"
+          <label><span data-i18n="field_apellidos">${typeof t==='function'?t('field_apellidos'):'Apellidos'}</span> <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_ape" maxlength="100"
+                 data-i18n-ph="ph_apellidos" placeholder="${typeof t==='function'?t('ph_apellidos'):'Apellidos completos'}"
                  oninput="actualizarBF(${id},'APE_BENE',this.value);actualizarTituloBF(${id});limpiarError('field-bf_${id}_ape')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-bf_${id}_fec">
-          <label>Fecha de expedici&#xF3;n <span class="req">*</span></label>
+          <label><span data-i18n="field_fec_expe">${typeof t==='function'?t('field_fec_expe'):'Fecha de expedición'}</span> <span class="req">*</span></label>
           <input type="date" id="bf_${id}_fec"
                  onchange="actualizarBF(${id},'FEC_EXPE',this.value);limpiarError('field-bf_${id}_fec')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
       </div>
 
       <!-- TIP_DOCU, NUM_DOCU, TEL, MAIL -->
       <div class="grid-4">
         <div class="field" id="field-bf_${id}_tipdoc">
-          <label>Tipo de documento <span class="req">*</span></label>
+          <label><span data-i18n="field_tip_doc">${typeof t==='function'?t('field_tip_doc'):'Tipo de documento'}</span> <span class="req">*</span></label>
           <select id="bf_${id}_tipdoc"
                   onchange="onBFTipdocChange(${id},this.value);actualizarBF(${id},'TIP_DOCU',this.value);limpiarError('field-bf_${id}_tipdoc')">
             ${td}
           </select>
           <input type="text" id="bf_${id}_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                 placeholder="Especifique el tipo de documento"
+                 data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
                  oninput="actualizarBF(${id},'OTR_TPDOC',this.value)" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-bf_${id}_numdoc">
-          <label>N&#xFA;mero de documento<span class="req">*</span></label>
+          <label><span data-i18n="field_num_doc">${typeof t==='function'?t('field_num_doc'):'Número de documento'}</span><span class="req">*</span></label>
           <input type="text" id="bf_${id}_numdoc" maxlength="20" inputmode="numeric"
                  oninput="this.value=this.value.replace(/\\D/g,'');actualizarBF(${id},'NUM_DOCU',this.value);limpiarError('field-bf_${id}_numdoc')" />
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Tel&#xE9;fono / Celular</label>
+          <label><span data-i18n="field_tel_cel">${typeof t==='function'?t('field_tel_cel'):'Teléfono / Celular'}</span></label>
           <input type="tel" id="bf_${id}_tel" maxlength="20"
                  oninput="actualizarBF(${id},'TEL_BENE',this.value)" />
         </div>
         <div class="field" id="field-bf_${id}_mail">
-          <label>Correo electr&#xF3;nico</label>
+          <label><span data-i18n="field_mail">${typeof t==='function'?t('field_mail'):'Correo electrónico'}</span></label>
           <input type="email" id="bf_${id}_mail" maxlength="100"
                  oninput="actualizarBF(${id},'MAIL_BENE',this.value);limpiarError('field-bf_${id}_mail')" />
-          <span class="error-msg">Email inv&#xE1;lido</span>
+          <span class="error-msg" data-i18n="invalid_email">${typeof t==='function'?t('invalid_email'):'Email inválido'}</span>
         </div>
       </div>
 
       <!-- País / Dept / Ciudad / Dirección -->
       <div class="grid-4">
         <div class="field" id="field-bf_${id}_pais">
-          <label>Pa&#xED;s <span class="req">*</span></label>
+          <label><span data-i18n="field_pais">${typeof t==='function'?t('field_pais'):'País'}</span> <span class="req">*</span></label>
           <select id="bf_${id}_pais"
                   onchange="onBFPaisChange(${id},this.value);limpiarError('field-bf_${id}_pais')">
             ${pa}
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-bf_${id}_pais_otro" style="display:none">
-          <label>Especifique el pa&#xED;s <span class="req">*</span></label>
-          <input type="text" id="bf_${id}_pais_otro" maxlength="100" placeholder="Nombre del pa&#xED;s"
+          <label><span data-i18n="field_specify_pais">${typeof t==='function'?t('field_specify_pais'):'Especifique el país'}</span> <span class="req">*</span></label>
+          <input type="text" id="bf_${id}_pais_otro" maxlength="100"
+                 data-i18n-ph="country_name_ph" placeholder="${typeof t==='function'?t('country_name_ph'):'Nombre del país'}"
                  oninput="actualizarBF(${id},'OTR_PAIS',this.value)" />
         </div>
         <div class="field" id="field-bf_${id}_dept">
-          <label>Departamento <span class="req">*</span></label>
+          <label><span data-i18n="field_dept">${typeof t==='function'?t('field_dept'):'Departamento'}</span> <span class="req">*</span></label>
           <select id="bf_${id}_dept" disabled
                   onchange="onBFDeptChange(${id},this.value);limpiarError('field-bf_${id}_dept')">
-            <option value="">&#x2014; Seleccione pa&#xED;s primero &#x2014;</option>
+            <option value="" data-i18n="select_first_country">${typeof t==='function'?t('select_first_country'):'— Seleccione país primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-bf_${id}_mpio">
-          <label>Ciudad <span class="req">*</span></label>
+          <label><span data-i18n="field_ciudad">${typeof t==='function'?t('field_ciudad'):'Ciudad'}</span> <span class="req">*</span></label>
           <select id="bf_${id}_mpio" disabled
                   onchange="actualizarBF(${id},'COD_MPIO',this.value);limpiarError('field-bf_${id}_mpio')">
             <option value="" data-i18n="select_first_dept">${typeof t==='function'?t('select_first_dept'):'— Seleccione departamento primero —'}</option>
           </select>
-          <span class="error-msg">Campo requerido</span>
+          <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field">
-          <label>Direcci&#xF3;n</label>
+          <label><span data-i18n="field_dir_simple">${typeof t==='function'?t('field_dir_simple'):'Dirección'}</span></label>
           <input type="text" id="bf_${id}_dir" maxlength="255"
                  oninput="actualizarBF(${id},'DIR_BENE',this.value)" />
         </div>
@@ -363,7 +366,7 @@ async function onBFPaisChange(id, codPais) {
   if (fieldMpio) fieldMpio.style.display = '';
 
   if (!codPais) {
-    selDept.innerHTML = '<option value="">&#x2014; Seleccione pa&#xED;s primero &#x2014;</option>';
+    selDept.innerHTML = '<option value="" data-i18n="select_first_country">' + (typeof t==='function'?t('select_first_country'):'— Seleccione país primero —') + '</option>';
     selDept.disabled  = true;
     return;
   }
@@ -375,12 +378,12 @@ async function onBFPaisChange(id, codPais) {
       'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: codPais }
     );
   } else {
-    selDept.innerHTML = '<option value="NA">No aplica</option>';
+    selDept.innerHTML = '<option value="NA">' + t('no_aplica') + '</option>';
     selDept.value    = 'NA';
     selDept.disabled = true;
     b.COD_DEPT = 'NA';
     selMpio.disabled = false;
-    selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+    selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('loading_cities'):'Cargando ciudades…') + '</option>';
     await cargarCatalogo(
       '/api/catalogo/ciudades', `bf_${id}_mpio`,
       'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: codPais }
@@ -404,7 +407,7 @@ async function onBFDeptChange(id, codDept) {
 
   const selMpio = document.getElementById(`bf_${id}_mpio`);
   const codPais = document.getElementById(`bf_${id}_pais`).value;
-  selMpio.innerHTML = '<option value="">Cargando ciudades&#x2026;</option>';
+  selMpio.innerHTML = '<option value="">' + (typeof t==='function'?t('loading_cities'):'Cargando ciudades…') + '</option>';
   selMpio.disabled  = true;
   if (!codDept || !codPais) return;
 

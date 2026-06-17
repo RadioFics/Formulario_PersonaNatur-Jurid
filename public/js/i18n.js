@@ -152,6 +152,7 @@ const I18N_DICT = {
   sec5_desc_norm_ph:     { es: 'Describa la normatividad aplicable…',         en: 'Describe the applicable regulation…' },
   sec5_norm_laft:        { es: 'Referencia específica de normatividad LA/FT', en: 'Specific ML/TF regulation reference' },
   sec5_norm_laft_ph:     { es: 'Nombre o número de la norma LA/FT aplicable', en: 'Name or number of the applicable ML/TF regulation' },
+  sec5_norm_laft_eg:     { es: '(ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)', en: '(e.g.: Law 526/1999, Decree 1674/2023, SAGRILAFT…)' },
   sec5_tie_sist:         { es: '¿Tiene sistema de prevención de riesgos implementado?', en: 'Does it have a risk prevention system implemented?' },
   sec5_tip_sist:         { es: 'Tipo de sistema implementado',      en: 'Type of system implemented' },
   sec5_select_ph:        { es: 'Seleccione uno o varios...',         en: 'Select one or more...' },
@@ -418,6 +419,23 @@ const I18N_DICT = {
   sec5_need_oficial:{ es: 'Agregue al menos un oficial de cumplimiento.', en: 'Add at least one compliance officer.' },
   sec14_rl_id_tip:  { es: 'Copia legible de la cédula de ciudadanía o documento de identidad vigente del Representante Legal. Incluya ambas caras si la información relevante está distribuida en ellas.',
                       en: 'Legible copy of the current national ID or identity document of the Legal Representative. Include both sides if relevant information is distributed across them.' },
+  toast_fields_missing: { es: 'Faltan {n} campo(s). Revise los campos en rojo.',
+                          en: 'Fix {n} required field(s). Check the fields marked in red.' },
+  /* ── Placeholders de campos de texto ──────────────────────────────────── */
+  ph_primer_nombre:    { es: 'Primer nombre',                    en: 'First name' },
+  ph_seg_nombre:       { es: 'Segundo nombre (opcional)',         en: 'Middle name (optional)' },
+  ph_primer_apellido:  { es: 'Primer apellido',                   en: 'First surname' },
+  ph_seg_apellido:     { es: 'Segundo apellido (opcional)',       en: 'Second surname (optional)' },
+  ph_email_contact:    { es: 'contacto@empresa.com',              en: 'contact@company.com' },
+  ph_describe_vinc:    { es: 'Describa el tipo de vinculación',   en: 'Describe the relationship type' },
+  ph_describe_ciiu:    { es: 'Describa la actividad económica',   en: 'Describe the economic activity' },
+  ph_pais_nacio:       { es: 'País o nacionalidad',               en: 'Country or nationality' },
+  ph_act_princ:        { es: 'Descripción breve de la actividad', en: 'Brief description of the activity' },
+  ph_dir_rl:           { es: 'Ej: Cra 7 # 45-12',               en: 'E.g.: 7th Ave # 45-12' },
+  /* ── Labels / errores sin i18n ────────────────────────────────────────── */
+  label_describe_ciiu: { es: 'Describa la actividad',             en: 'Describe the activity' },
+  label_especif_nacio: { es: 'Especifique la nacionalidad',       en: 'Specify the nationality' },
+  error_select_ciiu:   { es: 'Seleccione una actividad válida',   en: 'Select a valid activity' },
 
 };
 
