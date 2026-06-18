@@ -438,6 +438,8 @@ function _validarGrupoBF(id) {
     [`field-bf_${id}_pais`,   b.COD_PAIS],
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
 
+  if (b.TIP_DOCU === 'OTR_TPDOC' && !b.OTR_TPDOC) { mostrarError(`field-bf_${id}_tipdoc`); ok = false; }
+
   if (b.COD_PAIS !== 'OTRO' && String(b.COD_PAIS) !== '52') {
     [
       [`field-bf_${id}_dept`, b.COD_DEPT],

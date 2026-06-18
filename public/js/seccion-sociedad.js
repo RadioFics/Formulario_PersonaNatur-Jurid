@@ -37,28 +37,57 @@ function onUbicacionChange(ubic) {
   actualizarSociedad('UBIC_SOC', ubic);
   limpiarError('field-soc_ubic');
 
-  const fieldPais  = document.getElementById('campo-soc_pais');
-  const fieldOtro  = document.getElementById('field-soc_pais_otro');
-  const selPais    = document.getElementById('soc_pais');
-  const tipEmpr    = document.getElementById('field-soc_tip_empr');
-  const grupEmpr   = document.getElementById('field-soc_grup_empr');
+  const fieldPais     = document.getElementById('campo-soc_pais');
+  const fieldOtro     = document.getElementById('field-soc_pais_otro');
+  const fieldPaisOrig = document.getElementById('campo-soc_pais_orig');
+  const fieldOtroOrig = document.getElementById('field-soc_pais_orig_otro');
+  const selPais       = document.getElementById('soc_pais');
+  const tipEmpr       = document.getElementById('field-soc_tip_empr');
+  const grupEmpr      = document.getElementById('field-soc_grup_empr');
+
+  // Ocultar todos los campos condicionales de país primero
+  if (fieldPais)     fieldPais.style.display     = 'none';
+  if (fieldOtro)     { fieldOtro.style.display = 'none'; fieldOtro.style.gridColumn = ''; }
+  if (fieldPaisOrig) fieldPaisOrig.style.display = 'none';
+  if (fieldOtroOrig) { fieldOtroOrig.style.display = 'none'; fieldOtroOrig.style.gridColumn = ''; }
 
   if (ubic === 'E') {
+    // Extranjera: mostrar selector de país (sin Colombia)
     fieldPais.style.display = '';
     if (tipEmpr)  tipEmpr.style.gridColumn  = '';
     if (grupEmpr) grupEmpr.style.gridColumn = '';
-    // Sociedad extranjera no puede ser de Colombia — quitar esa opción
     const colOpt = selPais ? selPais.querySelector(`option[value="${COD_COLOMBIA}"]`) : null;
     if (colOpt) colOpt.remove();
-  } else {
-    // Nacional / SC: restaurar soc_pais completo (con Colombia) si fue removida
+    // Limpiar estado SC
+    actualizarSociedad('COD_PAIS_ORIG_SOC', null);
+    actualizarSociedad('OTR_PAIS_ORIG_SOC', null);
+    const selOrig = document.getElementById('soc_pais_orig');
+    if (selOrig) selOrig.value = '';
+    const inpOrig = document.getElementById('soc_pais_orig_otro_txt');
+    if (inpOrig) inpOrig.value = '';
+  } else if (ubic === 'SC') {
+    // Sucursal en Colombia: mostrar selector de País de origen
+    if (fieldPaisOrig) fieldPaisOrig.style.display = '';
+    if (tipEmpr)  tipEmpr.style.gridColumn  = '';
+    if (grupEmpr) grupEmpr.style.gridColumn = '';
+    // Restaurar Colombia en soc_pais si fue eliminada
     if (selPais && !selPais.querySelector(`option[value="${COD_COLOMBIA}"]`)) {
       selPais.innerHTML = getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_ph_pais');
       agregarOpcionOtroAlSelect(selPais);
     }
-    fieldPais.style.display = 'none';
-    if (fieldOtro) fieldOtro.style.display = 'none';
-    if (fieldOtro) fieldOtro.style.gridColumn = '';
+    // Limpiar estado Extranjera
+    selPais.value = '';
+    actualizarSociedad('COD_PAIS_SOC', null);
+    actualizarSociedad('OTR_PAIS_SOC', null);
+    const inp = document.getElementById('soc_pais_otro_txt');
+    if (inp) inp.value = '';
+    limpiarError('campo-soc_pais');
+  } else {
+    // Nacional: restaurar Colombia en soc_pais si fue eliminada
+    if (selPais && !selPais.querySelector(`option[value="${COD_COLOMBIA}"]`)) {
+      selPais.innerHTML = getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_ph_pais');
+      agregarOpcionOtroAlSelect(selPais);
+    }
     selPais.value = '';
     actualizarSociedad('COD_PAIS_SOC', null);
     actualizarSociedad('OTR_PAIS_SOC', null);
@@ -67,6 +96,32 @@ function onUbicacionChange(ubic) {
     limpiarError('campo-soc_pais');
     if (tipEmpr)  tipEmpr.style.gridColumn  = '';
     if (grupEmpr) grupEmpr.style.gridColumn = 'span 2';
+    // Limpiar estado SC
+    actualizarSociedad('COD_PAIS_ORIG_SOC', null);
+    actualizarSociedad('OTR_PAIS_ORIG_SOC', null);
+    const selOrig = document.getElementById('soc_pais_orig');
+    if (selOrig) selOrig.value = '';
+    const inpOrig = document.getElementById('soc_pais_orig_otro_txt');
+    if (inpOrig) inpOrig.value = '';
+  }
+}
+
+/**
+ * Manejador del selector de País de origen (sección 3 — Sucursal en Colombia).
+ * Si se elige "OTRO", muestra el campo de texto libre.
+ */
+function onSocPaisOrigenChange(codPais) {
+  actualizarSociedad('COD_PAIS_ORIG_SOC', codPais || null);
+  limpiarError('campo-soc_pais_orig');
+
+  const fieldOtroOrig = document.getElementById('field-soc_pais_orig_otro');
+  if (codPais === 'OTRO') {
+    if (fieldOtroOrig) { fieldOtroOrig.style.display = ''; fieldOtroOrig.style.gridColumn = 'span 2'; }
+  } else {
+    if (fieldOtroOrig) { fieldOtroOrig.style.display = 'none'; fieldOtroOrig.style.gridColumn = ''; }
+    actualizarSociedad('OTR_PAIS_ORIG_SOC', null);
+    const inp = document.getElementById('soc_pais_orig_otro_txt');
+    if (inp) inp.value = '';
   }
 }
 
@@ -171,6 +226,12 @@ function validarSeccionSociedad() {
       mostrarError('field-soc_pais_otro'); ok = false;
     }
   }
+  if (d.UBIC_SOC === 'SC') {
+    if (!d.COD_PAIS_ORIG_SOC) { mostrarError('campo-soc_pais_orig'); ok = false; }
+    if (d.COD_PAIS_ORIG_SOC === 'OTRO' && !d.OTR_PAIS_ORIG_SOC) {
+      mostrarError('field-soc_pais_orig_otro'); ok = false;
+    }
+  }
 
   if (d.GRUP_EMPR === 'S') {
     if (!d.CTRL_DECLA) { mostrarError('field-soc_ctrl_decla'); ok = false; }
@@ -207,6 +268,7 @@ function validarYContinuarSociedad() {
 function limpiarSeccionSociedad() {
   formData.sociedad = {
     UBIC_SOC: 'N', COD_PAIS_SOC: null, OTR_PAIS_SOC: '',
+    COD_PAIS_ORIG_SOC: null, OTR_PAIS_ORIG_SOC: '',
     TIP_EMPR: null, GRUP_EMPR: null,
     CTRL_DECLA: null, CAL_GRUPO: null, DESC_GRUPO: '',
   };
@@ -232,6 +294,14 @@ function limpiarSeccionSociedad() {
   document.getElementById('campo-soc_pais').style.display = 'none';
   const fo = document.getElementById('field-soc_pais_otro');
   if (fo) { fo.style.display = 'none'; fo.style.gridColumn = ''; }
+  const foOrig = document.getElementById('campo-soc_pais_orig');
+  if (foOrig) foOrig.style.display = 'none';
+  const foOtroOrig = document.getElementById('field-soc_pais_orig_otro');
+  if (foOtroOrig) { foOtroOrig.style.display = 'none'; foOtroOrig.style.gridColumn = ''; }
+  const selOrig = document.getElementById('soc_pais_orig');
+  if (selOrig) selOrig.value = '';
+  const inpOrig = document.getElementById('soc_pais_orig_otro_txt');
+  if (inpOrig) inpOrig.value = '';
   const tipEmpr  = document.getElementById('field-soc_tip_empr');
   const grupEmpr = document.getElementById('field-soc_grup_empr');
   if (tipEmpr)  tipEmpr.style.gridColumn  = '';

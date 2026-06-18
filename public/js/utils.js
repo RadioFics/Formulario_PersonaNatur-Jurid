@@ -222,6 +222,7 @@ function convertirABuscable(selectId) {
         const it = document.createElement('div');
         it.className   = 'sb-item' + (o.value === sel.value ? ' sb-selected' : '');
         it.textContent = o.textContent;
+        it.title       = o.textContent;
         it.addEventListener('mousedown', e => {
           e.preventDefault();
           sel.value = o.value;

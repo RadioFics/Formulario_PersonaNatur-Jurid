@@ -102,21 +102,6 @@
     .btn-actualizar { background: #E5F5FA; color: var(--color-primary); border: 1px solid #89CDD9; }
     .btn-actualizar:hover { background: #C2E4EF; }
 
-    .consolidado-section {
-      width: 100%; background: #fffdf4; border: 1px solid #e8d08a;
-      border-radius: 10px; padding: 18px 24px;
-    }
-    .consolidado-section h3 { font-size: 0.95rem; font-weight: 700; color: var(--color-primary); margin: 0 0 12px; }
-    .consolidado-btns { display: flex; gap: 12px; flex-wrap: wrap; }
-    .btn-consolidado {
-      padding: 9px 18px; border-radius: 6px; border: 1px solid var(--color-primary);
-      background: var(--color-primary); color: #fff; font-size: 0.87rem; font-weight: 600;
-      cursor: pointer; transition: background .15s;
-    }
-    .btn-consolidado:hover { background: #8a6500; }
-    .btn-consolidado-sec { background: #fff; color: var(--color-primary); }
-    .btn-consolidado-sec:hover { background: #fff8e1; }
-
     .modal-overlay {
       display: none; position: fixed; inset: 0;
       background: rgba(0,0,0,.45); z-index: 1000;
@@ -158,6 +143,31 @@
     .btn-sm-primary:hover { background: var(--color-accent-dark); }
     .btn-sm-primary:disabled { background: #89CDD9; cursor: default; }
     .landing-footer { font-size: 0.78rem; color: #9e9e9e; text-align: center; }
+
+    /* ── Paso 2 del modal: código de edición ── */
+    #step-codigo { display: none; }
+    #step-codigo.show { display: block; }
+    .codigo-back-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .btn-back-step {
+      background: none; border: none; color: var(--color-primary);
+      font-size: 0.82rem; cursor: pointer; padding: 0; font-weight: 600;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .btn-back-step:hover { text-decoration: underline; }
+    .codigo-label { font-size: 0.85rem; color: #424242; margin-bottom: 10px; }
+    .codigo-input-row { display: flex; gap: 8px; margin-bottom: 4px; }
+    .codigo-input-row input {
+      flex: 1; padding: 10px 12px; font-size: 1rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; border: 1.5px solid var(--color-border);
+      border-radius: var(--radius); text-align: center; font-family: monospace;
+    }
+    .codigo-input-row input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(21,101,192,.15); }
+    #codigo-error { font-size: 0.82rem; color: #c62828; min-height: 18px; margin-top: 2px; }
+    .legacy-notice {
+      background: #fff3e0; border: 1px solid #ffcc80; border-radius: 6px;
+      padding: 12px 14px; font-size: 0.85rem; color: #e65100; line-height: 1.5;
+    }
+    .legacy-notice a { color: #e65100; font-weight: 700; }
   </style>
 </head>
 <body onload="initLang()">
@@ -215,19 +225,6 @@
     </div>
   </div>
 
-  <!-- Consolidados -->
-  <div class="consolidado-section">
-    <h3 data-i18n="idx_consol_title">📥 Descargar consolidado de registros</h3>
-    <div class="consolidado-btns">
-      <button class="btn-consolidado" type="button" onclick="descargarConsolidado('natural')">
-        <span data-i18n="idx_consol_nat_btn">⬇ Consolidado Persona Natural</span>
-      </button>
-      <button class="btn-consolidado btn-consolidado-sec" type="button" onclick="descargarConsolidado('juridica')">
-        <span data-i18n="idx_consol_jur_btn">⬇ Consolidado Persona Jurídica</span>
-      </button>
-    </div>
-  </div>
-
   <div class="landing-footer">
     <span data-i18n="idx_footer">SAGRILAFT &mdash; Persona Natural y Jurídica &nbsp;|&nbsp; Solo para uso interno</span>
   </div>
@@ -264,26 +261,54 @@
       <h3 data-i18n="idx_modal_upd_title">🔍 Buscar registro existente</h3>
       <button class="modal-close-btn" onclick="cerrarModalActualizar()" title="Cerrar">✕</button>
     </div>
-    <p data-i18n="idx_modal_upd_body">Ingrese el número de documento (cédula, NIT, etc.) del tercero que desea actualizar.</p>
-    <div class="search-row">
-      <input type="text" id="buscar-num-iden"
-             data-i18n-ph="idx_modal_upd_ph"
-             placeholder="Ej: 900123456" inputmode="numeric" maxlength="20"
-             oninput="this.value=this.value.replace(/\D/g,'')"
-             onkeydown="if(event.key==='Enter') buscarTercero()" />
-      <button onclick="buscarTercero()">
-        <span data-i18n="idx_modal_upd_search">Buscar</span>
-      </button>
+
+    <!-- PASO 1: Búsqueda -->
+    <div id="step-buscar">
+      <p data-i18n="idx_modal_upd_body">Ingrese el número de documento (cédula, NIT, etc.) del tercero que desea actualizar.</p>
+      <div class="search-row">
+        <input type="text" id="buscar-num-iden"
+               data-i18n-ph="idx_modal_upd_ph"
+               placeholder="Ej: 900123456" inputmode="numeric" maxlength="20"
+               oninput="this.value=this.value.replace(/\D/g,'')"
+               onkeydown="if(event.key==='Enter') buscarTercero()" />
+        <button onclick="buscarTercero()">
+          <span data-i18n="idx_modal_upd_search">Buscar</span>
+        </button>
+      </div>
+      <div id="actualizar-resultado"></div>
+      <div class="modal-actions">
+        <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">
+          <span data-i18n="idx_modal_upd_cancel">Cancelar</span>
+        </button>
+        <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled onclick="irAActualizar()">
+          <span data-i18n="idx_modal_upd_open">Abrir registro</span>
+        </button>
+      </div>
     </div>
-    <div id="actualizar-resultado"></div>
-    <div class="modal-actions">
-      <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">
-        <span data-i18n="idx_modal_upd_cancel">Cancelar</span>
-      </button>
-      <button class="btn-sm btn-sm-primary" id="btn-ir-actualizar" disabled onclick="irAActualizar()">
-        <span data-i18n="idx_modal_upd_open">Abrir registro</span>
-      </button>
+
+    <!-- PASO 2: Código de edición -->
+    <div id="step-codigo">
+      <div class="codigo-back-row">
+        <button class="btn-back-step" onclick="volverAlBuscar()">← Volver</button>
+      </div>
+      <p class="codigo-label">Para editar este registro ingrese el <strong>código de edición</strong> que recibió al guardar el formulario por primera vez.</p>
+      <div class="codigo-input-row">
+        <input type="text" id="inp-codigo-edicion"
+               placeholder="XXXX-XXXX" maxlength="9"
+               oninput="formatearCodigoInput(this)"
+               onkeydown="if(event.key==='Enter') verificarCodigoYRedirigir()" />
+      </div>
+      <div id="codigo-error"></div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn-sm btn-sm-secondary" onclick="cerrarModalActualizar()">
+          <span>Cancelar</span>
+        </button>
+        <button class="btn-sm btn-sm-primary" id="btn-verificar-codigo" onclick="verificarCodigoYRedirigir()">
+          <span>Continuar</span>
+        </button>
+      </div>
     </div>
+
   </div>
 </div>
 
@@ -296,21 +321,19 @@
   (function init() {
     if (sessionStorage.getItem(TERMS_KEY) === '1') _setTermsUI(true);
 
-    // Si viene desde formulario con ?accion=actualizar, abrir modal de actualizar automáticamente
+    // Si viene desde formulario con ?accion=actualizar, abrir modal automáticamente
     const _qp = new URLSearchParams(window.location.search);
     if (_qp.get('accion') === 'actualizar' && sessionStorage.getItem(TERMS_KEY) === '1') {
       abrirModalActualizar();
       const numIdenParam = _qp.get('numIden');
       if (numIdenParam) {
         const inp = document.getElementById('buscar-num-iden');
-        if (inp) {
-          inp.value = numIdenParam;
-          buscarTercero();
-        }
+        if (inp) { inp.value = numIdenParam; buscarTercero(); }
       }
     }
   })();
 
+  /* ── Términos ── */
   function _setTermsUI(accepted) {
     document.getElementById('chk-terms').checked = accepted;
     document.getElementById('terms-badge').classList.toggle('visible', accepted);
@@ -321,21 +344,17 @@
     if (accepted) sessionStorage.setItem(TERMS_KEY, '1');
     else          sessionStorage.removeItem(TERMS_KEY);
   }
-
   function onTermsChange(checked) { _setTermsUI(checked); }
-
   function onCardClick(event, url) {
     if (sessionStorage.getItem(TERMS_KEY) !== '1') {
       event.preventDefault(); mostrarAvisoTerminos(); return false;
     }
     return true;
   }
-
   function onActualizarClick() {
     if (sessionStorage.getItem(TERMS_KEY) !== '1') { mostrarAvisoTerminos(); return; }
     abrirModalActualizar();
   }
-
   function mostrarAvisoTerminos() {
     const box = document.querySelector('.terms-box');
     box.style.outline = '2px solid #e53935';
@@ -343,20 +362,44 @@
     document.getElementById('chk-terms').focus();
   }
 
+  /* ── Modal política ── */
   function abrirModalPolitica(e) { if (e) e.preventDefault(); document.getElementById('modal-politica').classList.add('show'); }
   function cerrarModalPolitica() { document.getElementById('modal-politica').classList.remove('show'); }
   function aceptarDesdeModal() { cerrarModalPolitica(); _setTermsUI(true); }
   document.getElementById('modal-politica').addEventListener('click', function(e) { if (e.target === this) cerrarModalPolitica(); });
 
-  function abrirModalActualizar() { document.getElementById('modal-actualizar').classList.add('show'); document.getElementById('buscar-num-iden').focus(); }
+  /* ── Modal actualizar — helpers de paso ── */
+  function _mostrarPaso(paso) {
+    document.getElementById('step-buscar').style.display = paso === 1 ? '' : 'none';
+    document.getElementById('step-codigo').classList.toggle('show', paso === 2);
+  }
+
+  function abrirModalActualizar() {
+    document.getElementById('modal-actualizar').classList.add('show');
+    _mostrarPaso(1);
+    document.getElementById('buscar-num-iden').focus();
+  }
+
   function cerrarModalActualizar() {
     document.getElementById('modal-actualizar').classList.remove('show');
     document.getElementById('buscar-num-iden').value = '';
     document.getElementById('actualizar-resultado').innerHTML = '';
     document.getElementById('btn-ir-actualizar').disabled = true;
+    document.getElementById('inp-codigo-edicion').value = '';
+    document.getElementById('codigo-error').textContent = '';
     _terceroEncontrado = null;
+    _mostrarPaso(1);
   }
 
+  function volverAlBuscar() {
+    document.getElementById('inp-codigo-edicion').value = '';
+    document.getElementById('codigo-error').textContent = '';
+    _mostrarPaso(1);
+  }
+
+  document.getElementById('modal-actualizar').addEventListener('click', function(e) { if (e.target === this) cerrarModalActualizar(); });
+
+  /* ── Paso 1: Buscar ── */
   async function buscarTercero() {
     const numIden = document.getElementById('buscar-num-iden').value.trim();
     const resEl   = document.getElementById('actualizar-resultado');
@@ -370,29 +413,85 @@
       if (data.existe) {
         _terceroEncontrado = data;
         const tipLabel = data.TIP_TERC === 'N' ? 'Persona Natural' : 'Persona Jurídica';
-        resEl.innerHTML = `<div class="result-found"><strong>${data.NOM_COMP || data.NOM_TERC || '—'}</strong>Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo doc.: ${data.TIP_TPDOC || '—'}<br><span style="font-size:.8rem;color:#20A7C9">${tipLabel} — Registro encontrado ✔</span></div>`;
-        btnIr.disabled = false;
+        if (!data.tieneCodEdit) {
+          // Registro legacy sin código — sólo admin puede editar
+          resEl.innerHTML = `<div class="result-found">
+            <strong>${data.NOM_COMP || '—'}</strong>
+            Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; ${tipLabel}<br>
+            <span style="font-size:.8rem;color:#e65100;margin-top:4px;display:block">
+              Este registro no tiene código de edición asignado.<br>
+              Contacte al administrador del sistema para editarlo.
+              &nbsp;<a href="/admin" style="color:#e65100;font-weight:700">Ir al panel admin →</a>
+            </span>
+          </div>`;
+          btnIr.disabled = true;
+        } else {
+          resEl.innerHTML = `<div class="result-found">
+            <strong>${data.NOM_COMP || '—'}</strong>
+            Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo doc.: ${data.TIP_TPDOC || '—'}<br>
+            <span style="font-size:.8rem;color:#20A7C9">${tipLabel} — Registro encontrado ✔</span>
+          </div>`;
+          btnIr.disabled = false;
+        }
       } else {
         resEl.innerHTML = `<div class="result-not-found">No se encontró ningún registro con ese número de documento.<br><a href="formulario.html" style="color:#c62828;font-weight:600">¿Desea crear uno nuevo?</a></div>`;
       }
-    } catch (err) {
+    } catch (_) {
       resEl.innerHTML = '<p class="result-error">Error al conectar con el servidor.</p>';
     }
   }
 
+  /* ── Paso 2: Código de edición ── */
   function irAActualizar() {
-    if (!_terceroEncontrado) return;
-    const tipTerc = _terceroEncontrado.TIP_TERC || '';
-    window.location.href = `formulario.html?modo=actualizar&numIden=${encodeURIComponent(_terceroEncontrado.NUM_IDEN)}&tipTerc=${encodeURIComponent(tipTerc)}`;
+    if (!_terceroEncontrado || !_terceroEncontrado.tieneCodEdit) return;
+    _mostrarPaso(2);
+    setTimeout(() => document.getElementById('inp-codigo-edicion').focus(), 50);
   }
 
-  document.getElementById('modal-actualizar').addEventListener('click', function(e) { if (e.target === this) cerrarModalActualizar(); });
+  function formatearCodigoInput(input) {
+    let v = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4, 8);
+    input.value = v;
+  }
 
-  function descargarConsolidado(tipo) {
-    const url = tipo === 'natural' ? '/api/exportar-consolidado-natural' : '/api/exportar-consolidado-juridica';
-    const a = document.createElement('a');
-    a.href = url; a.download = '';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  async function verificarCodigoYRedirigir() {
+    const codigo = document.getElementById('inp-codigo-edicion').value.trim().toUpperCase();
+    const errEl  = document.getElementById('codigo-error');
+    const btnV   = document.getElementById('btn-verificar-codigo');
+    errEl.textContent = '';
+
+    if (!codigo || codigo.length < 9) {
+      errEl.textContent = 'Ingrese el código completo (formato XXXX-XXXX).';
+      return;
+    }
+    btnV.disabled = true;
+    btnV.textContent = 'Verificando…';
+
+    try {
+      const resp = await fetch('/api/verificar-codigo-edicion', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ numIden: _terceroEncontrado.NUM_IDEN, codigoEdicion: codigo }),
+      });
+      const data = await resp.json();
+
+      if (data.valido) {
+        sessionStorage.setItem('sarlaft_edit_code', codigo);
+        const tipTerc = _terceroEncontrado.TIP_TERC || '';
+        window.location.href = `formulario.html?modo=actualizar&numIden=${encodeURIComponent(_terceroEncontrado.NUM_IDEN)}&tipTerc=${encodeURIComponent(tipTerc)}`;
+      } else {
+        if (data.razon === 'legacy' || data.legacy) {
+          errEl.textContent = 'Este registro no tiene código asignado. Contacte al administrador.';
+        } else {
+          errEl.textContent = 'Código incorrecto. Verifique e intente de nuevo.';
+        }
+      }
+    } catch (_) {
+      errEl.textContent = 'Error de conexión. Intente de nuevo.';
+    } finally {
+      btnV.disabled = false;
+      btnV.textContent = 'Continuar';
+    }
   }
 </script>
 

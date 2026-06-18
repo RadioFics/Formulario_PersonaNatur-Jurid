@@ -23,6 +23,7 @@ function _rfCampos(tipRepr) {
     REVI_FIRMA:  'N',
     RAZ_FIRMA:   '',
     TIP_DOCU_FIR: null,
+    OTR_TPDOC_FIR: null,
     NUM_DOCU_FIR: '',
     NOM_REVI:    '', APE_REVI: '', RAZ_REVI: '',
     TIP_DOCU:    null, NUM_DOCU: '', FEC_EXPE: '',
@@ -150,6 +151,11 @@ function onTieneFirmaChange(id, valor) {
 function _rfTdOpts()    { return getOpcionesHTML('/api/catalogo/tipos-documento?todos=1', 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
 function _rfTdNitOpts() { return getOpcionesHTML('/api/catalogo/tipos-documento',        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'); }
 function _rfPaOpts()    { return getOpcionesHTML('/api/catalogo/paises', 'COD_PAIS', 'NOM_PAIS', 'select_placeholder'); }
+function _rfFirmaTdOpts() {
+  const nitOpts = getOpcionesHTML('/api/catalogo/tipos-documento', 'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder');
+  const label   = typeof t === 'function' ? t('otro_tipdoc_opt') : 'Sin asignar / Otro tipo';
+  return nitOpts + `<option value="OTR_TPDOC">${label}</option>`;
+}
 
 /* ── HTML de un revisor ──────────────────────────────────────────────────────── */
 function _rfMiembroHTML(r) {
@@ -309,9 +315,12 @@ function _rfMiembroHTML(r) {
           <div class="field" id="field-rf_${id}_firma_tipdoc">
             <label><span data-i18n="rf_firm_tipdoc">${typeof t==='function'?t('rf_firm_tipdoc'):'Tipo de documento de la firma'}</span><span class="req">*</span></label>
             <select id="rf_${id}_firma_tipdoc"
-                    onchange="actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
-              ${_rfTdOpts()}
+                    onchange="onRFFirmaTipdocChange(${id},this.value);actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
+              ${_rfFirmaTdOpts()}
             </select>
+            <input type="text" id="rf_${id}_firma_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                   data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
+                   oninput="actualizarRF(${id},'OTR_TPDOC_FIR',this.value)" />
             <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
           </div>
           <div class="field" id="field-rf_${id}_firma_numdoc">
@@ -382,7 +391,13 @@ function _hydrateRFFields(r, el) {
     if (yes) yes.checked = true;
     onTieneFirmaChange(id, 'S');
     set(`#rf_${id}_firma_raz`,    r.RAZ_FIRMA);
+    // Reconstruct synthetic OTR_TPDOC value if free-text was stored
+    if (r.OTR_TPDOC_FIR && !r.TIP_DOCU_FIR) r.TIP_DOCU_FIR = 'OTR_TPDOC';
     set(`#rf_${id}_firma_tipdoc`, r.TIP_DOCU_FIR);
+    if (r.TIP_DOCU_FIR === 'OTR_TPDOC') {
+      const inpOtroFir = el.querySelector(`#rf_${id}_firma_tipdoc_otro`);
+      if (inpOtroFir) { inpOtroFir.style.display = ''; inpOtroFir.value = r.OTR_TPDOC_FIR || ''; }
+    }
     set(`#rf_${id}_firma_numdoc`, r.NUM_DOCU_FIR);
   }
 
@@ -570,6 +585,8 @@ function _validarMiembroRF(r) {
     [`field-rf_${id}_pais`,   r.COD_PAIS],
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
 
+  if (r.TIP_DOCU === 'OTR_TPDOC' && !r.OTR_TPDOC) { mostrarError(`field-rf_${id}_tipdoc`); ok = false; }
+
   if (r.COD_PAIS !== 'OTRO') {
     [
       [`field-rf_${id}_dept`, r.COD_DEPT],
@@ -583,6 +600,7 @@ function _validarMiembroRF(r) {
   if (r.REVI_FIRMA === 'S') {
     if (!r.RAZ_FIRMA || !String(r.RAZ_FIRMA).trim()) { mostrarError(`field-rf_${id}_firma_raz`); ok = false; }
     if (!r.TIP_DOCU_FIR) { mostrarError(`field-rf_${id}_firma_tipdoc`); ok = false; }
+    if (r.TIP_DOCU_FIR === 'OTR_TPDOC' && !r.OTR_TPDOC_FIR) { mostrarError(`field-rf_${id}_firma_tipdoc`); ok = false; }
     if (!r.NUM_DOCU_FIR || !String(r.NUM_DOCU_FIR).trim()) { mostrarError(`field-rf_${id}_firma_numdoc`); ok = false; }
   }
   return ok;
@@ -626,6 +644,16 @@ function onRFTipdocChange(id, val) {
     if (inp) inp.value = '';
     const r = _rfGet(id);
     if (r) r.OTR_TPDOC = null;
+  }
+}
+
+function onRFFirmaTipdocChange(id, val) {
+  const inp = document.getElementById(`rf_${id}_firma_tipdoc_otro`);
+  if (inp) inp.style.display = val === 'OTR_TPDOC' ? '' : 'none';
+  if (val !== 'OTR_TPDOC') {
+    if (inp) inp.value = '';
+    const r = _rfGet(id);
+    if (r) r.OTR_TPDOC_FIR = null;
   }
 }
 

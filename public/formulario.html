@@ -28,6 +28,14 @@
       background: var(--color-accent, #00897b);
       color: #fff;
     }
+
+    /* Indicador visual de campo bloqueado en modo actualizar */
+    .campo-bloqueado {
+      background: #f5f5f5 !important;
+      color: #757575 !important;
+      cursor: not-allowed !important;
+      border-color: #e0e0e0 !important;
+    }
   </style>
   <script>
     /* Gate: redirigir al inicio si no se aceptaron los T&C */
@@ -107,6 +115,10 @@
                   onchange="actualizarFormData('basica','COD_TPDOC',this.value); limpiarError('field-cod_tpdoc')">
             <option value="">— Seleccione —</option>
           </select>
+          <input type="text" id="cod_tpdoc_otro" class="otro-inp" maxlength="100"
+                 style="display:none;margin-top:6px"
+                 data-i18n-ph="field_specify_doc" placeholder="Especifique el tipo de documento"
+                 oninput="actualizarFormData('basica','OTR_TPDOC',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
@@ -242,7 +254,7 @@
         </div>
 
         <div class="field" id="field-dir_terc">
-          <label for="dir_terc"><span id="dir_terc_label" data-i18n="sec3_dir_oficina">Dirección oficina principal (Registrada la sociedad)</span> <span class="req">*</span></label>
+          <label for="dir_terc"><span id="dir_terc_label" data-i18n="sec3_dir_oficina">Dirección oficina principal</span> <span class="req">*</span></label>
           <input type="text" id="dir_terc" maxlength="255"
                  data-i18n-ph="sec3_dir_oficina_ph" placeholder="Ej: Cra 7 # 45-12 Of. 301"
                  oninput="actualizarFormData('basica','DIR_TERC',this.value); limpiarError('field-dir_terc')" />
@@ -282,7 +294,9 @@
 
         <!-- Jurídica: email SAGRILAFT va en GN_JURID -->
         <div class="field solo-juridica" id="field-mail_sarl">
-          <label for="mail_sarl"><span data-i18n="sec1_mail_sarl">Email gestión SAGRILAFT</span> <span class="req">*</span></label>
+          <label for="mail_sarl"><span data-i18n="sec1_mail_sarl">Email gestión SAGRILAFT</span>
+            <span class="ic-info" data-i18n-tip="sec1_mail_sarl_tip" data-tip="El correo puede coincidir con el correo electrónico registrado en el punto anterior">i</span>
+            <span class="req">*</span></label>
           <input type="email" id="mail_sarl" maxlength="100"
                  data-i18n-ph="sec1_mail_sarl_ph" placeholder="SAGRILAFT@empresa.com"
                  oninput="actualizarFormData('basica','MAIL_SARL',this.value); limpiarError('field-mail_sarl')" />
@@ -294,7 +308,9 @@
       <div class="grid-2 solo-juridica">
 
         <div class="field" id="field-cod_ciiu">
-          <label for="cod_ciiu"><span data-i18n="sec1_ciiu">Actividad principal CIIU</span> <span class="req">*</span></label>
+          <label for="cod_ciiu"><span data-i18n="sec1_ciiu">Actividad principal CIIU</span>
+            <span class="ic-info" data-i18n-tip="sec1_ciiu_tip_j" data-tip="Debe coincidir con los registrados en RUT, cámara de comercio y/o documento equivalente">i</span>
+            <span class="req">*</span></label>
           <select id="cod_ciiu"
                   onchange="actualizarFormData('basica','COD_CIIU',this.value); limpiarError('field-cod_ciiu')">
             <option value="">— Seleccione actividad —</option>
@@ -339,15 +355,10 @@
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
-        <div class="field">
-          <label for="act_princ_n"><span data-i18n="sec1_act_princ">Actividad económica principal</span></label>
-          <input type="text" id="act_princ_n" maxlength="100"
-                 data-i18n-ph="ph_act_princ" placeholder="Descripción breve de la actividad"
-                 oninput="actualizarNatur('ACT_PRINC',this.value)" />
-        </div>
-
         <div class="field" id="field-cod_ciiu_n">
-          <label for="cod_ciiu_n"><span data-i18n="sec1_ciiu">Actividad CIIU</span> <span class="req">*</span></label>
+          <label for="cod_ciiu_n"><span data-i18n="sec1_ciiu">Actividad CIIU</span>
+            <span class="ic-info" data-i18n-tip="sec1_ciiu_tip_n" data-tip="Debe coincidir de acuerdo con el RUT o con declaración de renta">i</span>
+            <span class="req">*</span></label>
           <select id="cod_ciiu_n"
                   onchange="actualizarNatur('COD_CIIU',this.value); limpiarError('field-cod_ciiu_n'); onCiiuNChange(this.value)">
             <option value="">— Seleccione actividad —</option>
@@ -582,6 +593,29 @@
           <input type="text" id="soc_pais_otro_txt" maxlength="100" data-i18n-ph="country_name_ph"
                  placeholder="Nombre del país"
                  oninput="actualizarSociedad('OTR_PAIS_SOC',this.value)" />
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
+        </div>
+
+        <!-- País de origen — visible solo cuando Ubicación = Sucursal en Colombia -->
+        <div class="field" id="campo-soc_pais_orig" style="display:none">
+          <label for="soc_pais_orig">
+            <span data-i18n="sec3_pais_origen">País de origen</span>
+            <span class="ic-info" data-i18n-tip="sec3_pais_origen_tip" data-tip="País que establece la sucursal en Colombia">i</span>
+            <span class="req">*</span>
+          </label>
+          <select id="soc_pais_orig"
+                  onchange="onSocPaisOrigenChange(this.value); limpiarError('campo-soc_pais_orig')">
+            <option value="" data-i18n="select_ph_pais">— Seleccione país —</option>
+          </select>
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
+        </div>
+
+        <!-- Especifique el país de origen — visible solo cuando soc_pais_orig = OTRO -->
+        <div class="field" id="field-soc_pais_orig_otro" style="display:none">
+          <label><span data-i18n="field_specify_pais">Especifique el país</span> <span class="req">*</span></label>
+          <input type="text" id="soc_pais_orig_otro_txt" maxlength="100" data-i18n-ph="country_name_ph"
+                 placeholder="Nombre del país"
+                 oninput="actualizarSociedad('OTR_PAIS_ORIG_SOC',this.value)" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
@@ -1016,10 +1050,10 @@
     <div class="accordion-body">
 
       <p class="section-hint" style="background:#E5F5FA;border-left:3px solid var(--color-accent);padding:8px 12px;border-radius:4px;margin-bottom:4px">
-        <strong data-i18n="nota_lbl">Nota:</strong> <span data-i18n="sec10_note">Los valores de ingresos, egresos y demás campos financieros corresponden a cifras mensuales en pesos colombianos (COP), salvo los totales de activos, pasivos y patrimonio que son valores de balance.</span>
+        <strong data-i18n="nota_lbl">Nota:</strong> <span data-i18n="sec10_note">Los valores de ingresos, egresos y demás campos financieros corresponden a cifras anuales en pesos colombianos (COP), salvo los totales de activos, pasivos y patrimonio que son valores de balance.</span>
       </p>
 
-      <!-- Fila 1 — Activos / Ingresos mensuales / Pasivos -->
+      <!-- Fila 1 — Activos / Ingresos anuales / Pasivos -->
       <div class="grid-3">
 
         <div class="field" id="field-act_total">
@@ -1033,7 +1067,7 @@
         </div>
 
         <div class="field" id="field-ing_mens">
-          <label for="ing_mens"><span data-i18n="sec10_ing_mens">Ingresos mensuales (COP)</span> <span class="req">*</span></label>
+          <label for="ing_mens"><span data-i18n="sec10_ing_mens">Ingresos anuales (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="ing_mens" inputmode="decimal" placeholder="0,00"
@@ -1054,11 +1088,11 @@
 
       </div>
 
-      <!-- Fila 2 — Egresos mensuales / Patrimonio / Otros ingresos -->
+      <!-- Fila 2 — Egresos anuales / Patrimonio / Otros ingresos -->
       <div class="grid-3">
 
         <div class="field" id="field-egr_mens">
-          <label for="egr_mens"><span data-i18n="sec10_egr_mens">Egresos mensuales (COP)</span> <span class="req">*</span></label>
+          <label for="egr_mens"><span data-i18n="sec10_egr_mens">Egresos anuales (COP)</span> <span class="req">*</span></label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="egr_mens" inputmode="decimal" placeholder="0,00"
@@ -1199,52 +1233,73 @@
       <span class="accordion-title">
         <span class="section-num">13</span>
         <span data-i18n="sec13_title">Actividades con activos virtuales</span>
-        <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado."
-              data-i18n-tip="sec13_tip">i</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
 
     <div class="accordion-body">
 
-      <div class="checkbox-lista">
-
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_va_fiat"
-                 onchange="actualizarActividad('ACT_VA_FIAT', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_fiat">Intercambio entre activos virtuales y monedas fiduciarias</span>
+      <div class="field field-radio">
+        <label>
+          <span data-i18n="sec13_oper_va">¿Realiza operaciones con activos virtuales?</span>
+          <span class="ic-info" data-tip="Activos virtuales: representaciones digitales de valor que pueden negociarse o transferirse digitalmente (criptomonedas como Bitcoin, Ethereum, tokens, etc.). VASP: Proveedor de Servicios de Activos Virtuales (Virtual Asset Service Provider). Marque las actividades que realiza o ha realizado."
+                data-i18n-tip="sec13_tip">i</span>
+          <span class="req">*</span>
         </label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="oper_va" value="S"
+                   onchange="actualizarOperVA('S')">
+            <span data-i18n="yes">Sí</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="oper_va" value="N" checked
+                   onchange="actualizarOperVA('N')">
+            <span data-i18n="no">No</span>
+          </label>
+        </div>
+      </div>
 
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_va_va"
-                 onchange="actualizarActividad('ACT_VA_VA', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_va">Intercambio entre una o más formas de activos virtuales</span>
-        </label>
+      <div id="va-checkboxes-wrap" style="display:none">
+        <div class="checkbox-lista">
 
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_trans"
-                 onchange="actualizarActividad('ACT_TRANS', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_trans">Transferencia de activos virtuales</span>
-        </label>
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_va_fiat"
+                   onchange="actualizarActividad('ACT_VA_FIAT', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_fiat">Intercambio entre activos virtuales y monedas fiduciarias</span>
+          </label>
 
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_custo"
-                 onchange="actualizarActividad('ACT_CUSTO', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_custo">Custodia y/o administración de activos virtuales</span>
-        </label>
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_va_va"
+                   onchange="actualizarActividad('ACT_VA_VA', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_va">Intercambio entre una o más formas de activos virtuales</span>
+          </label>
 
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_serv_fin"
-                 onchange="actualizarActividad('ACT_SERV_FIN', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_serv_fin">Participación en servicios financieros relacionados con activos virtuales</span>
-        </label>
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_trans"
+                   onchange="actualizarActividad('ACT_TRANS', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_trans">Transferencia de activos virtuales</span>
+          </label>
 
-        <label class="checkbox-opcion">
-          <input type="checkbox" id="act_serv_vap"
-                 onchange="actualizarActividad('ACT_SERV_VAP', this.checked ? 'S' : 'N')" />
-          <span data-i18n="sec13_act_serv_vap">Servicios de proveedores de activos virtuales (VASP)</span>
-        </label>
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_custo"
+                   onchange="actualizarActividad('ACT_CUSTO', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_custo">Custodia y/o administración de activos virtuales</span>
+          </label>
 
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_serv_fin"
+                   onchange="actualizarActividad('ACT_SERV_FIN', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_serv_fin">Participación en servicios financieros relacionados con activos virtuales</span>
+          </label>
+
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="act_serv_vap"
+                   onchange="actualizarActividad('ACT_SERV_VAP', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_act_serv_vap">Servicios de proveedores de activos virtuales (VASP)</span>
+          </label>
+
+        </div>
       </div>
 
       <!-- Certificación obligatoria -->
@@ -1293,7 +1348,7 @@
         <div class="doc-item">
           <div class="doc-label">
             <span data-i18n="sec14_rut">RUT — Registro Único Tributario</span>
-            <span class="ic-info" data-tip="Registro Único Tributario actualizado. Puede descargarlo desde el portal de la DIAN (www.dian.gov.co) o solicitarlo en cualquier punto de atención.">i</span>
+            <span class="ic-info" data-tip="Registro Único Tributario actualizado. Vigencia no mayor a 30 días. Puede descargarlo desde el portal de la DIAN o solicitarlo en cualquier punto de atención.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
@@ -1309,7 +1364,7 @@
         <div class="doc-item">
           <div class="doc-label">
             <span data-i18n="sec14_cert_banc">Certificación bancaria</span>
-            <span class="ic-info" data-tip="Documento oficial emitido por la entidad bancaria que confirma la existencia y titularidad de la cuenta. Debe estar firmado y sellado por el banco, con fecha de expedición no mayor a 30 días.">i</span>
+            <span class="ic-info" data-tip="Documento oficial emitido por la entidad bancaria que confirma la existencia y titularidad de la cuenta. Debe estar firmado por la entidad bancaria, con fecha de expedición no mayor a 30 días.">i</span>
             <small data-i18n="sec14_vigencia">(vigencia menor a 30 días)</small>
           </div>
           <div class="doc-upload-wrap">
@@ -1325,8 +1380,8 @@
         <!-- Certificado de existencia — solo Jurídica -->
         <div class="doc-item solo-juridica">
           <div class="doc-label">
-            <span data-i18n="sec14_cert_exis">Certificado de existencia y representación</span>
-            <span class="ic-info" data-tip="Emitido por la Cámara de Comercio del domicilio principal. Acredita la existencia legal de la empresa, objeto social, representante legal y fecha de constitución. Expedición no mayor a 30 días.">i</span>
+            <span data-i18n="sec14_cert_exis">Certificado de existencia y representación legal y/o documento equivalente</span>
+            <span class="ic-info" data-tip="Emitido por la Cámara de Comercio del domicilio principal y/o entidad gubernamental encargada del registro. Acredita la existencia legal de la empresa, objeto social, representante legal y fecha de constitución. Expedición no mayor a 30 días.">i</span>
             <small data-i18n="sec14_max30">(máx. 30 días de expedición)</small>
           </div>
           <div class="doc-upload-wrap">
@@ -1342,8 +1397,8 @@
         <!-- Documento de identidad — Natural: único; Jurídica: uno por RL (dinámico) -->
         <div class="doc-item solo-natural" style="display:none">
           <div class="doc-label">
-            <span data-i18n="sec14_doc_id_rl">Copia del documento de identidad de la persona natural</span>
-            <span class="ic-info" data-tip="Copia legible de la cédula de ciudadanía o documento de identidad vigente. Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
+            <span data-i18n="sec14_doc_id_n">Copia del documento de identidad</span>
+            <span class="ic-info" data-tip="Copia legible del documento de identidad vigente. Debe coincidir con el documento informado en la sección 1 (información básica de la persona natural). Incluya ambas caras si la información relevante está distribuida en ellas.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
@@ -1378,7 +1433,7 @@
           <div class="doc-label">
             <span data-i18n="sec14_est_fin_1">Estados financieros</span>
             <small data-i18n="sec14_penultimo">(penúltimo y último año fiscal)</small>
-            <span class="ic-info" data-tip="Balance general y estado de resultados de los dos últimos años fiscales, firmados por el Representante Legal y el Contador o Revisor Fiscal.">i</span>
+            <span class="ic-info" data-tip="Balance general y estado de resultados de los dos últimos años fiscales. Deben estar firmados por el Representante Legal y el Contador o Revisor Fiscal.">i</span>
           </div>
           <div class="doc-multi-upload">
             <div class="doc-upload-wrap">
@@ -1404,7 +1459,7 @@
         <div class="doc-item solo-juridica">
           <div class="doc-label">
             <span data-i18n="sec14_cert_acci">Certificado de composición accionaria</span>
-            <span class="ic-info" data-tip="Documento que refleja la estructura de capital: nombre, identificación y porcentaje de participación de cada socio o accionista. Puede emitirlo el Revisor Fiscal, Contador o el Representante Legal bajo su responsabilidad.">i</span>
+            <span class="ic-info" data-tip="Documento que refleja la estructura de capital: nombre, identificación y porcentaje de participación de cada socio o accionista. Puede emitirlo el Revisor Fiscal, Contador o el Representante Legal. El documento debe estar firmado.">i</span>
           </div>
           <div class="doc-upload-wrap">
             <label class="btn-upload" tabindex="0">
@@ -1459,8 +1514,12 @@
     <ul class="error-panel-list" id="error-panel-list"></ul>
   </div>
 
-  <!-- ── Botón de envío ──────────────────────────────────────────────────── -->
+  <!-- ── Botones finales ─────────────────────────────────────────────────── -->
   <div class="btn-submit-wrap">
+    <button class="btn-save-draft" id="btn-save-draft" type="button" disabled
+            onclick="guardarProgreso()" title="Complete el tipo y número de documento antes de guardar el progreso">
+      <span>💾 Guardar progreso</span>
+    </button>
     <button class="btn-submit" id="btn-submit" type="button"
             onclick="onSubmitClick()">
       <span data-i18n="btn_submit">Enviar formulario</span>
@@ -1571,6 +1630,7 @@
 <script src="js/seccion-va.js"></script>
 <script src="js/seccion-bf.js"></script>
 <script src="js/seccion-docs.js"></script>
+<script src="js/borrador-servidor.js"></script>
 <script src="js/guardar.js"></script>
 <script src="js/guardar-natur.js"></script>
 <script src="js/app.js"></script>
@@ -1666,6 +1726,77 @@ async function verificarDuplicado(numIden) {
   };
 })();
 
+/* ── Campos de identificación bloqueados en modo actualizar ─────────────── */
+
+function _bloquearCamposIdentificacion() {
+  ['tip_terc', 'cod_tpdoc', 'num_iden'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('disabled', 'disabled');
+    el.classList.add('campo-bloqueado');
+    const label = el.closest('.field')?.querySelector('label');
+    if (label && !label.querySelector('.lock-icon')) {
+      const lock = document.createElement('span');
+      lock.className = 'lock-icon';
+      lock.textContent = ' 🔒';
+      lock.style.cssText = 'font-size:.75rem;opacity:.6;vertical-align:middle';
+      label.appendChild(lock);
+    }
+  });
+  // Ocultar también el input "otro" de tipo de documento si estuviera visible
+  const otroInp = document.getElementById('cod_tpdoc_otro');
+  if (otroInp) { otroInp.setAttribute('disabled', 'disabled'); otroInp.classList.add('campo-bloqueado'); }
+}
+
+/* ── Botón "Guardar progreso" — habilitado solo cuando hay tipo + número ── */
+
+function _actualizarEstadoBotonGuardar() {
+  const btn     = document.getElementById('btn-save-draft');
+  if (!btn) return;
+
+  const tpdoc   = (document.getElementById('cod_tpdoc')?.value  || '').trim();
+  const numIden = (document.getElementById('num_iden')?.value   || '').trim();
+  const otroEl  = document.getElementById('cod_tpdoc_otro');
+  const otroVis = otroEl && otroEl.style.display !== 'none';
+  const otroVal = otroVis ? (otroEl.value || '').trim() : 'ok'; // 'ok' = no requerido
+
+  const listo = tpdoc !== '' && numIden !== '' && otroVal !== '';
+  btn.disabled = !listo;
+  btn.title = listo
+    ? 'Guarda el progreso en el servidor para retomarlo desde otro dispositivo'
+    : 'Complete el tipo y número de documento antes de guardar el progreso';
+}
+
+// Enganchar los cambios en los campos de identificación
+document.addEventListener('DOMContentLoaded', function() {
+  ['cod_tpdoc', 'cod_tpdoc_otro', 'num_iden'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', _actualizarEstadoBotonGuardar);
+  });
+  _actualizarEstadoBotonGuardar(); // estado inicial
+});
+
+/* ── Guardar progreso (borrador local + servidor) ───────────────────────── */
+async function guardarProgreso() {
+  const btn = document.getElementById('btn-save-draft');
+  if (btn) btn.disabled = true;
+
+  if (typeof guardarBorrador === 'function') guardarBorrador();
+
+  if (typeof guardarBorradorServidor === 'function') {
+    const result = await guardarBorradorServidor();
+    if (result && result.ok) {
+      mostrarToast('Progreso guardado en el servidor ✔', 'success');
+    } else {
+      mostrarToast('Progreso guardado localmente. No se pudo sincronizar con el servidor.', 'warning');
+    }
+  } else {
+    mostrarToast('Progreso guardado localmente ✔', 'success');
+  }
+
+  _actualizarEstadoBotonGuardar();
+}
+
 /* ── Manejo de ?modo=actualizar&numIden=XXX ─────────────────────────────── */
 (function handleQueryParams() {
   const params  = new URLSearchParams(window.location.search);
@@ -1680,12 +1811,9 @@ async function verificarDuplicado(numIden) {
       banner.innerHTML = '🔄 <strong>Modo Actualizar</strong> — Cargando datos del documento <strong>' + numIden + '</strong>. Modifique los campos necesarios y guarde.';
       header.appendChild(banner);
     }
-    window.addEventListener('catalogosListos', function() {
-      const input = document.getElementById('num_iden');
-      if (input) {
-        input.value = numIden;
-        input.dispatchEvent(new Event('input'));
-      }
+    // Bloquear campos una vez que app.js termina de hidratar el formulario
+    window.addEventListener('registroCargado', function() {
+      _bloquearCamposIdentificacion();
     }, { once: true });
   }
 })();

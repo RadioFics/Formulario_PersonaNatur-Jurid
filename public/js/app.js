@@ -41,11 +41,11 @@ async function inicializar() {
         _repoblarTipoDocumento('J');
       }),
 
-      // Tipos de vinculación
+      // Tipos de vinculación — se filtra/reordena tras cargar según modoPersona
       cargarCatalogo(
         '/api/catalogo/vinculaciones', 'cod_vinc',
         'COD_VINC', 'NOM_VINC', 'select_ph_vinc'
-      ),
+      ).then(() => _filtrarVinculaciones('J')),
 
       // Países (Colombia primero)
       cargarCatalogo(
@@ -53,11 +53,11 @@ async function inicializar() {
         'COD_PAIS', 'NOM_PAIS', 'select_ph_pais'
       ),
 
-      // Actividades CIIU — select buscable, muestra "COD — Nombre"
+      // Actividades CIIU — solo jurídicas (excluye códigos 00XX de personas naturales)
       cargarCatalogo(
         '/api/catalogo/ciiu', 'cod_ciiu',
         'COD_CIIU', 'NOM_CIIU', 'select_ph_act',
-        {}, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
+        { tipo: 'J' }, d => `${d.COD_CIIU} — ${d.NOM_CIIU}`
       ).then(() => {
         const sel = document.getElementById('cod_ciiu');
         if (sel && !sel.querySelector('option[value="OTRO"]')) {
@@ -86,6 +86,12 @@ async function inicializar() {
       // Países para el desplegable del campo "País" en sección 3
       cargarCatalogo(
         '/api/catalogo/paises', 'soc_pais',
+        'COD_PAIS', 'NOM_PAIS', 'select_ph_pais'
+      ),
+
+      // País de origen — visible solo cuando Ubicación = Sucursal en Colombia
+      cargarCatalogo(
+        '/api/catalogo/paises', 'soc_pais_orig',
         'COD_PAIS', 'NOM_PAIS', 'select_ph_pais'
       ),
 
@@ -165,6 +171,11 @@ function _activarCamposOtros() {
     const el = document.getElementById('otr_vinc'); if (el) el.value = '';
   });
 
+  _activarSiblingOtro('cod_tpdoc',      'cod_tpdoc_otro',              () => {
+    actualizarFormData('basica', 'OTR_TPDOC', null);
+    const el = document.getElementById('cod_tpdoc_otro'); if (el) el.value = '';
+  });
+
   _activarSiblingOtro('cod_ciiu',       'field-cod_ciiu_otro',         () => {
     actualizarFormData('basica', 'OTR_CIIU', null);
     const el = document.getElementById('otr_ciiu'); if (el) el.value = '';
@@ -199,13 +210,16 @@ function _activarCamposOtros() {
  */
 function _agregarOtroPais() {
   const cacheKey = new URL('/api/catalogo/paises', window.location.origin).toString();
-  if (catalogCache[cacheKey] && !catalogCache[cacheKey].find(p => p.COD_PAIS === 'OTRO')) {
-    catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)', NOM_EN: 'Other country (not listed)' });
+  if (catalogCache[cacheKey]) {
+    // Eliminar entradas de BD que comiencen con "Otro/Other" para evitar duplicados
+    catalogCache[cacheKey] = catalogCache[cacheKey].filter(
+      p => !/^otro|^other/i.test((p.NOM_PAIS || '').trim())
+    );
+    if (!catalogCache[cacheKey].find(p => p.COD_PAIS === 'OTRO')) {
+      catalogCache[cacheKey].push({ COD_PAIS: 'OTRO', NOM_PAIS: 'Otro pa\xEDs (no listado)', NOM_EN: 'Other country (not listed)' });
+    }
   }
-  // Añadir a todos los selects estáticos de país ya presentes en el DOM
-  // (cump_p_pais / cump_s_pais ya no existen — los oficiales son dinámicos; rl_s_* tampoco existe)
-  ['cod_pais_exp', 'rl_p_pais', 'soc_pais', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
-  // La lógica de mostrar/ocultar el campo libre de sección 1 está en _handlePaisExpChange.
+  ['cod_pais_exp', 'rl_p_pais', 'soc_pais', 'soc_pais_orig', 'cod_nacio_n'].forEach(agregarOpcionOtroAlSelect);
 }
 
 /**
@@ -244,6 +258,55 @@ function _handlePaisExpChange(v) {
   }
 }
 
+/* ── Filtrado y orden de vinculaciones según tipo de persona ────────────────── */
+
+/**
+ * Reordena y filtra las opciones del select #cod_vinc según modoPersona.
+ * Jurídica: elimina "Vinculación laboral", ordena alfabéticamente, "Cliente" al final.
+ * Natural: restaura todas las opciones en el orden original de la API.
+ * @param {'J'|'N'} tipTerc
+ */
+function _filtrarVinculaciones(tipTerc) {
+  const sel = document.getElementById('cod_vinc');
+  if (!sel) return;
+
+  const cacheKey = new URL('/api/catalogo/vinculaciones', window.location.origin).toString();
+  const todos    = catalogCache[cacheKey] || [];
+  if (!todos.length) return;
+
+  const valActual = sel.value;
+  const _t = key => (typeof t === 'function' ? t(key) || key : key);
+
+  sel.innerHTML = `<option value="">${_t('select_ph_vinc')}</option>`;
+
+  if (tipTerc === 'J') {
+    const sinLaboralYCliente = todos.filter(d => d.COD_VINC !== 10 && d.COD_VINC !== 3);
+    sinLaboralYCliente.sort((a, b) => {
+      const na = (window._currentLang === 'en' && a.NOM_EN) ? a.NOM_EN : a.NOM_VINC;
+      const nb = (window._currentLang === 'en' && b.NOM_EN) ? b.NOM_EN : b.NOM_VINC;
+      return na.localeCompare(nb, 'es');
+    });
+    const cliente = todos.find(d => d.COD_VINC === 3);
+    const ordenados = cliente ? [...sinLaboralYCliente, cliente] : sinLaboralYCliente;
+    ordenados.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.COD_VINC;
+      opt.textContent = (window._currentLang === 'en' && d.NOM_EN) ? d.NOM_EN : d.NOM_VINC;
+      sel.appendChild(opt);
+    });
+  } else {
+    todos.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.COD_VINC;
+      opt.textContent = (window._currentLang === 'en' && d.NOM_EN) ? d.NOM_EN : d.NOM_VINC;
+      sel.appendChild(opt);
+    });
+  }
+
+  // Restaurar selección si sigue siendo válida en el nuevo filtro
+  sel.value = valActual;
+}
+
 /* ── Selects con buscador — activar después de cargar catálogos ─────────────── */
 function _activarBuscadores() {
   // Sección 1 — Básica (geo + vinculación + tipo doc + CIIU)
@@ -254,7 +317,7 @@ function _activarBuscadores() {
   ['rl_p_tipdoc', 'rl_p_pais', 'rl_p_dept', 'rl_p_mpio'].forEach(convertirABuscable);
 
   // Sección 3 — Sociedad
-  ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_pais'].forEach(convertirABuscable);
+  ['soc_ubic', 'soc_tip_empr', 'soc_grup_empr', 'soc_pais', 'soc_pais_orig'].forEach(convertirABuscable);
 
   // Sección 5 — Cumplimiento: cump_sis_preve es ahora checkboxes; no usa convertirABuscable.
 
@@ -276,12 +339,13 @@ async function recargarCatalogosIdioma() {
     { endpoint: '/api/catalogo/vinculaciones',           id: 'cod_vinc',     val: 'COD_VINC',  txt: 'NOM_VINC',  ph: 'select_ph_vinc' },
     { endpoint: '/api/catalogo/paises',                  id: 'cod_pais_exp', val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
     { endpoint: '/api/catalogo/paises',                  id: 'rl_p_pais',    val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_placeholder' },
-    { endpoint: '/api/catalogo/paises',                  id: 'soc_pais',     val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
-    { endpoint: '/api/catalogo/paises',                  id: 'cod_nacio_n',  val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    { endpoint: '/api/catalogo/paises',                  id: 'soc_pais',      val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    { endpoint: '/api/catalogo/paises',                  id: 'soc_pais_orig', val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
+    { endpoint: '/api/catalogo/paises',                  id: 'cod_nacio_n',   val: 'COD_PAIS',  txt: 'NOM_PAIS',  ph: 'select_ph_pais' },
     // cump_sis_preve es checkboxes; se re-renderiza con cargarCheckboxesSisPrev() abajo.
     { endpoint: '/api/catalogo/tipos-cuenta',            id: 'cod_tpcta',    val: 'COD_TPCTA', txt: 'NOM_TPCTA', ph: 'select_placeholder' },
-    // cod_ciiu / cod_ciiu_n requieren NOM_EN en MAE_CIIU (ver db_scripts/ciiu_nom_en.sql)
-    { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu',     val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
+    // cod_ciiu (jurídica) excluye códigos 00XX de personas naturales; cod_ciiu_n los incluye todos
+    { endpoint: '/api/catalogo/ciiu?tipo=J',             id: 'cod_ciiu',     val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
     { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu_n',   val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
   ];
 
@@ -302,6 +366,11 @@ async function recargarCatalogosIdioma() {
   if (typeof _repoblarTipoDocumento === 'function') {
     const tipTerc = (document.getElementById('tip_terc') || {}).value || formData.basica?.TIP_TERC || 'J';
     _repoblarTipoDocumento(tipTerc);
+  }
+
+  // Re-aplicar el filtro/orden de vinculaciones según el modo activo
+  if (typeof _filtrarVinculaciones === 'function') {
+    _filtrarVinculaciones(window.modoPersona || 'J');
   }
 
   // Re-renderizar checkboxes de SIS_PREVE (usan NOM_EN si idioma = en)
@@ -391,6 +460,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Hidrata los inputs "otros" si hay borrador o modo actualizar
   const _otrMap = {
     otr_vinc:       formData.basica?.OTR_VINC,
+    cod_tpdoc_otro: formData.basica?.OTR_TPDOC,
     otr_ciiu:       formData.basica?.OTR_CIIU,
     otr_socie:      formData.sociedad?.OTR_SOCIE,
     otr_preve:      formData.cumplimiento?.OTR_PREVE,
@@ -436,6 +506,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       banner.style.cssText = 'background:#fff3cd;color:#856404;border:1px solid #ffc107;border-radius:6px;padding:8px 14px;margin-bottom:12px;font-size:.875rem;font-weight:500;display:block';
       header.insertAdjacentElement('afterend', banner);
     }
+    // Notificar a formulario.html que el registro fue cargado e hidratado
+    window.dispatchEvent(new Event('registroCargado'));
   }
 });
 
@@ -446,10 +518,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function _cargarRegistroExistente(numIden) {
   try {
     mostrarToast('Cargando registro…', 'info');
-    const resp = await fetch(`/api/cargar-completo/${encodeURIComponent(numIden)}`);
+    const _editCode = sessionStorage.getItem('sarlaft_edit_code') || '';
+    const resp = await fetch(`/api/cargar-completo/${encodeURIComponent(numIden)}`, {
+      headers: _editCode ? { 'X-Codigo-Edicion': _editCode } : {},
+    });
     if (!resp.ok) {
       const d = await resp.json().catch(() => ({}));
-      mostrarToast(d.error || `Error al cargar el registro (${resp.status}).`, 'error');
+      if (d.error === 'codigoRequerido' || d.error === 'codigoInvalido') {
+        mostrarToast('Código de edición inválido o ausente. Regrese al inicio e intente de nuevo.', 'error');
+      } else {
+        mostrarToast(d.error || `Error al cargar el registro (${resp.status}).`, 'error');
+      }
       return;
     }
     const datos = await resp.json();
@@ -463,6 +542,7 @@ async function _cargarRegistroExistente(numIden) {
       if (datos.basica) Object.assign(formData.basica, {
         TIP_TERC:    'N',
         COD_TPDOC:   datos.basica.COD_TPDOC,
+        OTR_TPDOC:   datos.basica.OTR_TPDOC,
         NUM_IDEN:    datos.basica.NUM_IDEN,
         COD_VINC:    datos.basica.COD_VINC,
         DIR_TERC:    datos.basica.DIR_TERC,
@@ -490,7 +570,12 @@ async function _cargarRegistroExistente(numIden) {
     if (datos.financiera)    Object.assign(formData.financiera,  datos.financiera);
     if (datos.pep)           Object.assign(formData.pep,         datos.pep);
     if (datos.actividades)   Object.assign(formData.actividades, datos.actividades);
-    if (Array.isArray(datos.paises))        formData.paises        = datos.paises;
+    if (Array.isArray(datos.paises)) {
+      formData.paises = datos.paises.map(p => ({
+        COD_PAIS: p.COD_PAIS ? String(p.COD_PAIS) : (p.OTR_PAIS ? 'OTRO' : null),
+        OTR_PAIS: p.OTR_PAIS || '',
+      }));
+    }
     if (Array.isArray(datos.bancaria))      formData.bancaria      = datos.bancaria;
     if (Array.isArray(datos.accionistas))   formData.accionistas   = datos.accionistas;
     if (Array.isArray(datos.beneficiarios)) formData.beneficiarios = datos.beneficiarios;
@@ -729,6 +814,11 @@ async function hidratarFormularioVisual() {
     if (pepRadioCar) pepRadioCar.checked = true;
 
     // Sección 11B: Actividades
+    const operVA = formData.actividades.OPER_VA || 'N';
+    const radioOperVA = document.querySelector(`input[name="oper_va"][value="${operVA}"]`);
+    if (radioOperVA) radioOperVA.checked = true;
+    const vaWrap = document.getElementById('va-checkboxes-wrap');
+    if (vaWrap) vaWrap.style.display = operVA === 'S' ? '' : 'none';
     ['act_va_fiat','act_va_va','act_trans','act_custo','act_serv_fin','act_serv_vap','cert_info']
       .forEach(id => {
         const el = document.getElementById(id);

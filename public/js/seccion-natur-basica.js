@@ -52,9 +52,16 @@ function _repoblarTipoDocumento(tipTerc) {
     sel.appendChild(opt);
   });
 
+  // Agregar opción "Otro tipo" solo en modo Natural
+  if (tipTerc === 'N') {
+    agregarOpcionOtroAlTipdoc(sel);
+  }
+
   if (tipTerc === 'J' && filtrados.length === 1) {
     sel.value = filtrados[0].COD_TPDOC;
     actualizarFormData('basica', 'COD_TPDOC', filtrados[0].COD_TPDOC);
+    // Notificar cambio para que _activarSiblingOtro oculte el campo libre de tipo doc
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
   } else {
     // Limpiar selección al cambiar a Natural
     actualizarFormData('basica', 'COD_TPDOC', null);
@@ -127,7 +134,7 @@ function onTipTercChange(val) {
   const dirLabel = document.getElementById('dir_terc_label');
   if (dirLabel) dirLabel.textContent = esN
     ? 'Dirección'
-    : 'Dirección oficina principal (Registrada la sociedad)';
+    : 'Dirección oficina principal';
 
   // ── Divider de geografía ──────────────────────────────────────────────────
   const divGeo = document.getElementById('divider-geo');
@@ -176,6 +183,9 @@ function onTipTercChange(val) {
   // ── Repoblar select de tipo de documento según persona ───────────────────
   _repoblarTipoDocumento(val);
 
+  // ── Filtrar/reordenar vinculaciones según persona ─────────────────────────
+  if (typeof _filtrarVinculaciones === 'function') _filtrarVinculaciones(val);
+
   // ── Colapsar secciones Jurídica que quedaron abiertas ─────────────────────
   if (esN) {
     ['accordion-rl', 'accordion-sociedad', 'accordion-paises',
@@ -190,7 +200,10 @@ function onTipTercChange(val) {
   // Email ocupa el slot que Jurídica usa para "Email SAGRILAFT" → span 2
   const mailField = document.getElementById('field-dir_mail');
   if (mailField) mailField.style.gridColumn = esN ? 'span 2' : '';
-  // Actividad CIIU ocupa el slot vacío en la fila de datos adicionales → span 2
+  // Nacionalidad y CIIU se distribuyen simétricamente (2 col cada uno)
+  // al no existir el campo abierto "Actividad económica principal"
+  const nacioNField = document.getElementById('field-cod_nacio_n');
+  if (nacioNField) nacioNField.style.gridColumn = esN ? 'span 2' : '';
   const ciiuNField = document.getElementById('field-cod_ciiu_n');
   if (ciiuNField) ciiuNField.style.gridColumn = esN ? 'span 2' : '';
 

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restablecer contraseña — SAGRILAFT</title>
+  <style>
+    :root { --color-primary: #A07800; --color-accent: #C69500; --radius: 8px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f5; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #fff; border-radius: var(--radius);
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      padding: 40px 36px; width: 100%; max-width: 420px;
+    }
+    h1 { font-size: 1.25rem; color: var(--color-primary); margin-bottom: 6px; }
+    .sub { font-size: .85rem; color: #757575; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: .85rem; font-weight: 600; color: #424242; margin-bottom: 6px; }
+    .field input {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid #bdbdbd; border-radius: var(--radius); font-size: .9rem;
+    }
+    .field input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(198,149,0,.15); }
+    .btn {
+      width: 100%; padding: 11px;
+      background: var(--color-accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: .95rem; font-weight: 700; cursor: pointer;
+    }
+    .btn:hover { background: var(--color-primary); }
+    .btn:disabled { background: #bdbdbd; cursor: not-allowed; }
+    .msg { margin-top: 14px; font-size: .85rem; text-align: center; min-height: 20px; }
+    .msg.error { color: #c62828; }
+    .msg.ok { color: #2e7d32; }
+    .back { display: block; margin-top: 18px; text-align: center; font-size: .82rem; color: #90caf9; }
+    .back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="card" id="card-form">
+  <h1>Restablecer contraseña</h1>
+  <p class="sub">Ingrese su nueva contraseña. Mínimo 8 caracteres.</p>
+  <div class="field">
+    <label for="inp-clave">Nueva contraseña</label>
+    <input type="password" id="inp-clave" autocomplete="new-password"
+           onkeydown="if(event.key==='Enter') document.getElementById('inp-clave2').focus()" />
+  </div>
+  <div class="field">
+    <label for="inp-clave2">Confirmar contraseña</label>
+    <input type="password" id="inp-clave2" autocomplete="new-password"
+           onkeydown="if(event.key==='Enter') doReset()" />
+  </div>
+  <button class="btn" id="btn-reset" onclick="doReset()">Guardar nueva contraseña</button>
+  <div class="msg" id="msg"></div>
+  <a href="/admin" class="back">← Volver al inicio de sesión</a>
+</div>
+
+<div class="card" id="card-ok" style="display:none;text-align:center">
+  <h1 style="color:#2e7d32">Contraseña actualizada</h1>
+  <p class="sub" style="margin-top:12px">Su contraseña ha sido restablecida con éxito.</p>
+  <a href="/admin" class="btn" style="display:inline-block;margin-top:24px;text-decoration:none;text-align:center">
+    Ir al inicio de sesión
+  </a>
+</div>
+
+<script>
+'use strict';
+const _token = new URLSearchParams(window.location.search).get('token') || '';
+if (!_token) {
+  document.getElementById('msg').textContent = 'Token no encontrado. Solicite un nuevo enlace.';
+  document.getElementById('msg').className   = 'msg error';
+  document.getElementById('btn-reset').disabled = true;
+}
+
+async function doReset() {
+  const clave  = document.getElementById('inp-clave').value;
+  const clave2 = document.getElementById('inp-clave2').value;
+  const msgEl  = document.getElementById('msg');
+  const btn    = document.getElementById('btn-reset');
+  msgEl.textContent = ''; msgEl.className = 'msg';
+
+  if (!clave || !clave2) { msgEl.textContent = 'Complete los campos.'; msgEl.className = 'msg error'; return; }
+  if (clave !== clave2)  { msgEl.textContent = 'Las contraseñas no coinciden.'; msgEl.className = 'msg error'; return; }
+  if (clave.length < 8)  { msgEl.textContent = 'Mínimo 8 caracteres.'; msgEl.className = 'msg error'; return; }
+
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const resp = await fetch('/api/admin/restablecer', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ token: _token, clave, clave2 }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      document.getElementById('card-form').style.display = 'none';
+      document.getElementById('card-ok').style.display   = '';
+    } else {
+      msgEl.textContent = data.error || 'Error al restablecer la contraseña.';
+      msgEl.className   = 'msg error';
+    }
+  } catch (_) {
+    msgEl.textContent = 'Error de conexión.';
+    msgEl.className   = 'msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar nueva contraseña';
+  }
+}
+</script>
+</body>
+</html>

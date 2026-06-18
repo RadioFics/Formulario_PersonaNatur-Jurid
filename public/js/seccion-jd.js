@@ -89,9 +89,12 @@ function _jdMiembroHTML(m) {
       <div class="grid-4">
         <div class="field" style="grid-column: span 2" id="field-jd_${id}_tipmiem">
           <label><span data-i18n="field_tip_miembro">${typeof t==='function'?t('field_tip_miembro'):'Tipo de miembro'}</span> <span class="req">*</span></label>
-          <input type="text" id="jd_${id}_tipmiem" maxlength="100"
-                 data-i18n-ph="field_tip_miembro_ph" placeholder="${typeof t==='function'?t('field_tip_miembro_ph'):'Ej: Titular, Suplente de consejo…'}"
-                 oninput="actualizarJDMiem(${id},'TIP_MIEM',this.value);limpiarError('field-jd_${id}_tipmiem')" />
+          <select id="jd_${id}_tipmiem"
+                  onchange="actualizarJDMiem(${id},'TIP_MIEM',this.value);limpiarError('field-jd_${id}_tipmiem')">
+            <option value="" data-i18n="select_placeholder">${typeof t==='function'?t('select_placeholder'):'— Seleccione —'}</option>
+            <option value="P" data-i18n="role_principal">${typeof t==='function'?t('role_principal'):'Principal'}</option>
+            <option value="S" data-i18n="role_suplente">${typeof t==='function'?t('role_suplente'):'Suplente'}</option>
+          </select>
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
         </div>
         <div class="field" id="field-jd_${id}_nom">
@@ -394,6 +397,7 @@ function _validarMiembroJD(m) {
   ];
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  if (m.TIP_DOCU === 'OTR_TPDOC' && !m.OTR_TPDOC) { mostrarError(`field-jd_${id}_tipdoc`); ok = false; }
   if (m.COD_PAIS !== 'OTRO') {
     [
       [`field-jd_${id}_dept`, m.COD_DEPT],

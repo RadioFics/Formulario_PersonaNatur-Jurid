@@ -421,6 +421,7 @@ function validarBloqueRL(idx) {
   ];
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
+  if (d.TIP_DOCU === 'OTR_TPDOC' && !d.OTR_TPDOC) { mostrarError(pid('tipdoc')); ok = false; }
   if (!d.MAIL_REPR || !esEmailValido(d.MAIL_REPR)) { mostrarError(pid('mail')); ok = false; }
   return ok;
 }

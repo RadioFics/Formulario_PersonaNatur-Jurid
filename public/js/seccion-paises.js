@@ -43,23 +43,24 @@ function renderListaPaises() {
   container.innerHTML = '';
 
   formData.paises.forEach((entrada, idx) => {
-    // Normalizar a string para evitar discrepancias de tipo entre el DOM (siempre string)
-    // y los valores del cache (pueden ser number si la columna SQL es INT/NUMERIC).
     const entradaCod   = entrada.COD_PAIS != null ? String(entrada.COD_PAIS) : null;
     const elegidosCods = yaElegidos.map(c => String(c));
 
-    // Construir opciones: incluir el propio valor + los no elegidos en otras entradas
     const usaEN = document.documentElement.lang === 'en';
     let opciones = `<option value="">${typeof t==='function'?t('select_ph_pais'):'— Seleccione país —'}</option>`;
     todosPaises.forEach(p => {
-      const pCod         = String(p.COD_PAIS);
+      const pCod           = String(p.COD_PAIS);
       const ocupadoPorOtro = elegidosCods.includes(pCod) && pCod !== entradaCod;
       if (!ocupadoPorOtro) {
-        const sel      = pCod === entradaCod ? ' selected' : '';
-        const nomPais  = usaEN && p.NOM_EN ? p.NOM_EN : p.NOM_PAIS;
+        const sel     = pCod === entradaCod ? ' selected' : '';
+        const nomPais = usaEN && p.NOM_EN ? p.NOM_EN : p.NOM_PAIS;
         opciones += `<option value="${pCod}"${sel}>${nomPais}</option>`;
       }
     });
+
+    const esOtro     = entradaCod === 'OTRO';
+    const otroPh     = typeof t==='function' ? t('country_name_ph') : 'Nombre del país';
+    const otroPaisV  = entrada.OTR_PAIS || '';
 
     const fila = document.createElement('div');
     fila.className = 'pais-entry';
@@ -70,6 +71,11 @@ function renderListaPaises() {
                 onchange="onPaisOperacionChange(${idx}, this.value)">
           ${opciones}
         </select>
+        <input type="text" id="pais_op_${idx}_otro" maxlength="100"
+               style="display:${esOtro ? '' : 'none'};margin-top:6px"
+               placeholder="${otroPh}"
+               value="${otroPaisV.replace(/"/g, '&quot;')}"
+               oninput="onPaisOpOtroInput(${idx}, this.value)" />
         <span class="error-msg" data-i18n="sec4_err_pais">${typeof t==='function'?t('sec4_err_pais'):'Seleccione un país'}</span>
       </div>
       <button class="btn-eliminar-pais"
@@ -79,6 +85,11 @@ function renderListaPaises() {
     `;
     container.appendChild(fila);
   });
+}
+
+/** Actualiza OTR_PAIS para una entrada de la lista de países. */
+function onPaisOpOtroInput(idx, valor) {
+  if (formData.paises[idx]) formData.paises[idx].OTR_PAIS = valor || '';
 }
 
 /* ── Manejadores de eventos ─────────────────────────────────────────────────── */
@@ -91,8 +102,8 @@ function renderListaPaises() {
  * @param {string} valor  COD_PAIS seleccionado ('' si vacío)
  */
 function onPaisOperacionChange(idx, valor) {
-  // Normaliza a string para mantener consistencia con DOM (siempre string)
   formData.paises[idx].COD_PAIS = valor ? String(valor) : null;
+  if (valor !== 'OTRO') formData.paises[idx].OTR_PAIS = '';
   limpiarError(`field-pais_op_${idx}`);
   renderListaPaises();   // recalcula exclusiones en todas las entradas
 }
@@ -101,7 +112,7 @@ function onPaisOperacionChange(idx, valor) {
  * Agrega una nueva entrada vacía al final de la lista y desplaza la vista.
  */
 function agregarPais() {
-  formData.paises.push({ COD_PAIS: null });
+  formData.paises.push({ COD_PAIS: null, OTR_PAIS: '' });
   renderListaPaises();
 
   // Scroll suave hasta la nueva entrada
@@ -137,6 +148,9 @@ function validarSeccionPaises() {
     if (!entrada.COD_PAIS) {
       mostrarError(`field-pais_op_${idx}`);
       ok = false;
+    } else if (entrada.COD_PAIS === 'OTRO' && !entrada.OTR_PAIS) {
+      mostrarError(`field-pais_op_${idx}`);
+      ok = false;
     }
   });
   return ok;
@@ -164,7 +178,7 @@ function validarYContinuarPaises() {
 
 /** Resetea la lista a una sola entrada vacía. */
 function limpiarSeccionPaises() {
-  formData.paises = [{ COD_PAIS: null }];
+  formData.paises = [{ COD_PAIS: null, OTR_PAIS: '' }];
   renderListaPaises();
   mostrarToast(typeof t==='function'?t('toast_sec_clear'):'Sección limpiada.', 'success');
 }

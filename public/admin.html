@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel de Administración — SAGRILAFT</title>
+  <style>
+    :root {
+      --color-primary: #A07800;
+      --color-accent:  #C69500;
+      --color-bg:      #f5f5f5;
+      --radius:        8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--color-bg); min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+
+    /* ── Tarjetas ── */
+    .card {
+      background: #fff; border-radius: var(--radius);
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      padding: 40px 36px; width: 100%; max-width: 440px;
+    }
+    .card h1 { font-size: 1.3rem; color: var(--color-primary); margin-bottom: 6px; }
+    .card .subtitle { font-size: .85rem; color: #757575; margin-bottom: 24px; }
+
+    /* ── Campos ── */
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: .85rem; font-weight: 600; color: #424242; margin-bottom: 5px; }
+    .field input {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid #bdbdbd; border-radius: var(--radius); font-size: .9rem;
+      transition: border-color .15s;
+    }
+    .field input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(198,149,0,.15); }
+    .field-hint { font-size: .76rem; color: #9e9e9e; margin-top: 4px; }
+
+    /* ── Botones ── */
+    .btn-main {
+      width: 100%; padding: 11px;
+      background: var(--color-accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: .95rem; font-weight: 700; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-main:hover  { background: var(--color-primary); }
+    .btn-main:disabled { background: #bdbdbd; cursor: not-allowed; }
+
+    /* ── Mensaje de error/estado ── */
+    .msg { min-height: 20px; font-size: .83rem; margin-top: 10px; text-align: center; }
+    .msg.error   { color: #c62828; }
+    .msg.success { color: #2e7d32; }
+    .msg.info    { color: #0d47a1; }
+
+    /* ── Links de navegación entre vistas ── */
+    .nav-links { margin-top: 18px; text-align: center; font-size: .82rem; display: flex; flex-direction: column; gap: 6px; }
+    .nav-links a { color: var(--color-accent); cursor: pointer; text-decoration: none; }
+    .nav-links a:hover { text-decoration: underline; color: var(--color-primary); }
+    .nav-sep { color: #bdbdbd; }
+
+    /* ── Panel admin ── */
+    #view-panel { max-width: 560px; }
+    .admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .admin-header h1 { font-size: 1.2rem; color: var(--color-primary); }
+    .admin-user { font-size: .82rem; color: #757575; margin-top: 2px; }
+    .btn-logout {
+      padding: 7px 14px; background: #fff; color: #757575;
+      border: 1px solid #e0e0e0; border-radius: var(--radius);
+      font-size: .83rem; cursor: pointer; transition: background .12s;
+    }
+    .btn-logout:hover { background: #ffebee; color: #c62828; border-color: #ef9a9a; }
+    .section-title {
+      font-size: .92rem; font-weight: 700; color: #424242;
+      margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;
+    }
+    .consolidado-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+    .btn-consolidado {
+      flex: 1; min-width: 180px; padding: 14px 16px;
+      background: var(--color-accent); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: .9rem; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 8px; justify-content: center;
+      transition: background .15s;
+    }
+    .btn-consolidado:hover { background: var(--color-primary); }
+    .btn-consolidado.secondary {
+      background: #fff; color: var(--color-primary); border: 1px solid var(--color-accent);
+    }
+    .btn-consolidado.secondary:hover { background: #fff8e1; }
+    .toast {
+      display: none; margin-top: 12px; padding: 10px 14px;
+      border-radius: var(--radius); font-size: .84rem;
+    }
+    .toast.info  { background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; display: block; }
+    .toast.error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; display: block; }
+    .admin-footer { margin-top: 24px; font-size: .78rem; color: #bdbdbd; text-align: center; }
+    .back-link { display: inline-block; margin-top: 10px; font-size: .82rem; color: #90caf9; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+
+    /* ── Aviso pendiente ── */
+    .pending-notice {
+      background: #fff3e0; border: 1px solid #ffcc80; border-radius: var(--radius);
+      padding: 14px 16px; font-size: .86rem; color: #e65100; margin-bottom: 18px; line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ VISTA: LOGIN ══════════════════════════════════════════════════════════ -->
+<div class="card" id="view-login">
+  <h1>Panel de Administración</h1>
+  <p class="subtitle">SAGRILAFT — Acceso restringido al personal autorizado</p>
+  <div class="field">
+    <label for="inp-usr">Usuario</label>
+    <input type="text" id="inp-usr" autocomplete="username"
+           onkeydown="if(event.key==='Enter') document.getElementById('inp-pwd').focus()" />
+  </div>
+  <div class="field">
+    <label for="inp-pwd">Contraseña</label>
+    <input type="password" id="inp-pwd" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter') doLogin()" />
+  </div>
+  <button class="btn-main" id="btn-login" onclick="doLogin()">Ingresar</button>
+  <div class="msg" id="login-msg"></div>
+  <div class="nav-links">
+    <a onclick="mostrarVista('register')">Solicitar acceso — Crear cuenta</a>
+    <a onclick="mostrarVista('recuperar')">Olvidé mi contraseña</a>
+    <a href="/" class="nav-link" style="color:#9e9e9e">← Volver al formulario</a>
+  </div>
+</div>
+
+<!-- ══ VISTA: REGISTRO ═══════════════════════════════════════════════════════ -->
+<div class="card" id="view-register" style="display:none">
+  <h1>Solicitar acceso</h1>
+  <p class="subtitle">Su solicitud será enviada al administrador general para aprobación.</p>
+  <div class="field">
+    <label for="reg-usr">Nombre de usuario</label>
+    <input type="text" id="reg-usr" autocomplete="username"
+           oninput="this.value=this.value.replace(/[^a-zA-Z0-9._-]/g,'')" />
+    <div class="field-hint">Solo letras, números, . _ - Sin espacios.</div>
+  </div>
+  <div class="field">
+    <label for="reg-nom">Nombre completo</label>
+    <input type="text" id="reg-nom" autocomplete="name" />
+  </div>
+  <div class="field">
+    <label for="reg-email">Correo electrónico personal</label>
+    <input type="email" id="reg-email" autocomplete="email" />
+    <div class="field-hint">Se usará para notificaciones y recuperación de contraseña.</div>
+  </div>
+  <div class="field">
+    <label for="reg-pwd">Contraseña</label>
+    <input type="password" id="reg-pwd" autocomplete="new-password" />
+    <div class="field-hint">Mínimo 8 caracteres.</div>
+  </div>
+  <div class="field">
+    <label for="reg-pwd2">Confirmar contraseña</label>
+    <input type="password" id="reg-pwd2" autocomplete="new-password"
+           onkeydown="if(event.key==='Enter') doRegistrar()" />
+  </div>
+  <button class="btn-main" id="btn-registrar" onclick="doRegistrar()">Enviar solicitud</button>
+  <div class="msg" id="reg-msg"></div>
+  <div class="nav-links">
+    <a onclick="mostrarVista('login')">← Volver al inicio de sesión</a>
+  </div>
+</div>
+
+<!-- ══ VISTA: RECUPERAR CONTRASEÑA ══════════════════════════════════════════ -->
+<div class="card" id="view-recuperar" style="display:none">
+  <h1>Recuperar contraseña</h1>
+  <p class="subtitle">Ingrese su nombre de usuario y le enviaremos un enlace a su correo registrado.</p>
+  <div class="field">
+    <label for="rec-usr">Nombre de usuario</label>
+    <input type="text" id="rec-usr" autocomplete="username"
+           onkeydown="if(event.key==='Enter') doRecuperar()" />
+  </div>
+  <button class="btn-main" id="btn-recuperar" onclick="doRecuperar()">Enviar enlace</button>
+  <div class="msg" id="rec-msg"></div>
+  <div class="nav-links">
+    <a onclick="mostrarVista('login')">← Volver al inicio de sesión</a>
+  </div>
+</div>
+
+<!-- ══ VISTA: PANEL ADMIN ════════════════════════════════════════════════════ -->
+<div class="card" id="view-panel" style="display:none">
+  <div class="admin-header">
+    <div>
+      <h1>Panel de Administración</h1>
+      <div class="admin-user" id="admin-user-label">—</div>
+    </div>
+    <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+  </div>
+
+  <div class="section-title">📥 Descargar consolidado de registros</div>
+  <div class="consolidado-grid">
+    <button class="btn-consolidado" onclick="descargarConsolidado('natural')">
+      ⬇ Consolidado Persona Natural
+    </button>
+    <button class="btn-consolidado secondary" onclick="descargarConsolidado('juridica')">
+      ⬇ Consolidado Persona Jurídica
+    </button>
+  </div>
+  <div class="toast" id="admin-toast"></div>
+
+  <div class="admin-footer">
+    SAGRILAFT — Solo para uso interno &nbsp;|&nbsp; Sesión expira en 8 horas
+  </div>
+  <a href="/" class="back-link">← Volver al formulario</a>
+</div>
+
+<script>
+'use strict';
+
+const _VISTAS = ['login','register','recuperar','panel'];
+
+function mostrarVista(nombre) {
+  _VISTAS.forEach(v => {
+    const el = document.getElementById(`view-${v}`);
+    if (el) el.style.display = (v === nombre) ? '' : 'none';
+  });
+}
+
+// Restaurar sesión activa al cargar
+(async function init() {
+  const resp = await fetch('/api/admin/me').catch(() => null);
+  if (!resp || !resp.ok) return;
+  const data = await resp.json();
+  if (data.autenticado) mostrarPanel(data.usuario, data.loginAt);
+})();
+
+/* ── LOGIN ── */
+async function doLogin() {
+  const btn    = document.getElementById('btn-login');
+  const usuario = document.getElementById('inp-usr').value.trim();
+  const clave   = document.getElementById('inp-pwd').value;
+  const msgEl   = document.getElementById('login-msg');
+  msgEl.textContent = ''; msgEl.className = 'msg';
+
+  if (!usuario || !clave) { msgEl.textContent = 'Ingrese usuario y contraseña.'; msgEl.className = 'msg error'; return; }
+  btn.disabled = true; btn.textContent = 'Verificando…';
+  try {
+    const resp = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, clave }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      mostrarPanel(usuario, new Date().toISOString());
+    } else {
+      msgEl.textContent = data.error || 'Credenciales incorrectas.';
+      msgEl.className   = 'msg error';
+      document.getElementById('inp-pwd').value = '';
+    }
+  } catch (_) {
+    msgEl.textContent = 'Error de conexión con el servidor.';
+    msgEl.className   = 'msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+/* ── REGISTRO ── */
+async function doRegistrar() {
+  const btn    = document.getElementById('btn-registrar');
+  const msgEl  = document.getElementById('reg-msg');
+  const usuario = document.getElementById('reg-usr').value.trim();
+  const nomReal = document.getElementById('reg-nom').value.trim();
+  const email   = document.getElementById('reg-email').value.trim();
+  const clave   = document.getElementById('reg-pwd').value;
+  const clave2  = document.getElementById('reg-pwd2').value;
+  msgEl.textContent = ''; msgEl.className = 'msg';
+
+  if (!usuario || !nomReal || !email || !clave || !clave2) {
+    msgEl.textContent = 'Complete todos los campos.'; msgEl.className = 'msg error'; return;
+  }
+  btn.disabled = true; btn.textContent = 'Enviando solicitud…';
+  try {
+    const resp = await fetch('/api/admin/registrar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, nomReal, email, clave, clave2 }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      msgEl.textContent = 'Solicitud enviada. Recibirá un correo cuando sea aprobada.';
+      msgEl.className   = 'msg success';
+      ['reg-usr','reg-nom','reg-email','reg-pwd','reg-pwd2'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+    } else {
+      msgEl.textContent = data.error || 'No se pudo enviar la solicitud.';
+      msgEl.className   = 'msg error';
+    }
+  } catch (_) {
+    msgEl.textContent = 'Error de conexión.'; msgEl.className = 'msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enviar solicitud';
+  }
+}
+
+/* ── RECUPERAR CONTRASEÑA ── */
+async function doRecuperar() {
+  const btn    = document.getElementById('btn-recuperar');
+  const msgEl  = document.getElementById('rec-msg');
+  const usuario = document.getElementById('rec-usr').value.trim();
+  msgEl.textContent = ''; msgEl.className = 'msg';
+
+  if (!usuario) { msgEl.textContent = 'Ingrese su nombre de usuario.'; msgEl.className = 'msg error'; return; }
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    await fetch('/api/admin/recuperar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario }),
+    });
+    // Siempre mostrar mensaje genérico para no revelar si el usuario existe
+    msgEl.textContent = 'Si el usuario existe, recibirá un enlace en su correo registrado.';
+    msgEl.className   = 'msg success';
+    document.getElementById('rec-usr').value = '';
+  } catch (_) {
+    msgEl.textContent = 'Error de conexión.'; msgEl.className = 'msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enviar enlace';
+  }
+}
+
+/* ── LOGOUT ── */
+async function doLogout() {
+  await fetch('/api/admin/logout', { method: 'POST' }).catch(() => null);
+  mostrarVista('login');
+  document.getElementById('inp-usr').value = '';
+  document.getElementById('inp-pwd').value = '';
+}
+
+/* ── PANEL ── */
+function mostrarPanel(usuario, loginAt) {
+  mostrarVista('panel');
+  const fecha = loginAt ? new Date(loginAt).toLocaleString('es-CO') : '—';
+  document.getElementById('admin-user-label').textContent = `Sesión: ${usuario} — desde ${fecha}`;
+}
+
+function descargarConsolidado(tipo) {
+  const url = tipo === 'natural'
+    ? '/api/exportar-consolidado-natural'
+    : '/api/exportar-consolidado-juridica';
+  mostrarToastAdmin('Generando Excel, por favor espere…', 'info');
+  fetch(url)
+    .then(resp => {
+      if (resp.status === 401) { mostrarToastAdmin('Sesión expirada. Recargue la página.', 'error'); return null; }
+      if (!resp.ok)            { mostrarToastAdmin('Error al generar el consolidado.', 'error'); return null; }
+      return resp.blob();
+    })
+    .then(blob => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Consolidado_${tipo}_${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      mostrarToastAdmin('Descarga iniciada.', 'info');
+    })
+    .catch(() => mostrarToastAdmin('Error de red al descargar.', 'error'));
+}
+
+function mostrarToastAdmin(msg, tipo) {
+  const t = document.getElementById('admin-toast');
+  t.textContent = msg; t.className = `toast ${tipo}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; t.className = 'toast'; }, 5000);
+}
+</script>
+</body>
+</html>

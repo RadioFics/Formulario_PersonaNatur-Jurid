@@ -511,6 +511,8 @@ function _validarGrupoAC(id) {
     [`field-ac_${id}_pais`,   a.COD_PAIS],
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
 
+  if (a.TIP_DOCU === 'OTR_TPDOC' && !a.OTR_TPDOC) { mostrarError(`field-ac_${id}_tipdoc`); ok = false; }
+
   if (a.COD_PAIS !== 'OTRO' && String(a.COD_PAIS) !== '52') {
     [
       [`field-ac_${id}_dept`, a.COD_DEPT],

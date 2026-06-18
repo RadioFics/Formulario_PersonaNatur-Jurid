@@ -15,18 +15,19 @@
  */
 
 require('dotenv').config();
-const express    = require('express');
-const sql        = require('mssql');
-const cors       = require('cors');
-const path       = require('path');
-const multer     = require('multer');
-const fs         = require('fs');
-const ExcelJS    = require('exceljs');
+const express      = require('express');
+const sql          = require('mssql');
+const cors         = require('cors');
+const path         = require('path');
+const multer       = require('multer');
+const fs           = require('fs');
+const ExcelJS      = require('exceljs');
 const { S3Client, PutObjectCommand, GetObjectCommand,
         ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const session        = require('express-session');
-const crypto         = require('crypto');
+const session      = require('express-session');
+const crypto       = require('crypto');
+const nodemailer   = require('nodemailer');
 
 // ─── Validación MIME de archivos ─────────────────────────────────────────────
 const TIPOS_DOC_PERMITIDOS = new Set([
@@ -257,20 +258,124 @@ app.use(session({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));   // sirve index.html
 
+// ─── Nodemailer — transporte de correo ───────────────────────────────────────
+// Si no está configurado SMTP en .env, los correos se registran solo en consola.
+const APP_URL        = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || '';
+
+let _mailerTransport = null;
+(function _setupMailer() {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    _mailerTransport = nodemailer.createTransport({
+      host:   SMTP_HOST,
+      port:   Number(SMTP_PORT) || 587,
+      secure: Number(SMTP_PORT) === 465,
+      auth:   { user: SMTP_USER, pass: SMTP_PASS },
+    });
+    console.log(`📧  Nodemailer configurado — ${SMTP_HOST}:${SMTP_PORT || 587}`);
+  } else {
+    console.warn('⚠️  SMTP no configurado en .env — los correos se registrarán solo en consola.');
+  }
+})();
+
+async function _enviarCorreo(to, subject, html) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@minedax.local';
+  if (_mailerTransport) {
+    try {
+      await _mailerTransport.sendMail({ from, to, subject, html });
+      console.log(`📧  Correo enviado a ${to} — "${subject}"`);
+    } catch (e) {
+      console.error(`📧  Error enviando correo a ${to}: ${e.message}`);
+    }
+  } else {
+    console.log(`📧  [SIN SMTP] Para: ${to} | Asunto: ${subject}\n${html.replace(/<[^>]+>/g,' ')}`);
+  }
+}
+
 // ─── Pool de conexiones global ────────────────────────────────────────────────
 let pool;
+let _dbInitialized = false;
+
 async function getPool() {
   if (!pool) {
     pool = await sql.connect(dbConfig);
-    // Resetear el pool cuando SQL Server cae para permitir reconexión
-    // en el siguiente request sin necesitar reiniciar el servidor.
     pool.on('error', err => {
       console.error(`[Pool] Conexión perdida — se reconectará en el próximo request: ${err.message}`);
       pool = null;
+      _dbInitialized = false;
     });
     console.log('✅  Conectado a SQL Server — MineDax');
+    if (!_dbInitialized) {
+      _dbInitialized = true;
+      _initDB().catch(err => console.error('⚠️  _initDB():', err.message));
+    }
   }
   return pool;
+}
+
+// ─── Migración automática de schema ──────────────────────────────────────────
+// Añade columna COD_EDIT en GN_TERCE y crea tabla GN_BORRADOR si no existen.
+async function _initDB() {
+  const p = await getPool();
+  await p.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='GN_TERCE' AND COLUMN_NAME='COD_EDIT')
+      ALTER TABLE GN_TERCE ADD COD_EDIT CHAR(64) NULL
+  `);
+  await p.request().query(`
+    IF OBJECT_ID('GN_BORRADOR','U') IS NULL
+    BEGIN
+      CREATE TABLE GN_BORRADOR (
+        TOKEN_DRAFT  UNIQUEIDENTIFIER NOT NULL,
+        COD_EMPR     SMALLINT         NOT NULL,
+        TIP_TERC     CHAR(1)          NOT NULL,
+        NUM_IDEN_TXT VARCHAR(20)       NULL,
+        DATOS_JSON   NVARCHAR(MAX)    NOT NULL,
+        FEC_GUAR     DATETIME         NOT NULL DEFAULT GETDATE(),
+        FEC_VENC     DATETIME         NOT NULL,
+        CONSTRAINT PK_GN_BORRADOR PRIMARY KEY (TOKEN_DRAFT)
+      )
+    END
+  `);
+  await p.request().query(`
+    IF OBJECT_ID('GN_ADMIN_USR','U') IS NULL
+    BEGIN
+      CREATE TABLE GN_ADMIN_USR (
+        ID_ADMIN    UNIQUEIDENTIFIER NOT NULL DEFAULT NEWID(),
+        USR_ADMIN   VARCHAR(50)      NOT NULL,
+        NOM_REAL    VARCHAR(100)     NOT NULL,
+        EMAIL       VARCHAR(150)     NOT NULL,
+        PWD_HASH    CHAR(64)         NULL,
+        ESTADO      CHAR(1)          NOT NULL DEFAULT 'P',
+        TOK_APROB   CHAR(64)         NULL,
+        TOK_RESET   CHAR(64)         NULL,
+        TOK_VENC    DATETIME         NULL,
+        FEC_CREA    DATETIME         NOT NULL DEFAULT GETDATE(),
+        FEC_APROB   DATETIME         NULL,
+        CONSTRAINT PK_GN_ADMIN_USR  PRIMARY KEY (ID_ADMIN),
+        CONSTRAINT UQ_USR_ADMIN     UNIQUE      (USR_ADMIN)
+      )
+    END
+  `);
+  console.log('✅  DB schema verificado (COD_EDIT, GN_BORRADOR, GN_ADMIN_USR)');
+}
+
+// ─── Helpers de código de edición ────────────────────────────────────────────
+// Genera un código alfanumérico legible tipo "ABCD-EFGH" y su hash SHA-256.
+function _generarCodigoEdicion() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin I,O,0,1
+  const buf   = crypto.randomBytes(8);
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    if (i === 4) code += '-';
+    code += chars[buf[i] % chars.length];
+  }
+  return code;
+}
+
+function _hashCodigo(codigo) {
+  return crypto.createHash('sha256').update(String(codigo).toUpperCase()).digest('hex');
 }
 
 // ─── Validadores server-side ──────────────────────────────────────────────────
@@ -354,24 +459,44 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ error: 'Acceso no autorizado. Inicie sesión en /admin.' });
 }
 
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
   const { usuario, clave } = req.body || {};
+  if (!usuario || !clave) return res.status(400).json({ error: 'Campos requeridos.' });
+
+  // 1) Credenciales de entorno (super-admin hardcoded)
   const envUsuario = process.env.ADMIN_USUARIO;
   const envClave   = process.env.ADMIN_CLAVE;
+  if (envUsuario && envClave && usuario === envUsuario && clave === envClave) {
+    req.session.isAdmin   = true;
+    req.session.loginAt   = new Date().toISOString();
+    req.session.usuario   = usuario;
+    req.session.esSuperAdmin = true;
+    console.log(`[AUTH] Login super-admin env — ${usuario} — ${req.session.loginAt}`);
+    return res.json({ success: true, esSuperAdmin: true });
+  }
 
-  if (!envUsuario || !envClave) {
-    return res.status(503).json({
-      error: 'Autenticación no configurada. Defina ADMIN_USUARIO y ADMIN_CLAVE en .env',
-    });
+  // 2) Usuarios en DB (ESTADO='A')
+  try {
+    const p = await getPool();
+    const result = await p.request()
+      .input('USR', sql.VarChar(50), String(usuario))
+      .query(`SELECT PWD_HASH, NOM_REAL FROM GN_ADMIN_USR WHERE USR_ADMIN=@USR AND ESTADO='A'`);
+    if (result.recordset.length > 0) {
+      const { PWD_HASH, NOM_REAL } = result.recordset[0];
+      const hashIngresado = _hashCodigo(clave);
+      if (PWD_HASH && PWD_HASH.trim() === hashIngresado) {
+        req.session.isAdmin  = true;
+        req.session.loginAt  = new Date().toISOString();
+        req.session.usuario  = usuario;
+        console.log(`[AUTH] Login DB — ${usuario} (${NOM_REAL}) — ${req.session.loginAt}`);
+        return res.json({ success: true });
+      }
+    }
+  } catch (e) {
+    console.error('[AUTH] Error consultando GN_ADMIN_USR:', e.message);
   }
-  if (usuario === envUsuario && clave === envClave) {
-    req.session.isAdmin  = true;
-    req.session.loginAt  = new Date().toISOString();
-    req.session.usuario  = usuario;
-    console.log(`[AUTH] Login — usuario: ${usuario} — ${req.session.loginAt}`);
-    return res.json({ success: true });
-  }
-  console.warn(`[AUTH] Intento fallido — usuario: "${usuario}" — ${new Date().toISOString()}`);
+
+  console.warn(`[AUTH] Intento fallido — "${usuario}" — ${new Date().toISOString()}`);
   return res.status(401).json({ error: 'Credenciales incorrectas' });
 });
 
@@ -389,6 +514,270 @@ app.get('/api/admin/me', (req, res) => {
     return res.json({ autenticado: true, usuario: req.session.usuario, loginAt: req.session.loginAt });
   }
   res.json({ autenticado: false });
+});
+
+// Panel de administración (página protegida por login)
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Página de restablecimiento de contraseña
+app.get('/admin/restablecer', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-restablecer.html'));
+});
+
+// ─── Cuentas de administrador ─────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/registrar
+ * Crea una solicitud de cuenta pendiente y envía email al super-admin para aprobar/rechazar.
+ */
+app.post('/api/admin/registrar', async (req, res) => {
+  const { usuario, nomReal, email, clave, clave2 } = req.body || {};
+  if (!usuario || !nomReal || !email || !clave || !clave2)
+    return res.status(400).json({ error: 'Todos los campos son requeridos.' });
+  if (clave !== clave2)
+    return res.status(400).json({ error: 'Las contraseñas no coinciden.' });
+  if (clave.length < 8)
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres.' });
+  if (!/^[a-zA-Z0-9._-]+$/.test(usuario))
+    return res.status(400).json({ error: 'El usuario solo puede contener letras, números, . _ -' });
+
+  try {
+    const p = await getPool();
+    // Verificar que el usuario no exista ya
+    const dup = await p.request()
+      .input('USR', sql.VarChar(50), usuario)
+      .query(`SELECT 1 FROM GN_ADMIN_USR WHERE USR_ADMIN=@USR`);
+    if (dup.recordset.length > 0)
+      return res.status(409).json({ error: 'El nombre de usuario ya está en uso.' });
+
+    // Generar token de aprobación (raw) y su hash
+    const tokenRaw  = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+    const pwdHash   = _hashCodigo(clave);
+
+    await p.request()
+      .input('USR',        sql.VarChar(50),   usuario)
+      .input('NOM',        sql.VarChar(100),  nomReal)
+      .input('EMAIL',      sql.VarChar(150),  email)
+      .input('PWD_HASH',   sql.Char(64),      pwdHash)
+      .input('TOK_APROB',  sql.Char(64),      tokenHash)
+      .query(`INSERT INTO GN_ADMIN_USR (USR_ADMIN,NOM_REAL,EMAIL,PWD_HASH,ESTADO,TOK_APROB)
+              VALUES (@USR,@NOM,@EMAIL,@PWD_HASH,'P',@TOK_APROB)`);
+
+    const urlAprobar  = `${APP_URL}/api/admin/aprobar/${tokenRaw}`;
+    const urlRechazar = `${APP_URL}/api/admin/rechazar/${tokenRaw}`;
+
+    if (SUPER_ADMIN_EMAIL) {
+      await _enviarCorreo(
+        SUPER_ADMIN_EMAIL,
+        'SAGRILAFT — Solicitud de nueva cuenta admin',
+        `<p>El usuario <strong>${usuario}</strong> (${nomReal} &lt;${email}&gt;) solicita acceso al panel de administración.</p>
+         <p><a href="${urlAprobar}" style="color:green;font-weight:bold">✔ Aprobar solicitud</a></p>
+         <p><a href="${urlRechazar}" style="color:red;font-weight:bold">✘ Rechazar solicitud</a></p>
+         <p style="font-size:.85em;color:#666">Si no reconoce esta solicitud, puede ignorar este correo.</p>`
+      );
+    } else {
+      console.log(`[ADMIN-REG] SUPER_ADMIN_EMAIL no configurado.`);
+      console.log(`[ADMIN-REG] Aprobar:  ${urlAprobar}`);
+      console.log(`[ADMIN-REG] Rechazar: ${urlRechazar}`);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/admin/registrar:', err.message);
+    _responderError(res, err, req);
+  }
+});
+
+/**
+ * GET /api/admin/aprobar/:token
+ * Activa la cuenta y notifica al usuario.
+ */
+app.get('/api/admin/aprobar/:token', async (req, res) => {
+  const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+  try {
+    const p = await getPool();
+    const r = await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .query(`SELECT ID_ADMIN, USR_ADMIN, NOM_REAL, EMAIL, ESTADO FROM GN_ADMIN_USR WHERE TOK_APROB=@TOK`);
+    if (!r.recordset.length)
+      return res.status(404).send('<h2>Token inválido o ya procesado.</h2>');
+    const { ESTADO, USR_ADMIN, NOM_REAL, EMAIL } = r.recordset[0];
+    if (ESTADO !== 'P')
+      return res.send(`<h2>Esta solicitud ya fue procesada (estado: ${ESTADO}).</h2>`);
+
+    await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .query(`UPDATE GN_ADMIN_USR SET ESTADO='A', TOK_APROB=NULL, FEC_APROB=GETDATE() WHERE TOK_APROB=@TOK`);
+
+    await _enviarCorreo(
+      EMAIL,
+      'SAGRILAFT — Acceso aprobado',
+      `<p>Hola <strong>${NOM_REAL}</strong>, su solicitud de acceso al panel de administración SAGRILAFT ha sido <strong style="color:green">aprobada</strong>.</p>
+       <p>Puede iniciar sesión en: <a href="${APP_URL}/admin">${APP_URL}/admin</a></p>
+       <p>Usuario: <strong>${USR_ADMIN}</strong></p>`
+    );
+
+    res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cuenta aprobada</title></head>
+      <body style="font-family:sans-serif;padding:40px;max-width:500px;margin:auto">
+        <h2 style="color:#2e7d32">✔ Cuenta aprobada</h2>
+        <p>El usuario <strong>${USR_ADMIN}</strong> (${NOM_REAL}) ahora puede acceder al panel de administración.</p>
+        <p>Se le envió un correo de confirmación a ${EMAIL}.</p>
+        <a href="${APP_URL}/admin">Ir al panel admin</a>
+      </body></html>`);
+  } catch (err) {
+    console.error('GET /api/admin/aprobar:', err.message);
+    res.status(500).send('<h2>Error interno del servidor.</h2>');
+  }
+});
+
+/**
+ * GET /api/admin/rechazar/:token
+ * Marca la cuenta como rechazada y notifica al usuario.
+ */
+app.get('/api/admin/rechazar/:token', async (req, res) => {
+  const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+  try {
+    const p = await getPool();
+    const r = await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .query(`SELECT USR_ADMIN, NOM_REAL, EMAIL, ESTADO FROM GN_ADMIN_USR WHERE TOK_APROB=@TOK`);
+    if (!r.recordset.length)
+      return res.status(404).send('<h2>Token inválido o ya procesado.</h2>');
+    const { ESTADO, USR_ADMIN, NOM_REAL, EMAIL } = r.recordset[0];
+    if (ESTADO !== 'P')
+      return res.send(`<h2>Esta solicitud ya fue procesada (estado: ${ESTADO}).</h2>`);
+
+    await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .query(`UPDATE GN_ADMIN_USR SET ESTADO='R', TOK_APROB=NULL WHERE TOK_APROB=@TOK`);
+
+    await _enviarCorreo(
+      EMAIL,
+      'SAGRILAFT — Solicitud de acceso rechazada',
+      `<p>Hola <strong>${NOM_REAL}</strong>, su solicitud de acceso al panel de administración SAGRILAFT ha sido <strong style="color:red">rechazada</strong>.</p>
+       <p>Si cree que esto es un error, comuníquese con el administrador del sistema.</p>`
+    );
+
+    res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Solicitud rechazada</title></head>
+      <body style="font-family:sans-serif;padding:40px;max-width:500px;margin:auto">
+        <h2 style="color:#c62828">✘ Solicitud rechazada</h2>
+        <p>La solicitud del usuario <strong>${USR_ADMIN}</strong> (${NOM_REAL}) ha sido rechazada.</p>
+        <p>Se notificó al usuario por correo.</p>
+      </body></html>`);
+  } catch (err) {
+    console.error('GET /api/admin/rechazar:', err.message);
+    res.status(500).send('<h2>Error interno del servidor.</h2>');
+  }
+});
+
+/**
+ * POST /api/admin/recuperar
+ * Envía link de restablecimiento de contraseña al correo registrado.
+ */
+app.post('/api/admin/recuperar', async (req, res) => {
+  const { usuario } = req.body || {};
+  if (!usuario) return res.status(400).json({ error: 'Usuario requerido.' });
+  try {
+    const p = await getPool();
+    const r = await p.request()
+      .input('USR', sql.VarChar(50), String(usuario))
+      .query(`SELECT NOM_REAL, EMAIL FROM GN_ADMIN_USR WHERE USR_ADMIN=@USR AND ESTADO='A'`);
+
+    // Siempre responder OK para no revelar si el usuario existe
+    if (r.recordset.length > 0) {
+      const { NOM_REAL, EMAIL } = r.recordset[0];
+      const tokenRaw  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(tokenRaw).digest('hex');
+      const vencimiento = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 horas
+
+      await p.request()
+        .input('USR',  sql.VarChar(50), String(usuario))
+        .input('TOK',  sql.Char(64),    tokenHash)
+        .input('VENC', sql.DateTime,    vencimiento)
+        .query(`UPDATE GN_ADMIN_USR SET TOK_RESET=@TOK, TOK_VENC=@VENC WHERE USR_ADMIN=@USR AND ESTADO='A'`);
+
+      const urlReset = `${APP_URL}/admin/restablecer?token=${tokenRaw}`;
+      await _enviarCorreo(
+        EMAIL,
+        'SAGRILAFT — Restablecer contraseña',
+        `<p>Hola <strong>${NOM_REAL}</strong>, solicitó restablecer su contraseña del panel SAGRILAFT.</p>
+         <p><a href="${urlReset}" style="font-weight:bold">Haga clic aquí para restablecer su contraseña</a></p>
+         <p>Este enlace expira en 2 horas. Si no solicitó este cambio, ignore este correo.</p>`
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/admin/recuperar:', err.message);
+    _responderError(res, err, req);
+  }
+});
+
+/**
+ * POST /api/admin/restablecer
+ * Guarda la nueva contraseña usando el token de reset.
+ */
+app.post('/api/admin/restablecer', async (req, res) => {
+  const { token, clave, clave2 } = req.body || {};
+  if (!token || !clave || !clave2)
+    return res.status(400).json({ error: 'Campos requeridos.' });
+  if (clave !== clave2)
+    return res.status(400).json({ error: 'Las contraseñas no coinciden.' });
+  if (clave.length < 8)
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres.' });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  try {
+    const p = await getPool();
+    const r = await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .query(`SELECT USR_ADMIN FROM GN_ADMIN_USR WHERE TOK_RESET=@TOK AND TOK_VENC > GETDATE() AND ESTADO='A'`);
+    if (!r.recordset.length)
+      return res.status(400).json({ error: 'El enlace es inválido o ha expirado.' });
+
+    const pwdHash = _hashCodigo(clave);
+    await p.request()
+      .input('TOK', sql.Char(64), tokenHash)
+      .input('PWD', sql.Char(64), pwdHash)
+      .query(`UPDATE GN_ADMIN_USR SET PWD_HASH=@PWD, TOK_RESET=NULL, TOK_VENC=NULL WHERE TOK_RESET=@TOK`);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/admin/restablecer:', err.message);
+    _responderError(res, err, req);
+  }
+});
+
+// ─── Verificar código de edición ──────────────────────────────────────────────
+// Comprueba si el código ingresado coincide con el hash almacenado en GN_TERCE.
+// Registros legacy (COD_EDIT NULL) requieren sesión de admin.
+app.post('/api/verificar-codigo-edicion', async (req, res) => {
+  const { numIden, codigoEdicion } = req.body || {};
+  if (!numIden) return res.status(400).json({ error: 'numIden requerido.' });
+  try {
+    const p = await getPool();
+    const result = await p.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), String(numIden))
+      .query(`SELECT COD_EDIT FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (!result.recordset.length)
+      return res.json({ valido: false, razon: 'noEncontrado' });
+    const codEdit = (result.recordset[0].COD_EDIT || '').trim();
+    if (!codEdit) {
+      // Registro legacy — solo el admin puede editar
+      if (req.session && req.session.isAdmin)
+        return res.json({ valido: true, legacy: true });
+      return res.json({ valido: false, razon: 'requiereAdmin' });
+    }
+    if (!codigoEdicion)
+      return res.json({ valido: false, razon: 'codigoAusente' });
+    const valido = _hashCodigo(codigoEdicion.trim()) === codEdit;
+    res.json({ valido });
+  } catch (err) {
+    _responderError(res, err, req);
+  }
 });
 
 // ─── Manejo centralizado de errores internos ──────────────────────────────────
@@ -491,6 +880,7 @@ app.get('/api/catalogo/paises', async (req, res) => {
       `SELECT COD_PAIS, NOM_PAIS, IND_PRINCI, NOM_EN
          FROM MAE_PAIS
         WHERE COD_PAIS > 0
+          AND NOM_PAIS NOT LIKE 'Otro%'
         ORDER BY CASE WHEN IND_PRINCI = 'S' THEN 0 ELSE 1 END, NOM_PAIS`
     );
     res.json(rows);
@@ -512,7 +902,7 @@ app.get('/api/catalogo/departamentos', async (req, res) => {
       `SELECT COD_DEPT, NOM_DEPT, COD_PAIS
          FROM MAE_DEPT
         WHERE COD_PAIS = @cod_pais
-        ORDER BY NOM_DEPT`,
+        ORDER BY CASE COD_DEPT WHEN 2 THEN 0 WHEN 8 THEN 1 ELSE 2 END, NOM_DEPT`,
       { cod_pais: { type: sql.VarChar(10), value: cod_pais } }
     );
     res.json(rows);
@@ -586,12 +976,15 @@ app.get('/api/catalogo/vinculaciones', async (req, res) => {
  */
 app.get('/api/catalogo/ciiu', async (req, res) => {
   try {
+    const soloJuridica = req.query.tipo === 'J';
     const rows = await query(
       `SELECT COD_CIIU,
               COD_CIIU + ' - ' + NOM_CIIU AS NOM_CIIU,
               CASE WHEN NOM_EN IS NOT NULL AND NOM_EN <> ''
                    THEN COD_CIIU + ' - ' + NOM_EN ELSE NULL END AS NOM_EN
-       FROM MAE_CIIU ORDER BY COD_CIIU`
+       FROM MAE_CIIU
+      ${soloJuridica ? "WHERE COD_CIIU NOT LIKE '00%'" : ''}
+       ORDER BY COD_CIIU`
     );
     res.json(rows);
   } catch (err) {
@@ -1045,20 +1438,21 @@ app.post('/api/revisores-fiscales', async (req, res) => {
     r.input('CEL_REVI',     sql.VarChar(30),   d.CEL_REVI     || null);
     r.input('TEL_REVI',     sql.VarChar(30),   d.TEL_REVI     || null);
     r.input('MAIL_REVI',    sql.VarChar(100),  d.MAIL_REVI    || null);
-    r.input('REVI_FIRMA',   sql.Char(1),        d.REVI_FIRMA   || 'N');
-    r.input('RAZ_FIRMA',    sql.VarChar(255),  d.RAZ_FIRMA    || null);
-    r.input('TIP_DOCU_FIR', sql.Int,            d.TIP_DOCU_FIR ? Number(d.TIP_DOCU_FIR) : null);
-    r.input('NUM_DOCU_FIR', sql.VarChar(20),   d.NUM_DOCU_FIR || null);
-    r.input('OBS_REVI',     sql.VarChar(sql.MAX), d.OBS_REVI  || null);
+    r.input('REVI_FIRMA',    sql.Char(1),          d.REVI_FIRMA   || 'N');
+    r.input('RAZ_FIRMA',     sql.VarChar(255),     d.RAZ_FIRMA    || null);
+    r.input('TIP_DOCU_FIR',  sql.Int,               d.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : (d.TIP_DOCU_FIR ? Number(d.TIP_DOCU_FIR) : null));
+    r.input('OTR_TPDOC_FIR', sql.VarChar(100),     d.OTR_TPDOC_FIR || null);
+    r.input('NUM_DOCU_FIR',  sql.VarChar(20),      d.NUM_DOCU_FIR || null);
+    r.input('OBS_REVI',      sql.VarChar(sql.MAX), d.OBS_REVI  || null);
     await r.query(`
       INSERT INTO GN_JURID_RF
         (NUM_IDEN,TIP_REPR,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,TIP_DOCU,NUM_DOCU,
          FEC_EXPE,COD_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
-         REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OBS_REVI)
+         REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,OTR_TPDOC_FIR,NUM_DOCU_FIR,OBS_REVI)
       VALUES
         (@NUM_IDEN,@TIP_REPR,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,@TIP_DOCU,@NUM_DOCU,
          @FEC_EXPE,@COD_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
-         @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OBS_REVI)`);
+         @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@OTR_TPDOC_FIR,@NUM_DOCU_FIR,@OBS_REVI)`);
   };
 
   let transaction;
@@ -1173,7 +1567,7 @@ app.get('/api/catalogo/bancos', async (req, res) => {
 app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
   try {
     const rows = await query(
-      `SELECT COD_TPCTA, NOM_TPCTA, NOM_EN FROM MAE_TPCTA ORDER BY COD_TPCTA`
+      `SELECT COD_TPCTA, NOM_TPCTA, NOM_EN FROM MAE_TPCTA WHERE NOM_TPCTA NOT LIKE '%N%mina%' AND NOM_TPCTA NOT LIKE '%lectrónica%' AND NOM_TPCTA NOT LIKE '%lectronica%' ORDER BY COD_TPCTA`
     );
     res.json(rows);
   } catch (err) {
@@ -1206,7 +1600,8 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
         t.NUM_IDEN,
         t.NOM_COMP,
         t.TIP_TERC,
-        td.NOM_TPDOC AS TIP_TPDOC
+        td.NOM_TPDOC AS TIP_TPDOC,
+        CASE WHEN t.COD_EDIT IS NOT NULL THEN 1 ELSE 0 END AS TIENE_COD_EDIT
       FROM GN_TERCE t
       LEFT JOIN MAE_TPDOC td
         ON td.COD_TPDOC = t.COD_TPDOC
@@ -1215,7 +1610,8 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
     `);
 
     if (result.recordset.length > 0) {
-      res.json({ existe: true, ...result.recordset[0] });
+      const row = result.recordset[0];
+      res.json({ existe: true, ...row, tieneCodEdit: row.TIENE_COD_EDIT === 1 });
     } else {
       res.json({ existe: false });
     }
@@ -1786,19 +2182,41 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
  */
 app.get('/api/cargar-completo/:numIden', async (req, res) => {
   const { numIden } = req.params;
+  // Código de edición: viene en cabecera X-Codigo-Edicion (no en URL para evitar logs)
+  const codigoEdicion = req.headers['x-codigo-edicion'] || '';
   try {
     const pool = await getPool();
+
+    // ── Verificar acceso: código de edición o sesión admin ───────────────────
+    const editRow = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), numIden)
+      .query(`SELECT COD_EDIT FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (editRow.recordset.length) {
+      const codEdit = (editRow.recordset[0].COD_EDIT || '').trim();
+      if (codEdit) {
+        if (!codigoEdicion)
+          return res.status(401).json({ error: 'codigoRequerido', mensaje: 'Código de edición requerido.' });
+        if (_hashCodigo(codigoEdicion.trim()) !== codEdit)
+          return res.status(403).json({ error: 'codigoInvalido', mensaje: 'Código de edición incorrecto.' });
+      } else {
+        if (!req.session || !req.session.isAdmin)
+          return res.status(401).json({ error: 'adminRequerido', mensaje: 'Este registro requiere sesión de administrador para editar.' });
+      }
+    }
+    // ── Fin verificación ─────────────────────────────────────────────────────
+
     const r    = () => pool.request()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('NUM_IDEN',  sql.VarChar(20), numIden);
 
     const basica = await r().query(`
-      SELECT t.COD_TERC, t.TIP_TERC, t.COD_TPDOC, t.NUM_IDEN, t.DIG_VERI,
+      SELECT t.COD_TERC, t.TIP_TERC, t.COD_TPDOC, t.OTR_TPDOC, t.NUM_IDEN, t.DIG_VERI,
              t.NOM_COMP, t.NOM_TERC, t.SEG_NOMB, t.APE_TERC, t.SEG_APEL,
              t.DIR_TERC, t.TEL_TERC, t.TEL_TERC2, t.DIR_MAIL,
              j.TIP_VINC AS COD_VINC, j.OTR_VINC, j.MAIL_SARL,
              j.COD_CIIU, j.OTR_CIIU, j.URL_WEB,
-             j.UBIC_SOC, j.COD_PAIS_SOC, j.OTR_PAIS_SOC, j.TIP_EMPR, j.GRUP_EMPR,
+             j.UBIC_SOC, j.COD_PAIS_SOC, j.OTR_PAIS_SOC, j.COD_PAIS_ORI, j.TIP_EMPR, j.GRUP_EMPR,
              j.TIP_SOCIE, j.OTR_SOCIE,
              j.COD_PAIS_EXP, j.OTR_PAIS_EXP, j.COD_DEPT_EXP, j.COD_MPIO_EXP
       FROM GN_TERCE t
@@ -1821,12 +2239,12 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
                    FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
                    FROM GN_NATUR_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
-        rC().query(`SELECT COD_BANCO, TIP_CUEN, NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT,
-                          COD_PAIS_EXT, OTR_PAIS_EXT
+        rC().query(`SELECT COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN, NUM_CUEN, CUEN_EXTR,
+                          NOM_ENT_EXT, TIP_CUE_EXT, COD_PAIS_EXT, OTR_PAIS_EXT, CUENTAS_EXT
                    FROM GN_TERCE_BANCO WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT MAN_RPUB, CAR_PUBL
                    FROM GN_NATUR_PEP WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
-        rC().query(`SELECT ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
+        rC().query(`SELECT OPER_VA, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
                           ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO
                    FROM GN_NATUR_ACT WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
       ]);
@@ -1836,7 +2254,8 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         TIP_TERC: 'N',
         COD_TERC,
         basica: {
-          COD_TPDOC: row.COD_TPDOC, NUM_IDEN: row.NUM_IDEN,
+          COD_TPDOC: row.COD_TPDOC, OTR_TPDOC: row.OTR_TPDOC,
+          NUM_IDEN: row.NUM_IDEN,
           DIR_TERC: row.DIR_TERC,   TEL_TERC: row.TEL_TERC,
           TEL_TERC2: row.TEL_TERC2, DIR_MAIL: row.DIR_MAIL,
           COD_VINC: nRow.COD_VINC,  // se lee desde GN_NATUR
@@ -1851,7 +2270,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
           COD_DEPT_EXP: nRow.COD_DEPT_EXP, COD_MPIO_EXP: nRow.COD_MPIO_EXP,
         },
         financiera:  naturFinRes.recordset[0] || {},
-        bancaria:    banRes.recordset,
+        bancaria:    banRes.recordset.map(b => ({ ...b, cuentasExt: b.CUENTAS_EXT ? (() => { try { return JSON.parse(b.CUENTAS_EXT); } catch(e) { return []; } })() : [] })),
         pep:         pepRes.recordset[0]  || { MAN_RPUB: null, CAR_PUBL: null },
         actividades: actRes.recordset[0]  || {},
       });
@@ -1865,7 +2284,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
       FROM GN_JURID_RL WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC ORDER BY TIP_REPR`);
 
     const paisesRes = await rC().query(
-      `SELECT COD_PAIS FROM GN_JURID_PAIS WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
+      `SELECT COD_PAIS, OTR_PAIS FROM GN_JURID_PAIS WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const cumpRes = await rC().query(`
       SELECT REL_GRUPO, NORM_LAFT, SIS_PREVE, DESC_NORM, TIE_JUNTA,
@@ -1884,8 +2303,9 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     const rfRes  = await rC().query(`
       SELECT TIP_REPR, TIE_REVIS, NOM_REVI, APE_REVI, RAZ_REVI, TIP_DOCU, NUM_DOCU,
              CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
-             COD_PAIS, COD_DEPT, COD_MPIO, DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
-             REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR
+             COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO, DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
+             OBS_REVI, TIP_PERS, OTR_TPDOC,
+             REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, OTR_TPDOC_FIR, NUM_DOCU_FIR
       FROM GN_JURID_RF WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC ORDER BY TIP_REPR`);
 
     const acRes  = await rC().query(`
@@ -1899,8 +2319,8 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
       FROM GN_JURID_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const banRes = await rC().query(`
-      SELECT COD_BANCO, TIP_CUEN, NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT,
-             COD_PAIS_EXT, OTR_PAIS_EXT
+      SELECT COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN, NUM_CUEN, CUEN_EXTR,
+             NOM_ENT_EXT, TIP_CUE_EXT, COD_PAIS_EXT, OTR_PAIS_EXT, CUENTAS_EXT
       FROM GN_TERCE_BANCO WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const pepRes = await rC().query(`
@@ -1908,7 +2328,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
       WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const actRes = await rC().query(`
-      SELECT ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO, ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO
+      SELECT OPER_VA, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO, ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO
       FROM GN_JURID_ACT WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const bfRes  = await rC().query(`
@@ -1946,8 +2366,11 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         COD_DEPT_EXP: row.COD_DEPT_EXP, COD_MPIO_EXP: row.COD_MPIO_EXP,
       },
       sociedad: {
-        UBIC_SOC: row.UBIC_SOC, COD_PAIS_SOC: row.COD_PAIS_SOC,
-        OTR_PAIS_SOC: row.OTR_PAIS_SOC || '',
+        UBIC_SOC:          row.UBIC_SOC,
+        COD_PAIS_SOC:      row.COD_PAIS_SOC,
+        OTR_PAIS_SOC:      row.UBIC_SOC === 'E' ? (row.OTR_PAIS_SOC || '') : '',
+        COD_PAIS_ORIG_SOC: row.UBIC_SOC === 'SC' ? (row.COD_PAIS_ORI ? String(row.COD_PAIS_ORI) : null) : null,
+        OTR_PAIS_ORIG_SOC: row.UBIC_SOC === 'SC' ? (row.OTR_PAIS_SOC || '') : '',
         TIP_EMPR: row.TIP_EMPR, GRUP_EMPR: row.GRUP_EMPR,
         TIP_SOCIE: row.TIP_SOCIE, OTR_SOCIE: row.OTR_SOCIE,
         REL_GRUPO: cumpMain.REL_GRUPO || '',
@@ -1963,7 +2386,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
       revisores:      { TIE_REVIS: rfTieRevis, revisores: rfFlat },
       accionistas:    acRes.recordset,
       financiera:     finRes.recordset[0] || {},
-      bancaria:       banRes.recordset,
+      bancaria:       banRes.recordset.map(b => ({ ...b, cuentasExt: b.CUENTAS_EXT ? (() => { try { return JSON.parse(b.CUENTAS_EXT); } catch(e) { return []; } })() : [] })),
       pep:            pepRes.recordset[0] || { MAN_RPUB: 'N', CAR_PUBL: 'N' },
       actividades:    actRes.recordset[0] || {},
       beneficiarios:  bfRes.recordset,
@@ -1988,6 +2411,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
  */
 app.put('/api/actualizar-completo', async (req, res) => {
   const d = req.body;
+  const codigoEdicion = req.headers['x-codigo-edicion'] || '';
   if (!d.NUM_IDEN || !d.NOM_COMP) {
     return res.status(400).json({ error: 'Campos obligatorios faltantes: NUM_IDEN, NOM_COMP' });
   }
@@ -2012,7 +2436,25 @@ app.put('/api/actualizar-completo', async (req, res) => {
 
   let pool, transaction;
   try {
+    // ── Verificar código de edición antes de la transacción ──────────────────
     pool = await getPool();
+    const editRow = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), d.NUM_IDEN)
+      .query(`SELECT COD_EDIT FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (editRow.recordset.length) {
+      const codEdit = (editRow.recordset[0].COD_EDIT || '').trim();
+      if (codEdit) {
+        if (!codigoEdicion)
+          return res.status(401).json({ error: 'codigoRequerido', mensaje: 'Código de edición requerido.' });
+        if (_hashCodigo(codigoEdicion.trim()) !== codEdit)
+          return res.status(403).json({ error: 'codigoInvalido', mensaje: 'Código de edición incorrecto.' });
+      } else {
+        if (!req.session || !req.session.isAdmin)
+          return res.status(401).json({ error: 'adminRequerido', mensaje: 'Este registro requiere sesión de administrador para editar.' });
+      }
+    }
+    // ── Fin verificación ─────────────────────────────────────────────────────
     const lookup = await pool.request()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('NUM_IDEN',  sql.VarChar(20), d.NUM_IDEN)
@@ -2052,10 +2494,10 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('URL_WEB',     sql.VarChar(200), toChar(d.URL_WEB))
       .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
       .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
-      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_ORIG_SOC === 'OTRO' ? null : d.COD_PAIS_ORIG_SOC))
       .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
-      .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.OTR_PAIS_SOC))
+      .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
       .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
       .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
@@ -2113,10 +2555,11 @@ app.put('/api/actualizar-completo', async (req, res) => {
     // 4. GN_JURID_PAIS
     await del('GN_JURID_PAIS');
     for (const p of (Array.isArray(d.paises)?d.paises:[])) {
-      if (!p.COD_PAIS) continue;
+      if (!p.COD_PAIS && !p.OTR_PAIS) continue;
       await r().input('COD_EMPR',sql.SmallInt,COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-               .input('COD_PAIS',sql.Int,toInt(p.COD_PAIS))
-               .query(`INSERT INTO GN_JURID_PAIS(COD_EMPR,COD_TERC,COD_PAIS)VALUES(@COD_EMPR,@COD_TERC,@COD_PAIS)`);
+               .input('COD_PAIS',sql.Int,p.COD_PAIS === 'OTRO' ? null : toInt(p.COD_PAIS))
+               .input('OTR_PAIS',sql.VarChar(100),toChar(p.OTR_PAIS))
+               .query(`INSERT INTO GN_JURID_PAIS(COD_EMPR,COD_TERC,COD_PAIS,OTR_PAIS)VALUES(@COD_EMPR,@COD_TERC,@COD_PAIS,@OTR_PAIS)`);
     }
 
     // 5. GN_JURID_CUMP
@@ -2211,17 +2654,18 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('CEL_REVI',    sql.VarChar(30),  toChar(rv.CEL_REVI))
           .input('TEL_REVI',    sql.VarChar(30),  toChar(rv.TEL_REVI))
           .input('MAIL_REVI',   sql.VarChar(100), toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',  sql.Char(1),      toChar(rv.REVI_FIRMA)||'N')
-          .input('RAZ_FIRMA',   sql.VarChar(120), toChar(rv.RAZ_FIRMA))
-          .input('TIP_DOCU_FIR',sql.Int,          toInt(rv.TIP_DOCU_FIR))
-          .input('NUM_DOCU_FIR',sql.VarChar(20),  toChar(rv.NUM_DOCU_FIR))
-          .input('OTR_TPDOC',   sql.VarChar(100), toChar(rv.OTR_TPDOC))
+          .input('REVI_FIRMA',   sql.Char(1),      toChar(rv.REVI_FIRMA)||'N')
+          .input('RAZ_FIRMA',    sql.VarChar(120), toChar(rv.RAZ_FIRMA))
+          .input('TIP_DOCU_FIR', sql.Int,          rv.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : toInt(rv.TIP_DOCU_FIR))
+          .input('OTR_TPDOC_FIR',sql.VarChar(100), toChar(rv.OTR_TPDOC_FIR))
+          .input('NUM_DOCU_FIR', sql.VarChar(20),  toChar(rv.NUM_DOCU_FIR))
+          .input('OTR_TPDOC',    sql.VarChar(100), toChar(rv.OTR_TPDOC))
           .query(`INSERT INTO GN_JURID_RF(COD_EMPR,COD_TERC,TIP_REPR,TIP_PERS,TIE_REVIS,NOM_REVI,APE_REVI,RAZ_REVI,
                   TIP_DOCU,NUM_DOCU,FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_REVI,CEL_REVI,TEL_REVI,MAIL_REVI,
-                  REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,NUM_DOCU_FIR,OTR_TPDOC)
+                  REVI_FIRMA,RAZ_FIRMA,TIP_DOCU_FIR,OTR_TPDOC_FIR,NUM_DOCU_FIR,OTR_TPDOC)
                   VALUES(@COD_EMPR,@COD_TERC,@TIP_REPR,@TIP_PERS,@TIE_REVIS,@NOM_REVI,@APE_REVI,@RAZ_REVI,
                   @TIP_DOCU,@NUM_DOCU,@FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_REVI,@CEL_REVI,@TEL_REVI,@MAIL_REVI,
-                  @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@NUM_DOCU_FIR,@OTR_TPDOC)`);
+                  @REVI_FIRMA,@RAZ_FIRMA,@TIP_DOCU_FIR,@OTR_TPDOC_FIR,@NUM_DOCU_FIR,@OTR_TPDOC)`);
     }
 
     // 8. GN_JURID_AC
@@ -2278,13 +2722,10 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
         .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',    sql.Char(1),      toChar(b.CUEN_EXTR)||'N')
-        .input('NOM_ENT_EXT',  sql.VarChar(120), toChar(b.NOM_ENT_EXT))
-        .input('TIP_CUE_EXT',  sql.VarChar(40),  toChar(b.TIP_CUE_EXT))
-        .input('COD_PAIS_EXT', sql.VarChar(10),  toChar(b.COD_PAIS_EXT))
-        .input('OTR_PAIS_EXT', sql.VarChar(100), toChar(b.OTR_PAIS_EXT))
-        .query(`INSERT INTO GN_TERCE_BANCO(COD_EMPR,COD_TERC,COD_BANCO,OTR_BANCO,TIP_CUEN,OTR_CUEN,NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT,COD_PAIS_EXT,OTR_PAIS_EXT)
-                VALUES(@COD_EMPR,@COD_TERC,@COD_BANCO,@OTR_BANCO,@TIP_CUEN,@OTR_CUEN,@NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT,@COD_PAIS_EXT,@OTR_PAIS_EXT)`);
+        .input('CUEN_EXTR',   sql.Char(1),       toChar(b.CUEN_EXTR)||'N')
+        .input('CUENTAS_EXT', sql.NVarChar(sql.MAX), Array.isArray(b.cuentasExt) && b.cuentasExt.length > 0 ? JSON.stringify(b.cuentasExt) : null)
+        .query(`INSERT INTO GN_TERCE_BANCO(COD_EMPR,COD_TERC,COD_BANCO,OTR_BANCO,TIP_CUEN,OTR_CUEN,NUM_CUEN,CUEN_EXTR,CUENTAS_EXT)
+                VALUES(@COD_EMPR,@COD_TERC,@COD_BANCO,@OTR_BANCO,@TIP_CUEN,@OTR_CUEN,@NUM_CUEN,@CUEN_EXTR,@CUENTAS_EXT)`);
     }
 
     // 11. GN_JURID_PEP
@@ -2299,6 +2740,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
     const act = d.actividades || {};
     await r()
       .input('COD_EMPR',    sql.SmallInt,COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
+      .input('OPER_VA',     sql.Char(1), act.OPER_VA     ||'N')
       .input('ACT_VA_FIAT', sql.Char(1), act.ACT_VA_FIAT ||'N')
       .input('ACT_VA_VA',   sql.Char(1), act.ACT_VA_VA   ||'N')
       .input('ACT_TRANS',   sql.Char(1), act.ACT_TRANS   ||'N')
@@ -2306,8 +2748,8 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('ACT_SERV_FIN',sql.Char(1), act.ACT_SERV_FIN||'N')
       .input('ACT_SERV_VAP',sql.Char(1), act.ACT_SERV_VAP||'N')
       .input('CERT_INFO',   sql.Char(1), act.CERT_INFO   ||'N')
-      .query(`INSERT INTO GN_JURID_ACT(COD_EMPR,COD_TERC,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
-              VALUES(@COD_EMPR,@COD_TERC,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
+      .query(`INSERT INTO GN_JURID_ACT(COD_EMPR,COD_TERC,OPER_VA,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
+              VALUES(@COD_EMPR,@COD_TERC,@OPER_VA,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
 
     // 13. GN_JURID_BF
     await del('GN_JURID_BF');
@@ -2433,6 +2875,10 @@ app.post('/api/guardar-completo', async (req, res) => {
       _liberarEnvio(d.NUM_IDEN);
       return res.status(409).json({ error: `El documento ${d.NUM_IDEN} ya está registrado. Use la opción de actualización.` });
     }
+    // Generar código de edición ANTES de la transacción
+    const codigoEdicion = _generarCodigoEdicion();
+    const hashEdicion   = _hashCodigo(codigoEdicion);
+
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const r = () => new sql.Request(transaction);
@@ -2449,14 +2895,15 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('TEL_TERC',   sql.Char(30),    toChar(d.TEL_TERC))
       .input('TEL_TERC2',  sql.Char(40),    toChar(d.TEL_TERC2))
       .input('DIR_MAIL',   sql.VarChar(150),toChar(d.DIR_MAIL))
+      .input('COD_EDIT',   sql.Char(64),    hashEdicion)
       .query(`
         INSERT INTO GN_TERCE
           (COD_EMPR, TIP_TERC, COD_TPDOC, NUM_IDEN, DIG_VERI, NOM_COMP,
-           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL)
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT)
         OUTPUT INSERTED.COD_TERC
         VALUES
           (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @NUM_IDEN, @DIG_VERI, @NOM_COMP,
-           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL)
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT)
       `);
 
     const COD_TERC = resTerce.recordset[0].COD_TERC;
@@ -2473,10 +2920,10 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('URL_WEB',     sql.VarChar(200), toChar(d.URL_WEB))
       .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
       .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
-      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_EXP))
+      .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_ORIG_SOC === 'OTRO' ? null : d.COD_PAIS_ORIG_SOC))
       .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
-      .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.OTR_PAIS_SOC))
+      .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
       .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
       .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
@@ -2544,13 +2991,14 @@ app.post('/api/guardar-completo', async (req, res) => {
     // ── 4. GN_JURID_PAIS — Países de operación ────────────────────────────────
     const paises = Array.isArray(d.paises) ? d.paises : [];
     for (const p of paises) {
-      if (!p.COD_PAIS) continue;
+      if (!p.COD_PAIS && !p.OTR_PAIS) continue;
       await r()
-        .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('COD_TERC', sql.BigInt,   COD_TERC)
-        .input('COD_PAIS', sql.Int,      toInt(p.COD_PAIS))
-        .query(`INSERT INTO GN_JURID_PAIS (COD_EMPR, COD_TERC, COD_PAIS)
-                VALUES (@COD_EMPR, @COD_TERC, @COD_PAIS)`);
+        .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+        .input('COD_TERC', sql.BigInt,      COD_TERC)
+        .input('COD_PAIS', sql.Int,         p.COD_PAIS === 'OTRO' ? null : toInt(p.COD_PAIS))
+        .input('OTR_PAIS', sql.VarChar(100),toChar(p.OTR_PAIS))
+        .query(`INSERT INTO GN_JURID_PAIS (COD_EMPR, COD_TERC, COD_PAIS, OTR_PAIS)
+                VALUES (@COD_EMPR, @COD_TERC, @COD_PAIS, @OTR_PAIS)`);
     }
 
     // ── 5. GN_JURID_CUMP — Cumplimiento LAFT ─────────────────────────────────
@@ -2679,24 +3127,25 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('CEL_REVI',      sql.VarChar(30),  toChar(rv.CEL_REVI))
           .input('TEL_REVI',      sql.VarChar(30),  toChar(rv.TEL_REVI))
           .input('MAIL_REVI',     sql.VarChar(100), toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',    sql.Char(1),      toChar(rf.REVI_FIRMA) || 'N')
-          .input('RAZ_FIRMA',     sql.VarChar(120), toChar(rf.RAZ_FIRMA))
-          .input('TIP_DOCU_FIR',  sql.Int,          toInt(rf.TIP_DOCU_FIR))
-          .input('NUM_DOCU_FIR',  sql.VarChar(20),  toChar(rf.NUM_DOCU_FIR))
-          .input('OTR_TPDOC',     sql.VarChar(100), toChar(rv.OTR_TPDOC))
+          .input('REVI_FIRMA',    sql.Char(1),       toChar(rf.REVI_FIRMA) || 'N')
+          .input('RAZ_FIRMA',     sql.VarChar(120),  toChar(rf.RAZ_FIRMA))
+          .input('TIP_DOCU_FIR',  sql.Int,           rf.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : toInt(rf.TIP_DOCU_FIR))
+          .input('OTR_TPDOC_FIR', sql.VarChar(100),  toChar(rf.OTR_TPDOC_FIR))
+          .input('NUM_DOCU_FIR',  sql.VarChar(20),   toChar(rf.NUM_DOCU_FIR))
+          .input('OTR_TPDOC',     sql.VarChar(100),  toChar(rv.OTR_TPDOC))
           .query(`
             INSERT INTO GN_JURID_RF
               (COD_EMPR, COD_TERC, TIP_REPR, TIP_PERS, TIE_REVIS,
                NOM_REVI, APE_REVI, RAZ_REVI,
                TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
                DIR_REVI, CEL_REVI, TEL_REVI, MAIL_REVI,
-               REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, NUM_DOCU_FIR, OTR_TPDOC)
+               REVI_FIRMA, RAZ_FIRMA, TIP_DOCU_FIR, OTR_TPDOC_FIR, NUM_DOCU_FIR, OTR_TPDOC)
             VALUES
               (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIP_PERS, @TIE_REVIS,
                @NOM_REVI, @APE_REVI, @RAZ_REVI,
                @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
                @DIR_REVI, @CEL_REVI, @TEL_REVI, @MAIL_REVI,
-               @REVI_FIRMA, @RAZ_FIRMA, @TIP_DOCU_FIR, @NUM_DOCU_FIR, @OTR_TPDOC)
+               @REVI_FIRMA, @RAZ_FIRMA, @TIP_DOCU_FIR, @OTR_TPDOC_FIR, @NUM_DOCU_FIR, @OTR_TPDOC)
           `);
       }
     }
@@ -2767,18 +3216,15 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
         .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',    sql.Char(1),      toChar(b.CUEN_EXTR) || 'N')
-        .input('NOM_ENT_EXT',  sql.VarChar(120), toChar(b.NOM_ENT_EXT))
-        .input('TIP_CUE_EXT',  sql.VarChar(40),  toChar(b.TIP_CUE_EXT))
-        .input('COD_PAIS_EXT', sql.VarChar(10),  toChar(b.COD_PAIS_EXT))
-        .input('OTR_PAIS_EXT', sql.VarChar(100), toChar(b.OTR_PAIS_EXT))
+        .input('CUEN_EXTR',   sql.Char(1),           toChar(b.CUEN_EXTR) || 'N')
+        .input('CUENTAS_EXT', sql.NVarChar(sql.MAX),  Array.isArray(b.cuentasExt) && b.cuentasExt.length > 0 ? JSON.stringify(b.cuentasExt) : null)
         .query(`
           INSERT INTO GN_TERCE_BANCO
             (COD_EMPR, COD_TERC, COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN,
-             NUM_CUEN, CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT, COD_PAIS_EXT, OTR_PAIS_EXT)
+             NUM_CUEN, CUEN_EXTR, CUENTAS_EXT)
           VALUES
             (@COD_EMPR, @COD_TERC, @COD_BANCO, @OTR_BANCO, @TIP_CUEN, @OTR_CUEN,
-             @NUM_CUEN, @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT, @COD_PAIS_EXT, @OTR_PAIS_EXT)
+             @NUM_CUEN, @CUEN_EXTR, @CUENTAS_EXT)
         `);
     }
 
@@ -2797,6 +3243,7 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
       .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
       .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
       .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
@@ -2806,10 +3253,10 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
       .query(`
         INSERT INTO GN_JURID_ACT
-          (COD_EMPR, COD_TERC, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
+          (COD_EMPR, COD_TERC, OPER_VA, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
            ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO)
         VALUES
-          (@COD_EMPR, @COD_TERC, @ACT_VA_FIAT, @ACT_VA_VA, @ACT_TRANS, @ACT_CUSTO,
+          (@COD_EMPR, @COD_TERC, @OPER_VA, @ACT_VA_FIAT, @ACT_VA_VA, @ACT_TRANS, @ACT_CUSTO,
            @ACT_SERV_FIN, @ACT_SERV_VAP, @CERT_INFO)
       `);
 
@@ -2867,7 +3314,7 @@ app.post('/api/guardar-completo', async (req, res) => {
     await transaction.commit();
 
     console.log(`✅ Jurídica guardada. COD_TERC=${COD_TERC}, NUM_IDEN=${d.NUM_IDEN}`);
-    res.json({ success: true, NUM_IDEN: d.NUM_IDEN, COD_TERC });
+    res.json({ success: true, NUM_IDEN: d.NUM_IDEN, COD_TERC, codigoEdicion });
 
   } catch (err) {
     try { await transaction.rollback(); } catch (_) {}
@@ -2942,13 +3389,15 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       _liberarEnvio(b.NUM_IDEN);
       return res.status(409).json({ error: `El documento ${b.NUM_IDEN} ya está registrado. Use la opción de actualización.` });
     }
+    // Generar código de edición ANTES de la transacción
+    const codigoEdicion = _generarCodigoEdicion();
+    const hashEdicion   = _hashCodigo(codigoEdicion);
+
     transaction = new sql.Transaction(pool);
     await transaction.begin();
     const r = () => new sql.Request(transaction);
 
     // ── 1. GN_TERCE ──────────────────────────────────────────────────────────
-    // Para persona natural guardamos también NOM_TERC / APE_TERC como campos
-    // separados (además de NOM_COMP para búsquedas).
     const nomComp = [b.NOM_TERC, b.SEG_NOMB, b.APE_TERC, b.SEG_APEL]
       .filter(Boolean).join(' ');
 
@@ -2956,6 +3405,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
       .input('TIP_TERC',  sql.Char(1),     TIP_TERC_NATUR)
       .input('COD_TPDOC', sql.Int,         toInt(b.COD_TPDOC) || 8)
+      .input('OTR_TPDOC', sql.VarChar(100),b.OTR_TPDOC || null)
       .input('NUM_IDEN',  sql.VarChar(20), b.NUM_IDEN)
       .input('NOM_TERC',  sql.Char(40),    (b.NOM_TERC || '').substring(0,40))
       .input('SEG_NOMB',  sql.VarChar(40), b.SEG_NOMB || null)
@@ -2966,16 +3416,17 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('TEL_TERC',  sql.Char(30),    b.TEL_TERC  || null)
       .input('TEL_TERC2', sql.Char(40),    b.TEL_TERC2 || null)
       .input('DIR_MAIL',  sql.VarChar(150),b.DIR_MAIL  || null)
+      .input('COD_EDIT',  sql.Char(64),    hashEdicion)
       .query(`
         INSERT INTO GN_TERCE
-          (COD_EMPR, TIP_TERC, COD_TPDOC, NUM_IDEN,
+          (COD_EMPR, TIP_TERC, COD_TPDOC, OTR_TPDOC, NUM_IDEN,
            NOM_TERC, SEG_NOMB, APE_TERC, SEG_APEL, NOM_COMP,
-           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL)
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT)
         OUTPUT INSERTED.COD_TERC
         VALUES
-          (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @NUM_IDEN,
+          (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @OTR_TPDOC, @NUM_IDEN,
            @NOM_TERC, @SEG_NOMB, @APE_TERC, @SEG_APEL, @NOM_COMP,
-           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL)
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT)
       `);
 
     const COD_TERC = resTerce.recordset[0].COD_TERC;
@@ -3041,18 +3492,15 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
         .input('COD_BANCO',   sql.Int,         toInt(cuenta.COD_BANCO))
         .input('TIP_CUEN',    sql.Int,         toInt(cuenta.TIP_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30), cuenta.NUM_CUEN   || null)
-        .input('CUEN_EXTR',    sql.Char(1),      cuenta.CUEN_EXTR   || 'N')
-        .input('NOM_ENT_EXT',  sql.VarChar(120), cuenta.NOM_ENT_EXT || null)
-        .input('TIP_CUE_EXT',  sql.VarChar(40),  cuenta.TIP_CUE_EXT || null)
-        .input('COD_PAIS_EXT', sql.VarChar(10),  toChar(cuenta.COD_PAIS_EXT))
-        .input('OTR_PAIS_EXT', sql.VarChar(100), toChar(cuenta.OTR_PAIS_EXT))
+        .input('CUEN_EXTR',   sql.Char(1),           cuenta.CUEN_EXTR || 'N')
+        .input('CUENTAS_EXT', sql.NVarChar(sql.MAX),  Array.isArray(cuenta.cuentasExt) && cuenta.cuentasExt.length > 0 ? JSON.stringify(cuenta.cuentasExt) : null)
         .query(`
           INSERT INTO GN_TERCE_BANCO
             (COD_EMPR, COD_TERC, COD_BANCO, TIP_CUEN, NUM_CUEN,
-             CUEN_EXTR, NOM_ENT_EXT, TIP_CUE_EXT, COD_PAIS_EXT, OTR_PAIS_EXT)
+             CUEN_EXTR, CUENTAS_EXT)
           VALUES
             (@COD_EMPR, @COD_TERC, @COD_BANCO, @TIP_CUEN, @NUM_CUEN,
-             @CUEN_EXTR, @NOM_ENT_EXT, @TIP_CUE_EXT, @COD_PAIS_EXT, @OTR_PAIS_EXT)
+             @CUEN_EXTR, @CUENTAS_EXT)
         `);
     }
 
@@ -3073,6 +3521,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
       .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
       .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
       .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
@@ -3082,11 +3531,11 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
       .query(`
         INSERT INTO GN_NATUR_ACT
-          (COD_EMPR, COD_TERC,
+          (COD_EMPR, COD_TERC, OPER_VA,
            ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
            ACT_SERV_FIN, ACT_SERV_VAP, CERT_INFO)
         VALUES
-          (@COD_EMPR, @COD_TERC,
+          (@COD_EMPR, @COD_TERC, @OPER_VA,
            @ACT_VA_FIAT, @ACT_VA_VA, @ACT_TRANS, @ACT_CUSTO,
            @ACT_SERV_FIN, @ACT_SERV_VAP, @CERT_INFO)
       `);
@@ -3119,7 +3568,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     await transaction.commit();
 
     console.log(`✅ Natural guardado. COD_TERC=${COD_TERC}, NUM_IDEN=${b.NUM_IDEN}`);
-    res.json({ success: true, NUM_IDEN: b.NUM_IDEN, COD_TERC });
+    res.json({ success: true, NUM_IDEN: b.NUM_IDEN, COD_TERC, codigoEdicion });
 
   } catch (err) {
     try { await transaction.rollback(); } catch (_) {}
@@ -3957,6 +4406,7 @@ app.delete('/api/admin/purgar-archivos/:anio', async (req, res) => {
  */
 app.put('/api/actualizar-completo-natural', async (req, res) => {
   const b = req.body;
+  const codigoEdicion = req.headers['x-codigo-edicion'] || '';
   if (!b.NUM_IDEN || !b.NOM_TERC || !b.APE_TERC)
     return res.status(400).json({ error: 'Faltan campos obligatorios (NUM_IDEN, NOM_TERC, APE_TERC).' });
 
@@ -3983,6 +4433,25 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
   let pool, transaction;
   try {
     pool = await getPool();
+
+    // ── Verificar código de edición ──────────────────────────────────────────
+    const editRow = await pool.request()
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .input('NUM_IDEN', sql.VarChar(20), b.NUM_IDEN)
+      .query(`SELECT COD_EDIT FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
+    if (editRow.recordset.length) {
+      const codEdit = (editRow.recordset[0].COD_EDIT || '').trim();
+      if (codEdit) {
+        if (!codigoEdicion)
+          return res.status(401).json({ error: 'codigoRequerido', mensaje: 'Código de edición requerido.' });
+        if (_hashCodigo(codigoEdicion.trim()) !== codEdit)
+          return res.status(403).json({ error: 'codigoInvalido', mensaje: 'Código de edición incorrecto.' });
+      } else {
+        if (!req.session || !req.session.isAdmin)
+          return res.status(401).json({ error: 'adminRequerido', mensaje: 'Este registro requiere sesión de administrador para editar.' });
+      }
+    }
+    // ── Fin verificación ─────────────────────────────────────────────────────
 
     const lookup = await pool.request()
       .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
@@ -4070,15 +4539,12 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
         .input('COD_BANCO',   sql.Int,        toInt(ban.COD_BANCO))
         .input('TIP_CUEN',    sql.VarChar(20),toChar(ban.TIP_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),toChar(ban.NUM_CUEN))
-        .input('CUEN_EXTR',    sql.Char(1),      ban.CUEN_EXTR    || 'N')
-        .input('NOM_ENT_EXT',  sql.VarChar(120), ban.NOM_ENT_EXT  || null)
-        .input('TIP_CUE_EXT',  sql.VarChar(20),  ban.TIP_CUE_EXT  || null)
-        .input('COD_PAIS_EXT', sql.VarChar(10),  toChar(ban.COD_PAIS_EXT))
-        .input('OTR_PAIS_EXT', sql.VarChar(100), toChar(ban.OTR_PAIS_EXT))
+        .input('CUEN_EXTR',   sql.Char(1),          ban.CUEN_EXTR || 'N')
+        .input('CUENTAS_EXT', sql.NVarChar(sql.MAX), Array.isArray(ban.cuentasExt) && ban.cuentasExt.length > 0 ? JSON.stringify(ban.cuentasExt) : null)
         .query(`INSERT INTO GN_TERCE_BANCO (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,
-                NUM_CUEN,CUEN_EXTR,NOM_ENT_EXT,TIP_CUE_EXT,COD_PAIS_EXT,OTR_PAIS_EXT)
+                NUM_CUEN,CUEN_EXTR,CUENTAS_EXT)
                 VALUES (@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,
-                @NUM_CUEN,@CUEN_EXTR,@NOM_ENT_EXT,@TIP_CUE_EXT,@COD_PAIS_EXT,@OTR_PAIS_EXT)`);
+                @NUM_CUEN,@CUEN_EXTR,@CUENTAS_EXT)`);
     }
 
     // 5. GN_NATUR_PEP — reemplazar
@@ -4098,6 +4564,7 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
+      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
       .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
       .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
       .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
@@ -4105,9 +4572,9 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
       .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
       .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
-      .query(`INSERT INTO GN_NATUR_ACT (COD_EMPR,COD_TERC,ACT_VA_FIAT,ACT_VA_VA,
+      .query(`INSERT INTO GN_NATUR_ACT (COD_EMPR,COD_TERC,OPER_VA,ACT_VA_FIAT,ACT_VA_VA,
               ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
-              VALUES (@COD_EMPR,@COD_TERC,@ACT_VA_FIAT,@ACT_VA_VA,
+              VALUES (@COD_EMPR,@COD_TERC,@OPER_VA,@ACT_VA_FIAT,@ACT_VA_VA,
               @ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
 
     await transaction.commit();
@@ -4120,6 +4587,105 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
     _responderError(res, err, req);
   } finally {
     _liberarEnvio(b.NUM_IDEN);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  BORRADORES — Guardado parcial del formulario en servidor
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BORRADOR_TTL_MS = 72 * 60 * 60 * 1000; // 72 horas
+
+app.post('/api/borrador', async (req, res) => {
+  const { tokenDraft, tipTerc, numIdenTxt, datosJson } = req.body || {};
+  if (!tipTerc || !datosJson)
+    return res.status(400).json({ error: 'tipTerc y datosJson son requeridos.' });
+  try {
+    const p        = await getPool();
+    const fecVenc  = new Date(Date.now() + BORRADOR_TTL_MS);
+    const ahora    = new Date();
+    if (tokenDraft) {
+      const upd = await p.request()
+        .input('TOKEN',    sql.UniqueIdentifier, tokenDraft)
+        .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
+        .input('NUM_IDEN', sql.VarChar(20),       numIdenTxt || null)
+        .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
+        .input('FEC_GUAR', sql.DateTime,          ahora)
+        .input('FEC_VENC', sql.DateTime,          fecVenc)
+        .query(`UPDATE GN_BORRADOR SET NUM_IDEN_TXT=@NUM_IDEN, DATOS_JSON=@DATOS,
+                FEC_GUAR=@FEC_GUAR, FEC_VENC=@FEC_VENC
+                WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
+      if (upd.rowsAffected[0] > 0)
+        return res.json({ success: true, tokenDraft, fechaGuardado: ahora.toISOString() });
+    }
+    const newToken = crypto.randomUUID();
+    await p.request()
+      .input('TOKEN',    sql.UniqueIdentifier, newToken)
+      .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
+      .input('TIP_TERC', sql.Char(1),           tipTerc)
+      .input('NUM_IDEN', sql.VarChar(20),       numIdenTxt || null)
+      .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
+      .input('FEC_GUAR', sql.DateTime,          ahora)
+      .input('FEC_VENC', sql.DateTime,          fecVenc)
+      .query(`INSERT INTO GN_BORRADOR
+              (TOKEN_DRAFT,COD_EMPR,TIP_TERC,NUM_IDEN_TXT,DATOS_JSON,FEC_GUAR,FEC_VENC)
+              VALUES (@TOKEN,@COD_EMPR,@TIP_TERC,@NUM_IDEN,@DATOS,@FEC_GUAR,@FEC_VENC)`);
+    res.json({ success: true, tokenDraft: newToken, fechaGuardado: ahora.toISOString() });
+  } catch (err) {
+    _responderError(res, err, req);
+  }
+});
+
+app.get('/api/borrador', async (req, res) => {
+  const { token, numIden } = req.query;
+  if (!token && !numIden)
+    return res.status(400).json({ error: 'Proporcione token o numIden.' });
+  try {
+    const p = await getPool();
+    let result;
+    if (token) {
+      result = await p.request()
+        .input('TOKEN',    sql.UniqueIdentifier, token)
+        .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
+        .query(`SELECT TOKEN_DRAFT, TIP_TERC, NUM_IDEN_TXT, DATOS_JSON, FEC_GUAR
+                FROM GN_BORRADOR
+                WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR AND FEC_VENC > GETDATE()`);
+    } else {
+      result = await p.request()
+        .input('NUM_IDEN', sql.VarChar(20), numIden)
+        .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+        .query(`SELECT TOP 1 TOKEN_DRAFT, TIP_TERC, NUM_IDEN_TXT, DATOS_JSON, FEC_GUAR
+                FROM GN_BORRADOR
+                WHERE NUM_IDEN_TXT=@NUM_IDEN AND COD_EMPR=@COD_EMPR AND FEC_VENC > GETDATE()
+                ORDER BY FEC_GUAR DESC`);
+    }
+    if (!result.recordset.length)
+      return res.json({ encontrado: false });
+    const row = result.recordset[0];
+    res.json({
+      encontrado:    true,
+      tokenDraft:    row.TOKEN_DRAFT,
+      tipTerc:       row.TIP_TERC,
+      datosJson:     row.DATOS_JSON,
+      fechaGuardado: row.FEC_GUAR,
+    });
+  } catch (err) {
+    _responderError(res, err, req);
+  }
+});
+
+app.delete('/api/borrador', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'Token requerido.' });
+  try {
+    const p = await getPool();
+    await p.request()
+      .input('TOKEN',    sql.UniqueIdentifier, token)
+      .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
+      .query(`DELETE FROM GN_BORRADOR WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
+    res.json({ success: true });
+  } catch (err) {
+    _responderError(res, err, req);
   }
 });
 
@@ -4141,6 +4707,18 @@ app.use((err, req, res, next) => {
 });
 
 /* ── Puerto ──────────────────────────────────────────────────────────────────── */
-app.listen(PORT, () => {
-  console.log(`\n  🚀  Servidor SAGRILAFT corriendo en http://localhost:${PORT}\n`);
+app.listen(PORT, async () => {
+  console.log(`\n  🚀  Servidor SAGRILAFT corriendo en http://localhost:${PORT}`);
+  console.log(`  🔒  Panel admin: http://localhost:${PORT}/admin\n`);
+  // Mostrar solicitudes de cuenta pendientes al desarrollador
+  try {
+    const p = await getPool();
+    const r = await p.request()
+      .query(`SELECT COUNT(*) AS N FROM GN_ADMIN_USR WHERE ESTADO='P'`);
+    const pendientes = r.recordset[0]?.N || 0;
+    if (pendientes > 0) {
+      console.log(`  ⚠️  Hay ${pendientes} solicitud(es) de cuenta admin pendiente(s) de aprobación.`);
+      console.log(`      Revise el correo de ${SUPER_ADMIN_EMAIL || '(SUPER_ADMIN_EMAIL no configurado)'}\n`);
+    }
+  } catch (_) {}
 });

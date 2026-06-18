@@ -35,6 +35,7 @@ function validarTodoNatural() {
 
   if (!db.COD_VINC)   errores.push('Sección 1: Tipo de vinculación requerido');
   if (!db.COD_TPDOC)  errores.push('Sección 1: Tipo de documento requerido');
+  if (db.COD_TPDOC === 'OTR_TPDOC' && !db.OTR_TPDOC) errores.push('Sección 1: Especifique el tipo de documento');
   if (!db.NUM_IDEN)   errores.push('Sección 1: Número de documento requerido');
   if (!n.NOM_TERC)    errores.push('Sección 1: Primer nombre requerido');
   if (!n.APE_TERC)    errores.push('Sección 1: Primer apellido requerido');
@@ -52,9 +53,9 @@ function validarTodoNatural() {
   // ── Sección 9: Financiera ─────────────────────────────────────────────────
   const fin = formData.financiera;
   if (fin.ACT_TOTAL  === null) errores.push('Información financiera: Activos totales requeridos');
-  if (fin.ING_MENS   === null) errores.push('Información financiera: Ingresos mensuales requeridos');
+  if (fin.ING_MENS   === null) errores.push('Información financiera: Ingresos anuales requeridos');
   if (fin.PAS_TOTAL  === null) errores.push('Información financiera: Pasivos totales requeridos');
-  if (fin.EGR_MENS   === null) errores.push('Información financiera: Egresos mensuales requeridos');
+  if (fin.EGR_MENS   === null) errores.push('Información financiera: Egresos anuales requeridos');
   if (fin.PATRIMONIO === null) errores.push('Información financiera: Patrimonio requerido');
 
   // ── Sección 10: Bancaria ──────────────────────────────────────────────────
@@ -97,9 +98,10 @@ function _construirPayloadNatural() {
     DIR_MAIL:  db.DIR_MAIL,
     // ── GN_NATUR ────────────────────────────────────────────────────────────
     COD_VINC:     db.COD_VINC,     // → TIP_VINC en GN_NATUR
+    OTR_TPDOC:    db.OTR_TPDOC,
     MAIL_SARL:    n.MAIL_SARL,
     COD_NACIO:    n.COD_NACIO,
-    ACT_PRINC:    n.ACT_PRINC,
+    OTR_NACIO:    n.OTR_NACIO,
     COD_CIIU:     n.COD_CIIU,
     FEC_EXPE:     n.FEC_EXPE,
     COD_PAIS_EXP: n.COD_PAIS_EXP,
@@ -238,9 +240,13 @@ async function actualizarFormularioNatural() {
   try {
     const payload = _construirPayloadNatural();
 
+    const _codigoEdit = sessionStorage.getItem('sarlaft_edit_code') || '';
     const resp = await fetch('/api/actualizar-completo-natural', {
       method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ..._codigoEdit ? { 'X-Codigo-Edicion': _codigoEdit } : {},
+      },
       body:    JSON.stringify(payload),
     });
 
@@ -281,6 +287,7 @@ async function actualizarFormularioNatural() {
     if (docWarning) mostrarToast(`Cambios guardados. Documentos rechazados: ${docWarning}`, 'warning');
     if (typeof _archivos !== 'undefined') _archivos.clear();
     borrarBorrador();
+    if (typeof eliminarBorradorServidor === 'function') eliminarBorradorServidor();
 
     _mostrarConfirmacion(payload.NUM_IDEN, data.COD_TERC, true);
     console.log('✅ Persona Natural actualizada. COD_TERC:', data.COD_TERC);

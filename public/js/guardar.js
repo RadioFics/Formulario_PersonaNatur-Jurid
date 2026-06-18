@@ -61,8 +61,13 @@ function validarTodo() {
   if (!rp.NOM_REPR) errores.push('Representante legal: Nombres del Principal requeridos');
   if (!rp.APE_REPR) errores.push('Representante legal: Apellidos del Principal requeridos');
   if (!rp.TIP_DOCU) errores.push('Representante legal: Tipo de documento del Principal requerido');
+  if (rp.TIP_DOCU === 'OTR_TPDOC' && !rp.OTR_TPDOC) errores.push('Representante legal: Especifique el tipo de documento del Principal');
   if (!rp.NUM_DOCU) errores.push('Representante legal: Número de documento del Principal requerido');
   if (!rp.COD_PAIS) errores.push('Representante legal: País del Principal requerido');
+  formData.representantes.slice(1).forEach((r, i) => {
+    if (r.TIP_DOCU === 'OTR_TPDOC' && !r.OTR_TPDOC)
+      errores.push(`Representante legal: Especifique el tipo de documento del Suplente ${i + 1}`);
+  });
 
   /* ── Sección 3: Sociedad ─────────────────────────────────────────────── */
   if (!formData.sociedad.TIP_EMPR)
@@ -71,6 +76,8 @@ function validarTodo() {
     errores.push('Información de la sociedad: Grupo empresarial requerido');
   if (formData.sociedad.UBIC_SOC === 'E' && !formData.sociedad.COD_PAIS_SOC)
     errores.push('Información de la sociedad: País requerido para empresa extranjera');
+  if (formData.sociedad.UBIC_SOC === 'SC' && !formData.sociedad.COD_PAIS_ORIG_SOC)
+    errores.push('Información de la sociedad: País de origen requerido para Sucursal en Colombia');
   if (formData.sociedad.GRUP_EMPR === 'S') {
     if (!formData.sociedad.CTRL_DECLA)
       errores.push('Información de la sociedad: Indique si las situaciones de control están declaradas en el CERL');
@@ -87,12 +94,18 @@ function validarTodo() {
     errores.push('Países de operación: Seleccione al menos un país');
   if (formData.paises.some(p => !p.COD_PAIS))
     errores.push('Países de operación: Hay entradas sin país seleccionado');
+  if (formData.paises.some(p => p.COD_PAIS === 'OTRO' && !p.OTR_PAIS))
+    errores.push('Países de operación: Especifique el nombre del país en las entradas "Otro"');
 
   /* ── Sección 5: Cumplimiento ─────────────────────────────────────────── */
   if (formData.cumplimiento.TIE_NORM === 'S') {
     if (!formData.cumplimiento.DESC_NORM || !String(formData.cumplimiento.DESC_NORM).trim())
       errores.push('Sistema de cumplimiento: Descripción de normatividad requerida');
   }
+  formData.cumplimiento.oficiales.forEach((o, i) => {
+    if (o.TIP_DOCU === 'OTR_TPDOC' && !o.OTR_TPDOC)
+      errores.push(`Sistema de cumplimiento: Especifique el tipo de documento del oficial ${i + 1}`);
+  });
 
   /* ── Sección 6: Junta directiva ──────────────────────────────────────── */
   if (formData.juntaDirectiva.TIE_JUNTA === 'S') {
@@ -119,9 +132,9 @@ function validarTodo() {
 
   /* ── Sección 9: Financiera ───────────────────────────────────────────── */
   if (formData.financiera.ACT_TOTAL  === null) errores.push('Información financiera: Activos totales requeridos');
-  if (formData.financiera.ING_MENS   === null) errores.push('Información financiera: Ingresos mensuales requeridos');
+  if (formData.financiera.ING_MENS   === null) errores.push('Información financiera: Ingresos anuales requeridos');
   if (formData.financiera.PAS_TOTAL  === null) errores.push('Información financiera: Pasivos totales requeridos');
-  if (formData.financiera.EGR_MENS   === null) errores.push('Información financiera: Egresos mensuales requeridos');
+  if (formData.financiera.EGR_MENS   === null) errores.push('Información financiera: Egresos anuales requeridos');
   if (formData.financiera.PATRIMONIO === null) errores.push('Información financiera: Patrimonio requerido');
 
   /* ── Sección 10: Bancaria ────────────────────────────────────────────── */
@@ -132,8 +145,13 @@ function validarTodo() {
     if (!b.TIP_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin tipo de cuenta`);
     if (!b.NUM_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin número de cuenta`);
     if (b.CUEN_EXTR === 'S') {
-      if (!b.NOM_ENT_EXT) errores.push(`Información bancaria: Cuenta ${i + 1} sin nombre de entidad extranjera`);
-      if (!b.TIP_CUE_EXT) errores.push(`Información bancaria: Cuenta ${i + 1} sin tipo de cuenta extranjera`);
+      if (!b.cuentasExt || b.cuentasExt.length === 0)
+        errores.push(`Información bancaria: Cuenta ${i + 1} debe registrar al menos una cuenta extranjera`);
+      (b.cuentasExt || []).forEach((ext, j) => {
+        if (!ext.COD_PAIS_EXT) errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin país`);
+        if (!ext.NOM_ENT_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin entidad`);
+        if (!ext.TIP_CUE_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin tipo de cuenta`);
+      });
     }
   });
 
@@ -323,9 +341,11 @@ function _cerrarProgresoModal() {
 /**
  * Muestra la pantalla de confirmación con el NUM_IDEN asignado.
  * @param {string}      numIden
- * @param {number|null} codTerc  COD_TERC devuelto por el servidor (para Excel)
+ * @param {number|null} codTerc          COD_TERC devuelto por el servidor (para Excel)
+ * @param {boolean}     esActualizacion
+ * @param {string|null} codigoEdicion    Código de edición generado (solo en creación nueva)
  */
-function _mostrarConfirmacion(numIden, codTerc, esActualizacion) {
+function _mostrarConfirmacion(numIden, codTerc, esActualizacion, codigoEdicion) {
   const modal = document.getElementById('confirmacion-modal');
   const idEl  = document.getElementById('confirm-num-iden');
   if (idEl) idEl.textContent = numIden;
@@ -336,6 +356,31 @@ function _mostrarConfirmacion(numIden, codTerc, esActualizacion) {
   if (bodyEl)  bodyEl.innerHTML    = esActualizacion
     ? 'Los cambios han sido guardados correctamente en la base de datos.<br>Número de identificación:'
     : 'Su información SAGRILAFT ha sido registrada correctamente.<br>Guarde el siguiente número de identificación para sus registros:';
+
+  // ── Código de edición (solo para registros nuevos) ────────────────────────
+  let editCodeEl = document.getElementById('confirm-edit-code-box');
+  if (!editCodeEl) {
+    editCodeEl = document.createElement('div');
+    editCodeEl.id = 'confirm-edit-code-box';
+    editCodeEl.style.cssText = [
+      'margin-top:16px', 'padding:14px 16px',
+      'background:#fff8e1', 'border:1.5px solid #f0c040',
+      'border-radius:8px', 'font-size:.88rem', 'color:#5a3e00',
+    ].join(';');
+    const idElRef = document.getElementById('confirm-num-iden');
+    if (idElRef && idElRef.parentNode)
+      idElRef.parentNode.insertBefore(editCodeEl, idElRef.nextSibling);
+  }
+  if (codigoEdicion && !esActualizacion) {
+    editCodeEl.innerHTML =
+      '<strong>⚠️ Código de edición:</strong> ' +
+      `<code style="font-size:1.1rem;letter-spacing:.15em;background:#fff3cd;padding:2px 8px;border-radius:4px">${codigoEdicion}</code>` +
+      '<br><span style="font-size:.8rem;color:#7a5800">Guarde este código — será necesario para editar este registro en el futuro.</span>';
+    editCodeEl.style.display = 'block';
+  } else {
+    editCodeEl.style.display = 'none';
+  }
+  // ── Fin código de edición ────────────────────────────────────────────────
 
   const btnExcel = document.getElementById('btn-descargar-excel');
   if (btnExcel) {
@@ -495,7 +540,8 @@ async function guardarFormulario() {
     // Limpiar _archivos para que beforeunload no bloquee la navegación post-envío
     if (typeof _archivos !== 'undefined') _archivos.clear();
     borrarBorrador();
-    _mostrarConfirmacion(numIden, data.COD_TERC || null);
+    if (typeof eliminarBorradorServidor === 'function') eliminarBorradorServidor();
+    _mostrarConfirmacion(numIden, data.COD_TERC || null, false, data.codigoEdicion || null);
 
   } catch (err) {
     clearInterval(_progresoTimer);
@@ -517,9 +563,14 @@ async function actualizarFormulario() {
   _mostrarProgresoModal();
   try {
     const payload = _construirPayload();
+    // Recuperar código de edición desde sessionStorage (depositado al cargar el modo actualizar)
+    const _codigoEdit = sessionStorage.getItem('sarlaft_edit_code') || '';
     const response = await fetch('/api/actualizar-completo', {
       method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ..._codigoEdit ? { 'X-Codigo-Edicion': _codigoEdit } : {},
+      },
       body:    JSON.stringify(payload),
     });
     clearInterval(_progresoTimer);
@@ -594,9 +645,11 @@ function _construirPayload() {
     ACE_POLI:     true,  // T&C aceptados
 
     // ── Sección 3 — GN_JURID (sociedad) ────────────────────────────────────
-    UBIC_SOC:     s.UBIC_SOC     || null,
-    COD_PAIS_SOC: s.COD_PAIS_SOC || null,
-    OTR_PAIS_SOC: s.OTR_PAIS_SOC || null,
+    UBIC_SOC:          s.UBIC_SOC          || null,
+    COD_PAIS_SOC:      s.COD_PAIS_SOC      || null,
+    OTR_PAIS_SOC:      s.OTR_PAIS_SOC      || null,
+    COD_PAIS_ORIG_SOC: s.COD_PAIS_ORIG_SOC || null,
+    OTR_PAIS_ORIG_SOC: s.OTR_PAIS_ORIG_SOC || null,
     TIP_EMPR:     s.TIP_EMPR     || null,
     GRUP_EMPR:    s.GRUP_EMPR    || null,
     CTRL_DECLA:   s.CTRL_DECLA   || null,
@@ -607,7 +660,7 @@ function _construirPayload() {
     representantes: formData.representantes.map(r => ({ ...r })),
 
     // ── Sección 4 — Países de operación (GN_JURID_PAIS) ────────────────────
-    paises: formData.paises.filter(p => p.COD_PAIS).map(p => ({ COD_PAIS: p.COD_PAIS })),
+    paises: formData.paises.filter(p => p.COD_PAIS || p.OTR_PAIS).map(p => ({ COD_PAIS: p.COD_PAIS, OTR_PAIS: p.OTR_PAIS || null })),
 
     // ── Sección 5 — Cumplimiento (GN_JURID_CUMP) ───────────────────────────
     TIE_NORM:       c.TIE_NORM    || 'N',

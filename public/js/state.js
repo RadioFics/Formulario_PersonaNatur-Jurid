@@ -50,10 +50,12 @@ const formData = {
 
   // Sección 3 — Información de la sociedad
   sociedad: {
-    UBIC_SOC:     'N',   // 'N' = Nacional | 'E' = Extranjera | 'SC' = Sucursal en Colombia
-    COD_PAIS_SOC: null,  // solo si UBIC_SOC = 'E'
-    OTR_PAIS_SOC: '',    // texto libre cuando COD_PAIS_SOC = 'OTRO'
-    TIP_EMPR:     null,  // 'PUBLICA' | 'PRIVADA' | 'MIXTA'
+    UBIC_SOC:          'N',   // 'N' = Nacional | 'E' = Extranjera | 'SC' = Sucursal en Colombia
+    COD_PAIS_SOC:      null,  // solo si UBIC_SOC = 'E'
+    OTR_PAIS_SOC:      '',    // texto libre cuando COD_PAIS_SOC = 'OTRO' (Extranjera)
+    COD_PAIS_ORIG_SOC: null,  // solo si UBIC_SOC = 'SC' (Sucursal) — país de origen
+    OTR_PAIS_ORIG_SOC: '',    // texto libre cuando COD_PAIS_ORIG_SOC = 'OTRO'
+    TIP_EMPR:          null,  // 'PUBLICA' | 'PRIVADA' | 'MIXTA'
     GRUP_EMPR:    null,  // 'S' | 'N'
     // Campos del cascada de grupo empresarial (solo cuando GRUP_EMPR = 'S')
     CTRL_DECLA:   null,  // ¿Situaciones declaradas en CERL? 'S' | 'N'
@@ -63,7 +65,7 @@ const formData = {
 
   // Sección 4 — Países de operación
   paises: [
-    { COD_PAIS: null },  // una entrada por país; se agregan/eliminan dinámicamente
+    { COD_PAIS: null, OTR_PAIS: '' },  // una entrada por país; se agregan/eliminan dinámicamente
   ],
 
   // Sección 5 — Sistema de cumplimiento
@@ -118,6 +120,7 @@ const formData = {
 
   // Sección 11b — Actividades con activos virtuales
   actividades: {
+    OPER_VA:      'N',
     ACT_VA_FIAT:  'N',
     ACT_VA_VA:    'N',
     ACT_TRANS:    'N',
