@@ -1685,7 +1685,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
     addSheetJ(L('Información Financiera','Financial Information'),        financiera, CURRENCY_COLS);
     addSheetJ(L('Cuentas Bancarias','Bank Accounts'),                     bancaria);
     addSheetJ(L('PEP','PEP'),                                             pep);
-    addSheetJ(L('Actividades con Activos Virtuales','Virtual Asset Activities'), act);
+    addSheetJ(L('Act. Activos Virtuales','Virtual Asset Activities'), act);
     addSheetJ(L('Representantes Legales','Legal Representatives'),        rl);
     addSheetJ(L('Junta Directiva','Board of Directors'),                  jd);
     addSheetJ(L('Revisores Fiscales','Statutory Auditors'),               rf);
@@ -3509,10 +3509,29 @@ app.post('/api/documentos/:numIden',
 
       const COD_TERC = tercResult.recordset[0].COD_TERC;
 
+      // Mapas para nombres legibles en BD
+      const _nomDocLegible = {
+        'DOC_ID_RL':   'Doc. identidad Representante Legal Principal',
+        'DOC_ID_RL_1': 'Doc. identidad Representante Legal Suplente 1',
+        'DOC_ID_RL_2': 'Doc. identidad Representante Legal Suplente 2',
+        'DOC_ID_RL_3': 'Doc. identidad Representante Legal Suplente 3',
+        'EST_FIN_1':   'Estados financieros — Penúltimo año fiscal',
+        'EST_FIN_2':   'Estados financieros — Último año fiscal',
+        'RUT':         'RUT — Registro Único Tributario',
+        'CERT_BANC':   'Certificación bancaria',
+        'CERT_EXIS':   'Certificado de existencia y representación',
+        'CERT_ACCI':   'Certificado de composición accionaria',
+        'CART_ACEP':   'Carta de aceptación y autorización',
+        'ARCH_FIRMA':  'Firma del representante legal',
+        'DOC_ID_RL':   'Doc. identidad del Representante Legal',
+        'EST_FIN':     'Estados financieros',
+      };
+
       // Insertar o actualizar cada archivo en GN_TERCE_DOC
       const guardados = [];
       for (const file of req.files) {
-        const tipDoc  = file.fieldname;
+        // DOC_ID_RL_0 es el RL principal — se almacena con la clave canónica DOC_ID_RL
+        const tipDoc  = file.fieldname === 'DOC_ID_RL_0' ? 'DOC_ID_RL' : file.fieldname;
         const nomArch = file.originalname;
         const extArch = path.extname(nomArch).replace('.', '').toLowerCase();
         const anio    = new Date().getFullYear();
@@ -3568,7 +3587,7 @@ app.post('/api/documentos/:numIden',
             .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
             .input('COD_TERC', sql.BigInt,      COD_TERC)
             .input('TIP_DOC',  sql.VarChar(20), tipDoc)
-            .input('NOM_DOC',  sql.VarChar(120),tipDoc)   // el nombre legible se puede mejorar
+            .input('NOM_DOC',  sql.VarChar(120),_nomDocLegible[tipDoc] || tipDoc)
             .input('NOM_ARCH', sql.VarChar(260),nomArch)
             .input('RUT_DOC',  sql.VarChar(500),rutDoc)
             .input('EXT_ARCH', sql.VarChar(10), extArch)
