@@ -203,6 +203,15 @@ const I18N_DICT = {
   sec9_add_btn:          { es: '＋ Agregar beneficiario',           en: '＋ Add beneficiary' },
   sec9_btn:              { es: 'Continuar → Sección 10',           en: 'Continue → Section 10' },
 
+  /* ── Sección 9N ── Participación en sociedades (solo Persona Natural) ── */
+  sec9n_title:        { es: 'Participación en sociedades',         en: 'Participation in companies' },
+  sec9n_part_soc:     { es: '¿Tiene participación en alguna sociedad y/o es beneficiario final de esta?', en: 'Do you hold participation in any company and/or are you a beneficial owner?' },
+  sec9n_part_soc_tip: { es: 'Se entiende por participación la tenencia de acciones, cuotas sociales, participaciones en sociedades de personas o cualquier otro tipo de interés económico o de control en una entidad, entre otros.', en: 'Participation is understood as the holding of shares, social quotas, participations in partnerships, or any other type of economic interest or control in an entity, among others.' },
+  sec9n_raz_soc:      { es: 'Razón social (nombre de la sociedad)',   en: 'Company name' },
+  sec9n_tip_doc_soc:  { es: 'Tipo de documento',                      en: 'Document type' },
+  sec9n_num_doc_soc:  { es: 'Número de documento (NIT o equivalente)', en: 'Document number (NIT or equivalent)' },
+  sec9n_btn:          { es: 'Continuar → Sección 10',                  en: 'Continue → Section 10' },
+
   /* ── Sección 10 ── Financiera ───────────────────────────────────────── */
   sec10_title:           { es: 'Información financiera',            en: 'Financial Information' },
   sec10_act_total:       { es: 'Activos totales (COP)',             en: 'Total assets (COP)' },

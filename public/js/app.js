@@ -118,6 +118,12 @@ async function inicializar() {
       // inicializarNaturBasica() está en seccion-natur-basica.js.
       inicializarNaturBasica(),
 
+      // Tipos de documento para sección 9N (participación en sociedades — NIT o equiv.)
+      cargarCatalogo(
+        '/api/catalogo/tipos-documento?todos=1', 'bfn_tip_doc_soc',
+        'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'
+      ),
+
     ]);
   } catch (err) {
     console.error('Error en inicializar():', err);
@@ -347,6 +353,7 @@ async function recargarCatalogosIdioma() {
     // cod_ciiu (jurídica) excluye códigos 00XX de personas naturales; cod_ciiu_n los incluye todos
     { endpoint: '/api/catalogo/ciiu?tipo=J',             id: 'cod_ciiu',     val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
     { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu_n',   val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/tipos-documento?todos=1', id: 'bfn_tip_doc_soc', val: 'COD_TPDOC', txt: 'NOM_TPDOC', ph: 'select_placeholder' },
   ];
 
   for (const cfg of selects) {
@@ -559,6 +566,26 @@ async function _cargarRegistroExistente(numIden) {
       if (datos.pep)         Object.assign(formData.pep,         datos.pep);
       if (datos.actividades) Object.assign(formData.actividades, datos.actividades);
       if (Array.isArray(datos.bancaria)) formData.bancaria = datos.bancaria;
+
+      // Sección 9N — Participación en sociedades
+      if (datos.beneficiariosN) {
+        Object.assign(formDataNatur.beneficiariosN, datos.beneficiariosN);
+        // Hidratar radio PART_SOC
+        const partSoc = datos.beneficiariosN.PART_SOC || 'N';
+        const radioSel = document.querySelector(`input[name="part_soc"][value="${partSoc}"]`);
+        if (radioSel) radioSel.checked = true;
+        // Mostrar campos condicionales si aplica
+        const bfnWrap = document.getElementById('bfn-fields-wrap');
+        if (bfnWrap) bfnWrap.style.display = partSoc === 'S' ? '' : 'none';
+        if (partSoc === 'S') {
+          const razInp = document.getElementById('bfn_raz_soc');
+          const tdSel  = document.getElementById('bfn_tip_doc_soc');
+          const numInp = document.getElementById('bfn_num_doc_soc');
+          if (razInp && datos.beneficiariosN.RAZ_SOC)     razInp.value = datos.beneficiariosN.RAZ_SOC;
+          if (tdSel  && datos.beneficiariosN.TIP_DOC_SOC) tdSel.value  = datos.beneficiariosN.TIP_DOC_SOC;
+          if (numInp && datos.beneficiariosN.NUM_DOC_SOC) numInp.value = datos.beneficiariosN.NUM_DOC_SOC;
+        }
+      }
 
       mostrarToast('Registro de Persona Natural cargado.', 'success');
       return;

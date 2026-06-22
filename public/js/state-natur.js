@@ -28,6 +28,12 @@ window.formDataNatur = {
     COD_PAIS_EXP: '1',
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
+  },
+  beneficiariosN: {
+    PART_SOC:    'N',
+    RAZ_SOC:     null,
+    TIP_DOC_SOC: null,
+    NUM_DOC_SOC: null,
   }
 };
 
