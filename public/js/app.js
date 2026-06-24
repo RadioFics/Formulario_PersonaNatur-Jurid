@@ -118,11 +118,13 @@ async function inicializar() {
       // inicializarNaturBasica() está en seccion-natur-basica.js.
       inicializarNaturBasica(),
 
-      // Tipos de documento para sección 9N (participación en sociedades — NIT o equiv.)
+      // Tipos de documento para sección 9N: solo NIT + "Sin asignar / Otro tipo"
       cargarCatalogo(
-        '/api/catalogo/tipos-documento?todos=1', 'bfn_tip_doc_soc',
+        '/api/catalogo/tipos-documento', 'bfn_tip_doc_soc',
         'COD_TPDOC', 'NOM_TPDOC', 'select_placeholder'
-      ),
+      ).then(() => {
+        agregarOpcionOtroAlTipdoc('bfn_tip_doc_soc');
+      }),
 
     ]);
   } catch (err) {
@@ -200,6 +202,11 @@ function _activarCamposOtros() {
   _activarSiblingOtro('rl_p_tipdoc',   'rl_p_tipdoc_otro',            () => {
     actualizarRL(0, 'OTR_TPDOC', null);
     const el = document.getElementById('rl_p_tipdoc_otro'); if (el) el.value = '';
+  });
+
+  _activarSiblingOtro('bfn_tip_doc_soc', 'bfn_tip_doc_soc_otro',      () => {
+    if (typeof actualizarBFN === 'function') actualizarBFN('OTR_TIP_DOC_SOC', null);
+    const el = document.getElementById('bfn_tip_doc_soc_otro'); if (el) el.value = '';
   });
 
   // cump_sis_preve — checkboxes: cargarCheckboxesSisPrev() restaura el estado
@@ -353,7 +360,7 @@ async function recargarCatalogosIdioma() {
     // cod_ciiu (jurídica) excluye códigos 00XX de personas naturales; cod_ciiu_n los incluye todos
     { endpoint: '/api/catalogo/ciiu?tipo=J',             id: 'cod_ciiu',     val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
     { endpoint: '/api/catalogo/ciiu',                    id: 'cod_ciiu_n',   val: 'COD_CIIU',  txt: 'NOM_CIIU',  ph: 'select_placeholder' },
-    { endpoint: '/api/catalogo/tipos-documento?todos=1', id: 'bfn_tip_doc_soc', val: 'COD_TPDOC', txt: 'NOM_TPDOC', ph: 'select_placeholder' },
+    { endpoint: '/api/catalogo/tipos-documento', id: 'bfn_tip_doc_soc', val: 'COD_TPDOC', txt: 'NOM_TPDOC', ph: 'select_placeholder' },
   ];
 
   for (const cfg of selects) {
@@ -368,6 +375,7 @@ async function recargarCatalogosIdioma() {
   // Restaurar "Otro tipo doc" en selects de tipo de documento (no está en el catálogo de BD)
   const rlTipdocSel = document.getElementById('rl_p_tipdoc');
   if (rlTipdocSel) agregarOpcionOtroAlTipdoc(rlTipdocSel);
+  agregarOpcionOtroAlTipdoc('bfn_tip_doc_soc');
 
   // Re-aplicar el filtro de tipo de documento según el tipo de persona activo
   if (typeof _repoblarTipoDocumento === 'function') {
@@ -580,9 +588,14 @@ async function _cargarRegistroExistente(numIden) {
         if (partSoc === 'S') {
           const razInp = document.getElementById('bfn_raz_soc');
           const tdSel  = document.getElementById('bfn_tip_doc_soc');
+          const tdOtr  = document.getElementById('bfn_tip_doc_soc_otro');
           const numInp = document.getElementById('bfn_num_doc_soc');
           if (razInp && datos.beneficiariosN.RAZ_SOC)     razInp.value = datos.beneficiariosN.RAZ_SOC;
-          if (tdSel  && datos.beneficiariosN.TIP_DOC_SOC) tdSel.value  = datos.beneficiariosN.TIP_DOC_SOC;
+          if (tdSel  && datos.beneficiariosN.TIP_DOC_SOC) {
+            tdSel.value = datos.beneficiariosN.TIP_DOC_SOC;
+            tdSel.dispatchEvent(new Event('change'));
+          }
+          if (tdOtr  && datos.beneficiariosN.OTR_TIP_DOC_SOC) tdOtr.value = datos.beneficiariosN.OTR_TIP_DOC_SOC;
           if (numInp && datos.beneficiariosN.NUM_DOC_SOC) numInp.value = datos.beneficiariosN.NUM_DOC_SOC;
         }
       }

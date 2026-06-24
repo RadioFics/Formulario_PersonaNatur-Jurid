@@ -12,6 +12,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1058.0",
     "@azure/identity": "^4.13.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tediousjs/connection-string": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",

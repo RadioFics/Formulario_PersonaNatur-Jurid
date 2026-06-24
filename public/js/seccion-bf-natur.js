@@ -4,12 +4,13 @@
  *
  * Pregunta si la persona posee participación en alguna sociedad o es
  * beneficiario final de ella. Si responde Sí, muestra:
- *   RAZ_SOC     — Razón social de la sociedad
- *   TIP_DOC_SOC — Tipo de documento (NIT o equivalente)
- *   NUM_DOC_SOC — Número de documento
+ *   RAZ_SOC         — Razón social de la sociedad
+ *   TIP_DOC_SOC     — Tipo de documento (NIT o Sin asignar/Otro)
+ *   OTR_TIP_DOC_SOC — Texto libre cuando tipo = Sin asignar/Otro
+ *   NUM_DOC_SOC     — Número de documento
  *
  * Estado: formDataNatur.beneficiariosN
- * DB:     columnas PART_SOC, RAZ_SOC, TIP_DOC_SOC, NUM_DOC_SOC en GN_NATUR
+ * DB:     columnas PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC en GN_NATUR
  *
  * Depende de: state-natur.js, utils.js
  */
@@ -32,12 +33,14 @@ function onPartSocChange(valor) {
     wrap.style.display = '';
   } else {
     wrap.style.display = 'none';
-    ['RAZ_SOC', 'TIP_DOC_SOC', 'NUM_DOC_SOC'].forEach(c => actualizarBFN(c, null));
+    ['RAZ_SOC', 'TIP_DOC_SOC', 'OTR_TIP_DOC_SOC', 'NUM_DOC_SOC'].forEach(c => actualizarBFN(c, null));
     const razInp = document.getElementById('bfn_raz_soc');
     const tdSel  = document.getElementById('bfn_tip_doc_soc');
+    const tdOtr  = document.getElementById('bfn_tip_doc_soc_otro');
     const numInp = document.getElementById('bfn_num_doc_soc');
     if (razInp) razInp.value = '';
     if (tdSel)  tdSel.value = '';
+    if (tdOtr)  { tdOtr.value = ''; tdOtr.style.display = 'none'; }
     if (numInp) numInp.value = '';
     ['field-bfn_raz_soc', 'field-bfn_tip_doc_soc', 'field-bfn_num_doc_soc']
       .forEach(id => limpiarError(id));
@@ -50,9 +53,17 @@ function validarBFNatural() {
   const bfn = (formDataNatur && formDataNatur.beneficiariosN) || {};
   if (bfn.PART_SOC !== 'S') return true;
   let ok = true;
-  if (!bfn.RAZ_SOC     || !String(bfn.RAZ_SOC).trim())     { mostrarError('field-bfn_raz_soc');     ok = false; }
-  if (!bfn.TIP_DOC_SOC)                                     { mostrarError('field-bfn_tip_doc_soc'); ok = false; }
-  if (!bfn.NUM_DOC_SOC || !String(bfn.NUM_DOC_SOC).trim()) { mostrarError('field-bfn_num_doc_soc'); ok = false; }
+  if (!bfn.RAZ_SOC || !String(bfn.RAZ_SOC).trim()) {
+    mostrarError('field-bfn_raz_soc'); ok = false;
+  }
+  if (!bfn.TIP_DOC_SOC) {
+    mostrarError('field-bfn_tip_doc_soc'); ok = false;
+  } else if (bfn.TIP_DOC_SOC === 'OTR_TPDOC' && (!bfn.OTR_TIP_DOC_SOC || !String(bfn.OTR_TIP_DOC_SOC).trim())) {
+    mostrarError('field-bfn_tip_doc_soc'); ok = false;
+  }
+  if (!bfn.NUM_DOC_SOC || !String(bfn.NUM_DOC_SOC).trim()) {
+    mostrarError('field-bfn_num_doc_soc'); ok = false;
+  }
   return ok;
 }
 
@@ -61,7 +72,7 @@ function validarBFNatural() {
 function limpiarSeccionBFN() {
   if (!formDataNatur.beneficiariosN) formDataNatur.beneficiariosN = {};
   Object.assign(formDataNatur.beneficiariosN, {
-    PART_SOC: 'N', RAZ_SOC: null, TIP_DOC_SOC: null, NUM_DOC_SOC: null,
+    PART_SOC: 'N', RAZ_SOC: null, TIP_DOC_SOC: null, OTR_TIP_DOC_SOC: null, NUM_DOC_SOC: null,
   });
   const radioNo = document.querySelector('input[name="part_soc"][value="N"]');
   if (radioNo) radioNo.checked = true;
@@ -69,9 +80,11 @@ function limpiarSeccionBFN() {
   if (wrap) wrap.style.display = 'none';
   const razInp = document.getElementById('bfn_raz_soc');
   const tdSel  = document.getElementById('bfn_tip_doc_soc');
+  const tdOtr  = document.getElementById('bfn_tip_doc_soc_otro');
   const numInp = document.getElementById('bfn_num_doc_soc');
   if (razInp) razInp.value = '';
   if (tdSel)  tdSel.value = '';
+  if (tdOtr)  { tdOtr.value = ''; tdOtr.style.display = 'none'; }
   if (numInp) numInp.value = '';
   document.querySelectorAll('#accordion-bf-n .field.error').forEach(f => f.classList.remove('error'));
   mostrarToast(typeof t === 'function' ? t('toast_sec_clear') : 'Sección limpiada.', 'success');

@@ -1,23 +1,38 @@
-# Logs
-*.log
-
-# Dependencies
+# ── Dependencias ─────────────────────────────────────────────────────────────
 node_modules/
 
-# Build
+# ── Variables de entorno (secretos) ──────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Salida de tiempo de ejecución ────────────────────────────────────────────
+server_out.txt
+server_err.txt
+*.log
+logs/
+
+# ── Build / dist ──────────────────────────────────────────────────────────────
 dist/
 build/
 
-# Environment
-.env
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
 
-# IDE
+# ── IDE / editores ────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# OS
-.DS_Store
-Thumbs.db
-
-# node
-node_modules/
+# ── Claude Code (datos de sesión locales) ─────────────────────────────────────
+.claude/

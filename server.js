@@ -2236,7 +2236,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         rC().query(`SELECT TIP_VINC AS COD_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO, ACT_PRINC,
                           COD_CIIU, OTR_CIIU, CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
                           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-                          PART_SOC, RAZ_SOC, TIP_DOC_SOC, NUM_DOC_SOC
+                          PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC
                    FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
                    FROM GN_NATUR_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
@@ -2275,10 +2275,11 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         pep:         pepRes.recordset[0]  || { MAN_RPUB: null, CAR_PUBL: null },
         actividades: actRes.recordset[0]  || {},
         beneficiariosN: {
-          PART_SOC:    nRow.PART_SOC    || 'N',
-          RAZ_SOC:     nRow.RAZ_SOC     || null,
-          TIP_DOC_SOC: nRow.TIP_DOC_SOC || null,
-          NUM_DOC_SOC: nRow.NUM_DOC_SOC || null,
+          PART_SOC:        nRow.PART_SOC    || 'N',
+          RAZ_SOC:         nRow.RAZ_SOC     || null,
+          TIP_DOC_SOC:     nRow.OTR_TIP_DOC_SOC ? 'OTR_TPDOC' : (nRow.TIP_DOC_SOC || null),
+          OTR_TIP_DOC_SOC: nRow.OTR_TIP_DOC_SOC || null,
+          NUM_DOC_SOC:     nRow.NUM_DOC_SOC || null,
         },
       });
     }
@@ -3456,21 +3457,22 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP', sql.Int,          toInt(b.COD_DEPT_EXP))
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
-      .input('PART_SOC',    sql.Char(1),       b.PART_SOC    || 'N')
-      .input('RAZ_SOC',     sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC     || null) : null)
-      .input('TIP_DOC_SOC', sql.Int,           b.PART_SOC === 'S' ? (toInt(b.TIP_DOC_SOC)) : null)
-      .input('NUM_DOC_SOC', sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC  || null) : null)
+      .input('PART_SOC',        sql.Char(1),       b.PART_SOC    || 'N')
+      .input('RAZ_SOC',         sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC          || null) : null)
+      .input('TIP_DOC_SOC',     sql.Int,           b.PART_SOC === 'S' ? (b.TIP_DOC_SOC === 'OTR_TPDOC' ? null : toInt(b.TIP_DOC_SOC)) : null)
+      .input('OTR_TIP_DOC_SOC', sql.VarChar(100),  b.PART_SOC === 'S' ? (b.OTR_TIP_DOC_SOC || null) : null)
+      .input('NUM_DOC_SOC',     sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC      || null) : null)
       .query(`
         INSERT INTO GN_NATUR
           (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO,
            ACT_PRINC, COD_CIIU, OTR_CIIU, FEC_EXPE,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-           PART_SOC, RAZ_SOC, TIP_DOC_SOC, NUM_DOC_SOC)
+           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO, @OTR_NACIO,
            @ACT_PRINC, @COD_CIIU, @OTR_CIIU, @FEC_EXPE,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP,
-           @PART_SOC, @RAZ_SOC, @TIP_DOC_SOC, @NUM_DOC_SOC)
+           @PART_SOC, @RAZ_SOC, @TIP_DOC_SOC, @OTR_TIP_DOC_SOC, @NUM_DOC_SOC)
       `);
 
     // ── 3. GN_NATUR_FIN ──────────────────────────────────────────────────────
@@ -3725,7 +3727,11 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
           CASE n.PART_SOC WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                               AS [${L('¿Tiene participación en alguna sociedad?','Holds participation in a company?')}],
           ISNULL(n.RAZ_SOC,'')               AS [${L('Razón social de la sociedad','Company name')}],
-          ISNULL(${nomTpdoc('td')}, '')       AS [${L('Tipo de documento (NIT o equiv.)','Document type (NIT or equiv.)')}],
+          ISNULL(CASE WHEN n.TIP_DOC_SOC IS NULL AND n.OTR_TIP_DOC_SOC IS NOT NULL
+                      THEN '${L('Sin asignar / Otro tipo','Unassigned / Other type')}'
+                      ELSE ${nomTpdoc('td')} END, '')
+                                             AS [${L('Tipo de documento','Document type')}],
+          ISNULL(n.OTR_TIP_DOC_SOC,'')      AS [${L('Otro tipo de documento','Other document type')}],
           ISNULL(n.NUM_DOC_SOC,'')           AS [${L('Número de documento','Document number')}]
         FROM GN_NATUR n
           LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = n.TIP_DOC_SOC
@@ -4527,16 +4533,18 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP', sql.Int,          toInt(b.COD_DEPT_EXP))
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
-      .input('PART_SOC',    sql.Char(1),       b.PART_SOC    || 'N')
-      .input('RAZ_SOC',     sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC     || null) : null)
-      .input('TIP_DOC_SOC', sql.Int,           b.PART_SOC === 'S' ? (toInt(b.TIP_DOC_SOC)) : null)
-      .input('NUM_DOC_SOC', sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC  || null) : null)
+      .input('PART_SOC',        sql.Char(1),       b.PART_SOC    || 'N')
+      .input('RAZ_SOC',         sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC          || null) : null)
+      .input('TIP_DOC_SOC',     sql.Int,           b.PART_SOC === 'S' ? (b.TIP_DOC_SOC === 'OTR_TPDOC' ? null : toInt(b.TIP_DOC_SOC)) : null)
+      .input('OTR_TIP_DOC_SOC', sql.VarChar(100),  b.PART_SOC === 'S' ? (b.OTR_TIP_DOC_SOC || null) : null)
+      .input('NUM_DOC_SOC',     sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC      || null) : null)
       .query(`UPDATE GN_NATUR
               SET TIP_VINC=@TIP_VINC, MAIL_SARL=@MAIL_SARL, COD_NACIO=@COD_NACIO, OTR_NACIO=@OTR_NACIO,
                   ACT_PRINC=@ACT_PRINC, COD_CIIU=@COD_CIIU, OTR_CIIU=@OTR_CIIU, FEC_EXPE=@FEC_EXPE,
                   COD_PAIS_EXP=@COD_PAIS_EXP, OTR_PAIS_EXP=@OTR_PAIS_EXP,
                   COD_DEPT_EXP=@COD_DEPT_EXP, COD_MPIO_EXP=@COD_MPIO_EXP,
-                  PART_SOC=@PART_SOC, RAZ_SOC=@RAZ_SOC, TIP_DOC_SOC=@TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC
+                  PART_SOC=@PART_SOC, RAZ_SOC=@RAZ_SOC, TIP_DOC_SOC=@TIP_DOC_SOC,
+                  OTR_TIP_DOC_SOC=@OTR_TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const del = async tabla => r()

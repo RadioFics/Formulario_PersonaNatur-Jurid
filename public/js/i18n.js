@@ -209,7 +209,7 @@ const I18N_DICT = {
   sec9n_part_soc_tip: { es: 'Se entiende por participación la tenencia de acciones, cuotas sociales, participaciones en sociedades de personas o cualquier otro tipo de interés económico o de control en una entidad, entre otros.', en: 'Participation is understood as the holding of shares, social quotas, participations in partnerships, or any other type of economic interest or control in an entity, among others.' },
   sec9n_raz_soc:      { es: 'Razón social (nombre de la sociedad)',   en: 'Company name' },
   sec9n_tip_doc_soc:  { es: 'Tipo de documento',                      en: 'Document type' },
-  sec9n_num_doc_soc:  { es: 'Número de documento (NIT o equivalente)', en: 'Document number (NIT or equivalent)' },
+  sec9n_num_doc_soc:  { es: 'Número de documento',                      en: 'Document number' },
   sec9n_btn:          { es: 'Continuar → Sección 10',                  en: 'Continue → Section 10' },
 
   /* ── Sección 10 ── Financiera ───────────────────────────────────────── */

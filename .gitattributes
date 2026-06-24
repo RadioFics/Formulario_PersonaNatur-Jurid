@@ -1,13 +1,56 @@
-* text=auto
+# Normalizar todos los archivos de texto a LF al hacer commit.
+# Al hacer checkout en Windows se usará también LF (no CRLF), lo que
+# garantiza consistencia entre sistemas y evita diffs falsos.
+* text=auto eol=lf
 
-*.cs text diff=csharp
-*.sql text
-*.json text
-*.md text
-*.sh text eol=lf
-*.bat text eol=crlf
+# ── JavaScript / Node ─────────────────────────────────────────────────────────
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
 
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.gif binary
+# ── Web ───────────────────────────────────────────────────────────────────────
+*.html  text eol=lf
+*.css   text eol=lf
+
+# ── Datos / Configuración ─────────────────────────────────────────────────────
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.env   text eol=lf
+
+# ── Base de datos / SQL ───────────────────────────────────────────────────────
+*.sql   text eol=lf
+
+# ── Documentación ─────────────────────────────────────────────────────────────
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+*.sh    text eol=lf
+*.py    text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# ── Binarios — sin conversión ─────────────────────────────────────────────────
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   binary
+*.webp  binary
+*.pdf   binary
+*.docx  binary
+*.xlsx  binary
+*.xls   binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.7z    binary
+*.rar   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
+*.eot   binary

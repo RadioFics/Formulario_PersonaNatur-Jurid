@@ -30,10 +30,11 @@ window.formDataNatur = {
     COD_MPIO_EXP: null,
   },
   beneficiariosN: {
-    PART_SOC:    'N',
-    RAZ_SOC:     null,
-    TIP_DOC_SOC: null,
-    NUM_DOC_SOC: null,
+    PART_SOC:        'N',
+    RAZ_SOC:         null,
+    TIP_DOC_SOC:     null,
+    OTR_TIP_DOC_SOC: null,
+    NUM_DOC_SOC:     null,
   }
 };
 

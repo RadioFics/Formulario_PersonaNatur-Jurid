@@ -1,0 +1,15 @@
+-- add_otr_tip_doc_soc.sql
+-- Agrega columna OTR_TIP_DOC_SOC a GN_NATUR para permitir texto libre
+-- cuando el tipo de documento de la sociedad es "Sin asignar / Otro tipo".
+-- Ejecutar en MineDax (CM-ITD-P-05\SQLEXPRESS)
+
+IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = 'GN_NATUR' AND COLUMN_NAME = 'OTR_TIP_DOC_SOC'
+)
+    ALTER TABLE dbo.GN_NATUR ADD OTR_TIP_DOC_SOC VARCHAR(100) NULL;
+
+-- Verificación
+SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'GN_NATUR' AND COLUMN_NAME = 'OTR_TIP_DOC_SOC';

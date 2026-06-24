@@ -1050,7 +1050,7 @@
     <div class="accordion-body">
 
       <!-- Pregunta principal -->
-      <div class="field" id="field-part_soc">
+      <div class="field field-radio" id="field-part_soc">
         <label>
           <span data-i18n="sec9n_part_soc">¿Tiene participación en alguna sociedad y/o es beneficiario final de esta?</span>
           <span class="ic-info"
@@ -1059,11 +1059,11 @@
           <span class="req">*</span>
         </label>
         <div class="radio-group">
-          <label class="radio-label">
+          <label class="radio-option">
             <input type="radio" name="part_soc" value="S" onchange="onPartSocChange('S')">
             <span data-i18n="yes">Sí</span>
           </label>
-          <label class="radio-label">
+          <label class="radio-option">
             <input type="radio" name="part_soc" value="N" onchange="onPartSocChange('N')" checked>
             <span data-i18n="no">No</span>
           </label>
@@ -1090,14 +1090,19 @@
               <span class="req">*</span>
             </label>
             <select id="bfn_tip_doc_soc"
-                    onchange="actualizarBFN('TIP_DOC_SOC', this.value)"
+                    onchange="actualizarBFN('TIP_DOC_SOC', this.value); limpiarError('field-bfn_tip_doc_soc')"
                     onfocus="limpiarError('field-bfn_tip_doc_soc')">
             </select>
+            <input type="text" id="bfn_tip_doc_soc_otro" class="otro-inp" maxlength="100"
+                   style="display:none;margin-top:6px"
+                   data-i18n-ph="field_specify_doc" placeholder="Especifique el tipo de documento"
+                   oninput="actualizarBFN('OTR_TIP_DOC_SOC', this.value)" />
+            <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
           </div>
 
           <div class="field" id="field-bfn_num_doc_soc">
             <label>
-              <span data-i18n="sec9n_num_doc_soc">Número de documento (NIT o equivalente)</span>
+              <span data-i18n="sec9n_num_doc_soc">Número de documento</span>
               <span class="req">*</span>
             </label>
             <input type="text" id="bfn_num_doc_soc" maxlength="20"

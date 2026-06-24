@@ -55,6 +55,8 @@ function validarTodoNatural() {
   if (bfn.PART_SOC === 'S') {
     if (!bfn.RAZ_SOC     || !String(bfn.RAZ_SOC).trim())     errores.push('Sección 9: Razón social de la sociedad requerida');
     if (!bfn.TIP_DOC_SOC)                                     errores.push('Sección 9: Tipo de documento de la sociedad requerido');
+    if (bfn.TIP_DOC_SOC === 'OTR_TPDOC' && (!bfn.OTR_TIP_DOC_SOC || !String(bfn.OTR_TIP_DOC_SOC).trim()))
+                                                              errores.push('Sección 9: Especifique el tipo de documento de la sociedad');
     if (!bfn.NUM_DOC_SOC || !String(bfn.NUM_DOC_SOC).trim()) errores.push('Sección 9: Número de documento de la sociedad requerido');
   }
 
@@ -117,10 +119,11 @@ function _construirPayloadNatural() {
     COD_DEPT_EXP: n.COD_DEPT_EXP,
     COD_MPIO_EXP: n.COD_MPIO_EXP,
     // ── Participación en sociedades (sección 9N) ────────────────────────────
-    PART_SOC:    bfn.PART_SOC    || 'N',
-    RAZ_SOC:     bfn.PART_SOC === 'S' ? (bfn.RAZ_SOC     || null) : null,
-    TIP_DOC_SOC: bfn.PART_SOC === 'S' ? (bfn.TIP_DOC_SOC || null) : null,
-    NUM_DOC_SOC: bfn.PART_SOC === 'S' ? (bfn.NUM_DOC_SOC || null) : null,
+    PART_SOC:        bfn.PART_SOC    || 'N',
+    RAZ_SOC:         bfn.PART_SOC === 'S' ? (bfn.RAZ_SOC          || null) : null,
+    TIP_DOC_SOC:     bfn.PART_SOC === 'S' ? (bfn.TIP_DOC_SOC      || null) : null,
+    OTR_TIP_DOC_SOC: bfn.PART_SOC === 'S' ? (bfn.OTR_TIP_DOC_SOC || null) : null,
+    NUM_DOC_SOC:     bfn.PART_SOC === 'S' ? (bfn.NUM_DOC_SOC      || null) : null,
     // ── Secciones compartidas ───────────────────────────────────────────────
     financiera: fin,
     bancaria:   formData.bancaria,
