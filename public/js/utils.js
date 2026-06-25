@@ -301,10 +301,17 @@ function convertirABuscable(selectId) {
     }
   });
 
-  // Detectar cuando cargarCatalogo cambia las opciones o el disabled
-  const obs = new MutationObserver(() => {
+  // Detectar cuando cargarCatalogo cambia las opciones o el disabled.
+  // Si el dropdown está abierto y llegaron nuevas opciones, re-renderizar
+  // la lista visible para que el usuario vea los nuevos items inmediatamente.
+  const obs = new MutationObserver((mutations) => {
     _syncDisabled();
-    if (!_abierto) _cerrar();
+    const hadChildListChange = mutations.some(m => m.type === 'childList');
+    if (_abierto && hadChildListChange) {
+      _renderDrop(inp.readOnly ? '' : inp.value);
+    } else if (!_abierto) {
+      _cerrar();
+    }
   });
   obs.observe(sel, { childList: true, attributes: true, attributeFilter: ['disabled'] });
 
