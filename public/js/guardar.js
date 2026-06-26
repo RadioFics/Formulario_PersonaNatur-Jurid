@@ -642,6 +642,8 @@ function _construirPayload() {
     COD_CIIU:     b.COD_CIIU    || null,
     OTR_CIIU:     b.OTR_CIIU    || null,  // texto libre cuando CIIU = "Otro"
     URL_WEB:      b.URL_WEB     || null,
+    COT_BOLSA:    b.COT_BOLSA   || 'N',
+    NOM_BOLSA:    b.COT_BOLSA === 'S' ? (b.NOM_BOLSA || null) : null,
     ACE_POLI:     true,  // T&C aceptados
 
     // ── Sección 3 — GN_JURID (sociedad) ────────────────────────────────────

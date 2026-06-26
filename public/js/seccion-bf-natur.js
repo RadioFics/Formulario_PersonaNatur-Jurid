@@ -15,6 +15,20 @@
  * Depende de: state-natur.js, utils.js
  */
 
+/* ── Visibilidad condicional por tipo de vinculación ─────────────────────── */
+
+/**
+ * Muestra u oculta el acordeón de Participación en Sociedades (9N)
+ * según el tipo de vinculación seleccionado.
+ * Solo visible cuando modoPersona = 'N' y COD_VINC = 10 (Vinculación laboral).
+ */
+function _onVincChange(valor) {
+  const acc = document.getElementById('accordion-bf-n');
+  if (!acc) return;
+  const mostrar = window.modoPersona === 'N' && String(valor) === '10';
+  acc.style.display = mostrar ? '' : 'none';
+}
+
 /* ── Actualización de estado ──────────────────────────────────────────────── */
 
 function actualizarBFN(campo, valor) {

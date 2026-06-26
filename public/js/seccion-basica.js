@@ -127,6 +127,21 @@ async function onDeptChange(codDept) {
 /* onCiiuInput ya no se usa — CIIU pasó de datalist a select buscable. */
 function onCiiuInput() { /* obsoleto — mantenido por compatibilidad */ }
 
+/* ── Cotiza en bolsa (solo Jurídica) ─────────────────────────────────────────── */
+
+function onCotBolsaChange(valor) {
+  actualizarFormData('basica', 'COT_BOLSA', valor);
+  const fld = document.getElementById('field-nom_bolsa');
+  if (!fld) return;
+  fld.style.display = valor === 'S' ? '' : 'none';
+  if (valor !== 'S') {
+    actualizarFormData('basica', 'NOM_BOLSA', null);
+    const inp = document.getElementById('nom_bolsa');
+    if (inp) inp.value = '';
+    limpiarError('field-nom_bolsa');
+  }
+}
+
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 
 /**
@@ -161,6 +176,11 @@ function validarSeccionBasica() {
   if (!d.DIR_MAIL  || !esEmailValido(d.DIR_MAIL))  { mostrarError('field-dir_mail');  ok = false; }
   if (!d.MAIL_SARL || !esEmailValido(d.MAIL_SARL)) { mostrarError('field-mail_sarl'); ok = false; }
   if (!d.COD_CIIU)                                  { mostrarError('field-cod_ciiu');  ok = false; }
+
+  // Cotiza en bolsa: si Sí, el nombre de la bolsa es obligatorio
+  if (d.COT_BOLSA === 'S' && (!d.NOM_BOLSA || !String(d.NOM_BOLSA).trim())) {
+    mostrarError('field-nom_bolsa'); ok = false;
+  }
 
   return ok;
 }

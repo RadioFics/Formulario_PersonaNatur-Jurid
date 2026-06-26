@@ -33,6 +33,8 @@ const formData = {
     COD_CIIU:     null,
     OTR_CIIU:     '',   // texto libre cuando CIIU = "Otro"
     URL_WEB:      '',
+    COT_BOLSA:    'N',  // ¿Cotiza en bolsa de valores?
+    NOM_BOLSA:    null,  // Nombre de la bolsa (si COT_BOLSA='S')
   },
 
   // Sección 2 — Representantes legales
@@ -101,6 +103,7 @@ const formData = {
 
   // Sección 9 — Información financiera
   financiera: {
+    COD_MONE:   20,    // Moneda de reporte: 20 = COP (default)
     ACT_TOTAL:  null,
     ING_MENS:   null,
     PAS_TOTAL:  null,

@@ -43,6 +43,9 @@ function actualizarACPCT(id, valor) {
   const a = _acGet(id);
   if (a) a.PCT_PART = valor === '' ? null : valor;
   _acActualizarIndicador();
+  const pct = parseFloat(valor);
+  const warnEl = document.getElementById(`ac_${id}_warn5pct`);
+  if (warnEl) warnEl.style.display = (!isNaN(pct) && pct > 0 && pct < 5) ? '' : 'none';
 }
 
 /* ── Título dinámico del grupo ──────────────────────────────────────────────── */
@@ -168,6 +171,9 @@ function _crearGrupoACEl(accionista) {
                  placeholder="Ej: 25.50"
                  oninput="actualizarACPCT(${id},this.value);limpiarError('field-ac_${id}_pct')" />
           <span class="error-msg"><span data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span> (0.01 – 100)</span>
+          <span id="ac_${id}_warn5pct" style="display:none;font-size:.78rem;color:#E65100;margin-top:3px">
+            ⚠ ${typeof t==='function'?t('sec8_warn_5pct'):'El porcentaje de participación es menor al 5%. Los accionistas con menos del 5% generalmente no se consideran beneficiarios finales, pero igualmente deben registrarse.'}
+          </span>
         </div>
       </div>
 

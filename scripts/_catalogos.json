@@ -1,0 +1,530 @@
+{
+ "tiposDocumento": [
+  {
+   "es": "Cédula de Ciudadanía",
+   "en": "Citizenship Card"
+  },
+  {
+   "es": "Cédula de Extranjería",
+   "en": "Foreigner ID Card"
+  },
+  {
+   "es": "NIT",
+   "en": "Tax ID (NIT)"
+  },
+  {
+   "es": "Pasaporte",
+   "en": "Passport"
+  },
+  {
+   "es": "Permiso Especial de Permanencia",
+   "en": "Special Stay Permit (PEP)"
+  },
+  {
+   "es": "Permiso por Protección Temporal",
+   "en": "Temporary Protection Permit"
+  },
+  {
+   "es": "Registro Civil",
+   "en": "Birth Certificate"
+  },
+  {
+   "es": "Tarjeta de Identidad",
+   "en": "Identity Card (Minor)"
+  }
+ ],
+ "vinculaciones": [
+  {
+   "es": "Cliente",
+   "en": "Client"
+  },
+  {
+   "es": "Contratista/Proveedor",
+   "en": "Contractor / Supplier"
+  },
+  {
+   "es": "Otro",
+   "en": "Other"
+  },
+  {
+   "es": "Vinculación laboral",
+   "en": "Employment Relationship"
+  },
+  {
+   "es": "Aliados institucionales y comunitarios",
+   "en": "Institutional and Community Partners"
+  }
+ ],
+ "tiposSociedad": [
+  {
+   "es": "Sociedad por Acciones Simplificada",
+   "en": "Simplified Joint Stock Company (S.A.S.)"
+  },
+  {
+   "es": "Sociedad Anónima",
+   "en": "Corporation (S.A.)"
+  },
+  {
+   "es": "Sociedad de Responsabilidad Limitada",
+   "en": "Limited Liability Company (Ltda.)"
+  },
+  {
+   "es": "Sociedad Colectiva",
+   "en": "General Partnership"
+  },
+  {
+   "es": "Sociedad en Comandita Simple",
+   "en": "Limited Partnership (Simple)"
+  },
+  {
+   "es": "Sociedad en Comandita por Acciones",
+   "en": "Limited Partnership by Shares"
+  },
+  {
+   "es": "Empresa Unipersonal",
+   "en": "Sole Proprietorship"
+  },
+  {
+   "es": "Empresa Industrial y Comercial del Estado",
+   "en": "State Industrial and Commercial Company"
+  },
+  {
+   "es": "Entidad Sin Ánimo de Lucro",
+   "en": "Non-Profit Organization"
+  },
+  {
+   "es": "Cooperativa",
+   "en": "Cooperative"
+  },
+  {
+   "es": "Sucursal de Sociedad Extranjera",
+   "en": "Branch of Foreign Company"
+  },
+  {
+   "es": "Sociedad Extranjera con Domicilio",
+   "en": "Foreign Company with Local Domicile"
+  },
+  {
+   "es": "Consorcio",
+   "en": "Consortium"
+  },
+  {
+   "es": "Unión Temporal",
+   "en": "Temporary Joint Venture"
+  },
+  {
+   "es": "Otro",
+   "en": "Other"
+  }
+ ],
+ "sistemasPrevencion": [
+  {
+   "es": "Sistema de Autocontrol y Gestión del Riesgo LA/FT/FPADM (SAGRILAFT)",
+   "en": "Self-Control and ML/TF/FPWMD Risk Management System (SAGRILAFT)"
+  },
+  {
+   "es": "Sistema de Administración del Riesgo LA/FT (SARLAFT)",
+   "en": "ML/TF Risk Administration System (SARLAFT)"
+  },
+  {
+   "es": "Sistema Integral de Prevención LA/FT (SIPLA)",
+   "en": "Comprehensive ML/TF Prevention System (SIPLA)"
+  },
+  {
+   "es": "Programa de Transparencia y Ética Empresarial (PTEE)",
+   "en": "Transparency and Business Ethics Program (PTEE)"
+  },
+  {
+   "es": "No aplica",
+   "en": "Not Applicable"
+  },
+  {
+   "es": "Otro",
+   "en": "Other"
+  },
+  {
+   "es": "Programa de Transparencia y Ética Pública (PTEP)",
+   "en": "Transparency and Public Ethics Program (PTEP)"
+  },
+  {
+   "es": "Sistema Integral de Prevención LA/FT (SIPLAFT)",
+   "en": "Comprehensive AML/CFT Integrated Prevention System (SIPLAFT)"
+  }
+ ],
+ "bancos": [
+  {
+   "es": "BANCO AGRARIO DE COLOMBIA",
+   "en": "BANCO AGRARIO DE COLOMBIA"
+  },
+  {
+   "es": "BANCO AV VILLAS",
+   "en": "BANCO AV VILLAS"
+  },
+  {
+   "es": "BANCO CAJA SOCIAL - BCSC S.A.",
+   "en": "BANCO CAJA SOCIAL - BCSC S.A."
+  },
+  {
+   "es": "BANCO DAVIVIENDA S.A.",
+   "en": "BANCO DAVIVIENDA S.A."
+  },
+  {
+   "es": "BANCO DE BOGOTÁ",
+   "en": "BANCO DE BOGOTÁ"
+  },
+  {
+   "es": "BANCO DE OCCIDENTE",
+   "en": "BANCO DE OCCIDENTE"
+  },
+  {
+   "es": "BANCO FALABELLA",
+   "en": "BANCO FALABELLA"
+  },
+  {
+   "es": "BANCO GNB SUDAMERIS",
+   "en": "BANCO GNB SUDAMERIS"
+  },
+  {
+   "es": "BANCO ITAÚ",
+   "en": "BANCO ITAÚ"
+  },
+  {
+   "es": "BANCO MUNDO MUJER",
+   "en": "BANCO MUNDO MUJER"
+  },
+  {
+   "es": "BANCO PICHINCHA",
+   "en": "BANCO PICHINCHA"
+  },
+  {
+   "es": "BANCO POPULAR",
+   "en": "BANCO POPULAR"
+  },
+  {
+   "es": "BANCO SERFINANZA",
+   "en": "BANCO SERFINANZA"
+  },
+  {
+   "es": "BANCOLOMBIA S.A.",
+   "en": "BANCOLOMBIA S.A."
+  },
+  {
+   "es": "BANK OF AMERICA",
+   "en": "BANK OF AMERICA"
+  },
+  {
+   "es": "BBVA COLOMBIA",
+   "en": "BBVA COLOMBIA"
+  },
+  {
+   "es": "CITIBANK N.A.",
+   "en": "CITIBANK N.A."
+  },
+  {
+   "es": "DAVIPLATA (DAVIVIENDA)",
+   "en": "DAVIPLATA (DAVIVIENDA)"
+  },
+  {
+   "es": "HSBC",
+   "en": "HSBC"
+  },
+  {
+   "es": "JP MORGAN CHASE",
+   "en": "JP MORGAN CHASE"
+  },
+  {
+   "es": "NEQUI (BANCOLOMBIA)",
+   "en": "NEQUI (BANCOLOMBIA)"
+  },
+  {
+   "es": "NO APLICA",
+   "en": "NO APLICA"
+  },
+  {
+   "es": "NUBANK COLOMBIA",
+   "en": "NUBANK COLOMBIA"
+  },
+  {
+   "es": "OTRO BANCO EXTRANJERO",
+   "en": "OTRO BANCO EXTRANJERO"
+  },
+  {
+   "es": "RAPPIPAY",
+   "en": "RAPPIPAY"
+  },
+  {
+   "es": "SANTANDER",
+   "en": "SANTANDER"
+  },
+  {
+   "es": "SCOTIABANK COLPATRIA",
+   "en": "SCOTIABANK COLPATRIA"
+  },
+  {
+   "es": "SCOTIABANK INT.",
+   "en": "SCOTIABANK INT."
+  },
+  {
+   "es": "Sin asignar",
+   "en": "Sin asignar"
+  },
+  {
+   "es": "TD BANK",
+   "en": "TD BANK"
+  }
+ ],
+ "tiposCuenta": [
+  {
+   "es": "Otro",
+   "en": "Other"
+  },
+  {
+   "es": "Cuenta de Ahorros",
+   "en": "Savings Account"
+  },
+  {
+   "es": "Cuenta Corriente",
+   "en": "Checking Account"
+  }
+ ],
+ "monedas": [
+  {
+   "es": "PESO COLOMBIANO (COP)",
+   "en": "PESO COLOMBIANO (COP)"
+  },
+  {
+   "es": "BOLIVAR VENEZOLANO (VEB)",
+   "en": "BOLIVAR VENEZOLANO (VEB)"
+  },
+  {
+   "es": "BOLIVIANO (BOB)",
+   "en": "BOLIVIANO (BOB)"
+  },
+  {
+   "es": "COLÓN COSTARRICENSE (CRC)",
+   "en": "COLÓN COSTARRICENSE (CRC)"
+  },
+  {
+   "es": "CÓRDOBA NICARAGÜENSE (NIO)",
+   "en": "CÓRDOBA NICARAGÜENSE (NIO)"
+  },
+  {
+   "es": "CORONA DANESA (DKK)",
+   "en": "CORONA DANESA (DKK)"
+  },
+  {
+   "es": "CORONA NORUEGA (NOK)",
+   "en": "CORONA NORUEGA (NOK)"
+  },
+  {
+   "es": "CORONA SUECA (SEK)",
+   "en": "CORONA SUECA (SEK)"
+  },
+  {
+   "es": "CORONA SUECA (SEK)",
+   "en": "CORONA SUECA (SEK)"
+  },
+  {
+   "es": "DERECHO ESPECIAL DE GIRO (DEG)",
+   "en": "DERECHO ESPECIAL DE GIRO (DEG)"
+  },
+  {
+   "es": "DINAR ISRAELÍ (ILS)",
+   "en": "DINAR ISRAELÍ (ILS)"
+  },
+  {
+   "es": "DÓLAR AUSTRALIANO (AUD)",
+   "en": "DÓLAR AUSTRALIANO (AUD)"
+  },
+  {
+   "es": "DÓLAR CANADIENSE (CAD)",
+   "en": "DÓLAR CANADIENSE (CAD)"
+  },
+  {
+   "es": "DÓLAR DE BAHAMAS (BSD)",
+   "en": "DÓLAR DE BAHAMAS (BSD)"
+  },
+  {
+   "es": "DÓLAR DE BERMUDAS (BMD)",
+   "en": "DÓLAR DE BERMUDAS (BMD)"
+  },
+  {
+   "es": "DÓLAR DE JAMAICA (JMD)",
+   "en": "DÓLAR DE JAMAICA (JMD)"
+  },
+  {
+   "es": "DÓLAR DE SINGAPUR (SGD)",
+   "en": "DÓLAR DE SINGAPUR (SGD)"
+  },
+  {
+   "es": "DÓLAR DE TRINIDAD Y TOBAGO (TTD)",
+   "en": "DÓLAR DE TRINIDAD Y TOBAGO (TTD)"
+  },
+  {
+   "es": "DÓLAR ESTADOUNIDENSE (USD)",
+   "en": "DÓLAR ESTADOUNIDENSE (USD)"
+  },
+  {
+   "es": "DÓLAR ISLAS CAIMÁN (KYD)",
+   "en": "DÓLAR ISLAS CAIMÁN (KYD)"
+  },
+  {
+   "es": "DÓLAR JAMAICANO (JMD)",
+   "en": "DÓLAR JAMAICANO (JMD)"
+  },
+  {
+   "es": "DÓLAR NEOZELANDÉS (NZD)",
+   "en": "DÓLAR NEOZELANDÉS (NZD)"
+  },
+  {
+   "es": "DÓLAR PUERTORRIQUEÑO (USD)",
+   "en": "DÓLAR PUERTORRIQUEÑO (USD)"
+  },
+  {
+   "es": "EURO (EUR)",
+   "en": "EURO (EUR)"
+  },
+  {
+   "es": "EURO AUSTRIACO (EUR)",
+   "en": "EURO AUSTRIACO (EUR)"
+  },
+  {
+   "es": "EURO BELGA (EUR)",
+   "en": "EURO BELGA (EUR)"
+  },
+  {
+   "es": "EURO FRANCÉS (EUR)",
+   "en": "EURO FRANCÉS (EUR)"
+  },
+  {
+   "es": "EURO HOLANDÉS (EUR)",
+   "en": "EURO HOLANDÉS (EUR)"
+  },
+  {
+   "es": "EURO IRLANDÉS (EUR)",
+   "en": "EURO IRLANDÉS (EUR)"
+  },
+  {
+   "es": "EURO ITALIANO (EUR)",
+   "en": "EURO ITALIANO (EUR)"
+  },
+  {
+   "es": "EURO LUXEMBURGUÉS (EUR)",
+   "en": "EURO LUXEMBURGUÉS (EUR)"
+  },
+  {
+   "es": "EURO PORTUGUÉS (EUR)",
+   "en": "EURO PORTUGUÉS (EUR)"
+  },
+  {
+   "es": "FRANCO SUIZO (CHF)",
+   "en": "FRANCO SUIZO (CHF)"
+  },
+  {
+   "es": "GUARANÍ PARAGUAYO (PYG)",
+   "en": "GUARANÍ PARAGUAYO (PYG)"
+  },
+  {
+   "es": "HRYVNIA UCRANIANA (UAH)",
+   "en": "HRYVNIA UCRANIANA (UAH)"
+  },
+  {
+   "es": "LEMPIRA HONDUREÑO (HNL)",
+   "en": "LEMPIRA HONDUREÑO (HNL)"
+  },
+  {
+   "es": "LIBRA ESTERLINA (GBP)",
+   "en": "LIBRA ESTERLINA (GBP)"
+  },
+  {
+   "es": "LIRA TURCA (TRY)",
+   "en": "LIRA TURCA (TRY)"
+  },
+  {
+   "es": "NUEVO SOL PERUANO (PEN)",
+   "en": "NUEVO SOL PERUANO (PEN)"
+  },
+  {
+   "es": "NULO DE STONE (NUL)",
+   "en": "NULO DE STONE (NUL)"
+  },
+  {
+   "es": "OTRAS MONEDAS (NA)",
+   "en": "OTRAS MONEDAS (NA)"
+  },
+  {
+   "es": "PESO ARGENTINO (ARS)",
+   "en": "PESO ARGENTINO (ARS)"
+  },
+  {
+   "es": "PESO CHILENO (CLP)",
+   "en": "PESO CHILENO (CLP)"
+  },
+  {
+   "es": "PESO CUBANO (CUP)",
+   "en": "PESO CUBANO (CUP)"
+  },
+  {
+   "es": "PESO DOMINICANO (DOP)",
+   "en": "PESO DOMINICANO (DOP)"
+  },
+  {
+   "es": "PESO MEXICANO (MXN)",
+   "en": "PESO MEXICANO (MXN)"
+  },
+  {
+   "es": "PESO URUGUAYO (UYU)",
+   "en": "PESO URUGUAYO (UYU)"
+  },
+  {
+   "es": "QUETZAL GUATEMALTECO (GTQ)",
+   "en": "QUETZAL GUATEMALTECO (GTQ)"
+  },
+  {
+   "es": "RAND SUDAFRICANO (ZAR)",
+   "en": "RAND SUDAFRICANO (ZAR)"
+  },
+  {
+   "es": "REAL BRASILEÑO (BRL)",
+   "en": "REAL BRASILEÑO (BRL)"
+  },
+  {
+   "es": "RENMINBI CHINO (CNY)",
+   "en": "RENMINBI CHINO (CNY)"
+  },
+  {
+   "es": "RUBLO RUSO (RUB)",
+   "en": "RUBLO RUSO (RUB)"
+  },
+  {
+   "es": "RUPIA INDIA (UNR)",
+   "en": "RUPIA INDIA (UNR)"
+  },
+  {
+   "es": "RUPIA INDIA (INR)",
+   "en": "RUPIA INDIA (INR)"
+  },
+  {
+   "es": "RUPIA INDONESA (IDR)",
+   "en": "RUPIA INDONESA (IDR)"
+  },
+  {
+   "es": "SÉQUEL ISRAELÍ (ILS)",
+   "en": "SÉQUEL ISRAELÍ (ILS)"
+  },
+  {
+   "es": "WON SURCOREANO (KRW)",
+   "en": "WON SURCOREANO (KRW)"
+  },
+  {
+   "es": "YEN JAPONES (JYP)",
+   "en": "YEN JAPONES (JYP)"
+  }
+ ],
+ "_counts": {
+  "paises": 247,
+  "departamentos": 34,
+  "ciudades": 1174,
+  "ciiu": 504
+ }
+}

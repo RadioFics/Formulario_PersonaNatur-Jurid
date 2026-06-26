@@ -680,30 +680,40 @@ async function rellenarPrueba() {
 
 /* ─── Inyección del botón flotante ───────────────────────────────────────────── */
 (function _inyectarBoton() {
-  const btn = document.createElement('button');
-  btn.id          = '_dev_fill_btn';
-  btn.textContent = '🧪 Rellenar prueba';
-  btn.title       = 'Rellena todos los campos con datos ficticios de prueba (solo desarrollo)';
-  Object.assign(btn.style, {
-    position:     'fixed',
-    bottom:       '16px',
-    left:         '16px',
-    zIndex:       '9999',
-    padding:      '10px 16px',
-    background:   '#ff6d00',
-    color:        '#fff',
-    border:       'none',
-    borderRadius: '8px',
-    fontWeight:   '700',
-    fontSize:     '13px',
-    cursor:       'pointer',
-    boxShadow:    '0 4px 12px rgba(0,0,0,0.3)',
-    letterSpacing: '0.3px',
-  });
-  btn.addEventListener('mouseenter', () => btn.style.background = '#e65100');
-  btn.addEventListener('mouseleave', () => btn.style.background = '#ff6d00');
-  btn.addEventListener('click', rellenarPrueba);
-  document.body.appendChild(btn);
-  console.log('%c[dev-fill] Modo prueba activo — botón 🧪 disponible. También: rellenarPrueba()',
-              'color:#ff6d00; font-weight:bold');
+  function crear() {
+    const btn = document.createElement('button');
+    btn.id          = '_dev_fill_btn';
+    btn.textContent = '🧪 Rellenar prueba';
+    btn.title       = 'Rellena todos los campos con datos ficticios de prueba (solo desarrollo)';
+    Object.assign(btn.style, {
+      position:     'fixed',
+      bottom:       '16px',
+      right:        '16px',
+      zIndex:       '9999',
+      padding:      '10px 16px',
+      background:   '#ff6d00',
+      color:        '#fff',
+      border:       'none',
+      borderRadius: '8px',
+      fontWeight:   '700',
+      fontSize:     '13px',
+      cursor:       'pointer',
+      boxShadow:    '0 4px 12px rgba(0,0,0,0.3)',
+      letterSpacing: '0.3px',
+    });
+    btn.addEventListener('mouseenter', () => btn.style.background = '#e65100');
+    btn.addEventListener('mouseleave', () => btn.style.background = '#ff6d00');
+    btn.addEventListener('click', rellenarPrueba);
+    document.body.appendChild(btn);
+    console.log('%c[dev-fill] Modo prueba activo — botón 🧪 disponible. También: rellenarPrueba()',
+                'color:#ff6d00; font-weight:bold');
+  }
+
+  // Solo mostrar el botón cuando hay servidor real (entorno de desarrollo local).
+  // En la demo estática publicada (sin backend) NO aparece, para una entrega limpia.
+  if (typeof window.__sarlaftBackendReady === 'function') {
+    window.__sarlaftBackendReady().then(hayBackend => { if (hayBackend) crear(); });
+  } else {
+    crear();   // sin static-mode cargado → comportamiento original
+  }
 })();

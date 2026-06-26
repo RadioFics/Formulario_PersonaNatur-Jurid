@@ -1,0 +1,15 @@
+Sociedad por Acciones Simplificada
+Sociedad Anónima
+Sociedad de Responsabilidad Limitada
+Sociedad Colectiva
+Sociedad en Comandita Simple
+Sociedad en Comandita por Acciones
+Empresa Unipersonal
+Empresa Industrial y Comercial del Estado
+Entidad Sin Ánimo de Lucro
+Cooperativa
+Sucursal de Sociedad Extranjera
+Sociedad Extranjera con Domicilio
+Consorcio
+Unión Temporal
+Otro

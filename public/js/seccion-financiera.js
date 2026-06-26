@@ -74,7 +74,7 @@ function onMonedaBlur(campo, inputEl) {
     // Rechazar negativos: restaurar a 0 y marcar error
     formData.financiera[campo] = null;
     inputEl.value = '';
-    mostrarError(`field-fin_${campo.toLowerCase()}`);
+    mostrarError(`field-${campo.toLowerCase()}`);
     mostrarToast('No se permiten valores negativos.', 'error');
     return;
   }
@@ -91,7 +91,7 @@ function onPatrimonioInput(inputEl) {
   _patrimonioManual = true;
   const raw = _parseMoneda(inputEl.value);
   formData.financiera.PATRIMONIO = raw;
-  const hint = document.getElementById('fin_patrimonio_hint');
+  const hint = document.getElementById('patrimonio-hint');
   if (hint) hint.textContent = 'Valor ingresado manualmente.';
 }
 
@@ -103,7 +103,7 @@ function onPatrimonioBlur(inputEl) {
   if (raw !== null && raw < 0) {
     formData.financiera.PATRIMONIO = null;
     inputEl.value = '';
-    mostrarError('field-fin_patrimonio');
+    mostrarError('field-patrimonio');
     mostrarToast('No se permiten valores negativos.', 'error');
     return;
   }
@@ -123,12 +123,25 @@ function _recalcPatrimonio() {
   if (act !== null && pas !== null) {
     const calc = Math.round((act - pas) * 100) / 100;
     formData.financiera.PATRIMONIO = calc;
-    const inp = document.getElementById('fin_patrimonio');
+    const inp = document.getElementById('patrimonio');
     if (inp) inp.value = _fmtMoneda(calc);
-    const hint = document.getElementById('fin_patrimonio_hint');
+    const hint = document.getElementById('patrimonio-hint');
     if (hint) hint.textContent = `Calculado automáticamente: ${_fmtMoneda(calc)} — puedes editarlo si difiere`;
-    limpiarError('field-fin_patrimonio');
+    limpiarError('field-patrimonio');
   }
+}
+
+/* ── Moneda de reporte ────────────────────────────────────────────────────────── */
+
+function onFinMonedaChange(codMone, ini) {
+  formData.financiera.COD_MONE = codMone ? parseInt(codMone, 10) : 20;
+  const currLabel = ini ? ini.trim() : 'COP';
+  document.querySelectorAll('.fin-curr-lbl').forEach(el => {
+    el.textContent = `(${currLabel})`;
+  });
+  document.querySelectorAll('#accordion-financiera .money-prefix').forEach(el => {
+    el.textContent = currLabel === 'COP' ? '$' : currLabel;
+  });
 }
 
 /* ── Actualización directa de estado ─────────────────────────────────────────── */
@@ -139,11 +152,11 @@ function actualizarFinanciera(campo, valor) {
 /* ── Validación ─────────────────────────────────────────────────────────────── */
 function validarSeccionFinanciera() {
   const requeridos = [
-    ['field-fin_act_total',  formData.financiera.ACT_TOTAL,  'ACT_TOTAL'],
-    ['field-fin_ing_mens',   formData.financiera.ING_MENS,   'ING_MENS'],
-    ['field-fin_pas_total',  formData.financiera.PAS_TOTAL,  'PAS_TOTAL'],
-    ['field-fin_egr_mens',   formData.financiera.EGR_MENS,   'EGR_MENS'],
-    ['field-fin_patrimonio', formData.financiera.PATRIMONIO, 'PATRIMONIO'],
+    ['field-act_total',  formData.financiera.ACT_TOTAL,  'ACT_TOTAL'],
+    ['field-ing_mens',   formData.financiera.ING_MENS,   'ING_MENS'],
+    ['field-pas_total',  formData.financiera.PAS_TOTAL,  'PAS_TOTAL'],
+    ['field-egr_mens',   formData.financiera.EGR_MENS,   'EGR_MENS'],
+    ['field-patrimonio', formData.financiera.PATRIMONIO, 'PATRIMONIO'],
   ];
   let ok = true;
   requeridos.forEach(([fid, val]) => {
@@ -155,7 +168,7 @@ function validarSeccionFinanciera() {
   });
   // OTR_ING es opcional pero no puede ser negativo si está ingresado
   if (formData.financiera.OTR_ING !== null && formData.financiera.OTR_ING < 0) {
-    mostrarError('field-fin_otr_ing'); ok = false;
+    mostrarError('field-otr_ing'); ok = false;
   }
   return ok;
 }
@@ -178,17 +191,19 @@ function validarYContinuarFinanciera() {
 }
 
 function limpiarSeccionFinanciera() {
-  formData.financiera = { ACT_TOTAL: null, ING_MENS: null, PAS_TOTAL: null,
+  formData.financiera = { COD_MONE: 20, ACT_TOTAL: null, ING_MENS: null, PAS_TOTAL: null,
                           EGR_MENS: null, PATRIMONIO: null, OTR_ING: null };
   _patrimonioManual = false;
-  ['fin_act_total','fin_ing_mens','fin_pas_total',
-   'fin_egr_mens','fin_patrimonio','fin_otr_ing'].forEach(id => {
+  const selMone = document.getElementById('fin_moneda');
+  if (selMone) { selMone.value = '20'; onFinMonedaChange('20', 'COP'); }
+  ['act_total','ing_mens','pas_total',
+   'egr_mens','patrimonio','otr_ing'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['field-fin_act_total','field-fin_ing_mens','field-fin_pas_total',
-   'field-fin_egr_mens','field-fin_patrimonio','field-fin_otr_ing'].forEach(id => limpiarError(id));
-  const hint = document.getElementById('fin_patrimonio_hint');
+  ['field-act_total','field-ing_mens','field-pas_total',
+   'field-egr_mens','field-patrimonio','field-otr_ing'].forEach(id => limpiarError(id));
+  const hint = document.getElementById('patrimonio-hint');
   if (hint) hint.textContent = 'Calculado automáticamente como Activos − Pasivos';
   mostrarToast('Sección limpiada.', 'success');
 }

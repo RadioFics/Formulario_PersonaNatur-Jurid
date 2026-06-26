@@ -1576,6 +1576,24 @@ app.get('/api/catalogo/tipos-cuenta', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/catalogo/monedas
+ * Lista de monedas desde MAE_MONED. COP (COD_MONE=20) va primero.
+ */
+app.get('/api/catalogo/monedas', async (req, res) => {
+  try {
+    const rows = await query(
+      `SELECT COD_MONE, NOM_MONE, INI_MONE, NUM_DECI
+         FROM MAE_MONED
+        ORDER BY CASE WHEN COD_MONE = 20 THEN 0 ELSE 1 END, NOM_MONE`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('monedas:', err);
+    _responderError(res, err, req);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  CONSULTA — Verificar si un número de identificación ya existe en GN_TERCE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2215,7 +2233,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
              t.NOM_COMP, t.NOM_TERC, t.SEG_NOMB, t.APE_TERC, t.SEG_APEL,
              t.DIR_TERC, t.TEL_TERC, t.TEL_TERC2, t.DIR_MAIL,
              j.TIP_VINC AS COD_VINC, j.OTR_VINC, j.MAIL_SARL,
-             j.COD_CIIU, j.OTR_CIIU, j.URL_WEB,
+             j.COD_CIIU, j.OTR_CIIU, j.URL_WEB, j.COT_BOLSA, j.NOM_BOLSA,
              j.UBIC_SOC, j.COD_PAIS_SOC, j.OTR_PAIS_SOC, j.COD_PAIS_ORI, j.TIP_EMPR, j.GRUP_EMPR,
              j.TIP_SOCIE, j.OTR_SOCIE,
              j.COD_PAIS_EXP, j.OTR_PAIS_EXP, j.COD_DEPT_EXP, j.COD_MPIO_EXP
@@ -2238,7 +2256,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
                           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
                           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC
                    FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
-        rC().query(`SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
+        rC().query(`SELECT COD_MONE, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
                    FROM GN_NATUR_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN, NUM_CUEN, CUEN_EXTR,
                           NOM_ENT_EXT, TIP_CUE_EXT, COD_PAIS_EXT, OTR_PAIS_EXT, CUENTAS_EXT
@@ -2323,7 +2341,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
       FROM GN_JURID_AC WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const finRes = await rC().query(`
-      SELECT ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
+      SELECT COD_MONE, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
       FROM GN_JURID_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const banRes = await rC().query(`
@@ -2515,6 +2533,8 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
       .input('COD_MPIO_EXP',  sql.Int,          toInt(d.COD_MPIO_EXP))
+      .input('COT_BOLSA',     sql.Char(1),      toChar(d.COT_BOLSA) || 'N')
+      .input('NOM_BOLSA',     sql.VarChar(200), d.COT_BOLSA === 'S' ? toChar(d.NOM_BOLSA) : null)
       .query(`UPDATE GN_JURID SET TIP_VINC=@TIP_VINC,OTR_VINC=@OTR_VINC,
               MAIL_SARL=@MAIL_SARL,COD_CIIU=@COD_CIIU,OTR_CIIU=@OTR_CIIU,
               URL_WEB=@URL_WEB,TIP_SOCIE=@TIP_SOCIE,OTR_SOCIE=@OTR_SOCIE,
@@ -2523,7 +2543,8 @@ app.put('/api/actualizar-completo', async (req, res) => {
               TIP_EMPR=@TIP_EMPR,GRUP_EMPR=@GRUP_EMPR,
               CTRL_DECLA=@CTRL_DECLA,CAL_GRUPO=@CAL_GRUPO,DESC_GRUPO=@DESC_GRUPO,
               COD_PAIS_EXP=@COD_PAIS_EXP,OTR_PAIS_EXP=@OTR_PAIS_EXP,
-              COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP
+              COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP,
+              COT_BOLSA=@COT_BOLSA,NOM_BOLSA=@NOM_BOLSA
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const del = async tabla =>
@@ -2710,14 +2731,15 @@ app.put('/api/actualizar-completo', async (req, res) => {
     const fin = d.financiera || {};
     await r()
       .input('COD_EMPR',   sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
+      .input('COD_MONE',   sql.SmallInt,    toInt(fin.COD_MONE) || 20)
       .input('ACT_TOTAL',  sql.Decimal(18,2),toDec(fin.ACT_TOTAL))
       .input('ING_MENS',   sql.Decimal(18,2),toDec(fin.ING_MENS))
       .input('PAS_TOTAL',  sql.Decimal(18,2),toDec(fin.PAS_TOTAL))
       .input('EGR_MENS',   sql.Decimal(18,2),toDec(fin.EGR_MENS))
       .input('PATRIMONIO', sql.Decimal(18,2),toDec(fin.PATRIMONIO))
       .input('OTR_ING',    sql.Decimal(18,2),toDec(fin.OTR_ING))
-      .query(`INSERT INTO GN_JURID_FIN(COD_EMPR,COD_TERC,ACT_TOTAL,ING_MENS,PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING)
-              VALUES(@COD_EMPR,@COD_TERC,@ACT_TOTAL,@ING_MENS,@PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING)`);
+      .query(`INSERT INTO GN_JURID_FIN(COD_EMPR,COD_TERC,COD_MONE,ACT_TOTAL,ING_MENS,PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING)
+              VALUES(@COD_EMPR,@COD_TERC,@COD_MONE,@ACT_TOTAL,@ING_MENS,@PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING)`);
 
     // 10. GN_TERCE_BANCO
     await del('GN_TERCE_BANCO');
@@ -2941,19 +2963,23 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
       .input('COD_MPIO_EXP',  sql.Int,          toInt(d.COD_MPIO_EXP))
+      .input('COT_BOLSA',     sql.Char(1),      toChar(d.COT_BOLSA) || 'N')
+      .input('NOM_BOLSA',     sql.VarChar(200), d.COT_BOLSA === 'S' ? toChar(d.NOM_BOLSA) : null)
       .query(`
         INSERT INTO GN_JURID
           (COD_EMPR, COD_TERC, TIP_VINC, OTR_VINC, MAIL_SARL, COD_CIIU, OTR_CIIU,
            URL_WEB, TIP_SOCIE, OTR_SOCIE, COD_PAIS_ORI, UBIC_SOC,
            COD_PAIS_SOC, OTR_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
            CTRL_DECLA, CAL_GRUPO, DESC_GRUPO,
-           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP)
+           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
+           COT_BOLSA, NOM_BOLSA)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @OTR_VINC, @MAIL_SARL, @COD_CIIU, @OTR_CIIU,
            @URL_WEB, @TIP_SOCIE, @OTR_SOCIE, @COD_PAIS_ORI, @UBIC_SOC,
            @COD_PAIS_SOC, @OTR_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
            @CTRL_DECLA, @CAL_GRUPO, @DESC_GRUPO,
-           @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP)
+           @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP,
+           @COT_BOLSA, @NOM_BOLSA)
       `);
 
     // ── 3. GN_JURID_RL — Representantes legales ───────────────────────────────
@@ -3199,6 +3225,7 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',   sql.SmallInt,      COD_EMPR)
       .input('COD_TERC',   sql.BigInt,        COD_TERC)
+      .input('COD_MONE',   sql.SmallInt,      toInt(fin.COD_MONE) || 20)
       .input('ACT_TOTAL',  sql.Decimal(18,2), toDec(fin.ACT_TOTAL))
       .input('ING_MENS',   sql.Decimal(18,2), toDec(fin.ING_MENS))
       .input('PAS_TOTAL',  sql.Decimal(18,2), toDec(fin.PAS_TOTAL))
@@ -3207,9 +3234,9 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('OTR_ING',    sql.Decimal(18,2), toDec(fin.OTR_ING))
       .query(`
         INSERT INTO GN_JURID_FIN
-          (COD_EMPR, COD_TERC, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING)
+          (COD_EMPR, COD_TERC, COD_MONE, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING)
         VALUES
-          (@COD_EMPR, @COD_TERC, @ACT_TOTAL, @ING_MENS, @PAS_TOTAL, @EGR_MENS, @PATRIMONIO, @OTR_ING)
+          (@COD_EMPR, @COD_TERC, @COD_MONE, @ACT_TOTAL, @ING_MENS, @PAS_TOTAL, @EGR_MENS, @PATRIMONIO, @OTR_ING)
       `);
 
     // ── 10. GN_TERCE_BANCO — Cuentas bancarias ────────────────────────────────
@@ -3480,6 +3507,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',   sql.SmallInt,       COD_EMPR)
       .input('COD_TERC',   sql.BigInt,          COD_TERC)
+      .input('COD_MONE',   sql.SmallInt,        toInt(fin.COD_MONE) || 20)
       .input('ACT_TOTAL',  sql.Decimal(18,2),   fin.ACT_TOTAL  ?? null)
       .input('ING_MENS',   sql.Decimal(18,2),   fin.ING_MENS   ?? null)
       .input('PAS_TOTAL',  sql.Decimal(18,2),   fin.PAS_TOTAL  ?? null)
@@ -3488,10 +3516,10 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('OTR_ING',    sql.Decimal(18,2),   fin.OTR_ING    ?? null)
       .query(`
         INSERT INTO GN_NATUR_FIN
-          (COD_EMPR, COD_TERC,
+          (COD_EMPR, COD_TERC, COD_MONE,
            ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING)
         VALUES
-          (@COD_EMPR, @COD_TERC,
+          (@COD_EMPR, @COD_TERC, @COD_MONE,
            @ACT_TOTAL, @ING_MENS, @PAS_TOTAL, @EGR_MENS, @PATRIMONIO, @OTR_ING)
       `);
 
@@ -4556,15 +4584,16 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',   sql.SmallInt,       COD_EMPR)
       .input('COD_TERC',   sql.BigInt,          COD_TERC)
+      .input('COD_MONE',   sql.SmallInt,        toInt(fin.COD_MONE) || 20)
       .input('ACT_TOTAL',  sql.Decimal(18,2),   fin.ACT_TOTAL  ?? null)
       .input('ING_MENS',   sql.Decimal(18,2),   fin.ING_MENS   ?? null)
       .input('PAS_TOTAL',  sql.Decimal(18,2),   fin.PAS_TOTAL  ?? null)
       .input('EGR_MENS',   sql.Decimal(18,2),   fin.EGR_MENS   ?? null)
       .input('PATRIMONIO', sql.Decimal(18,2),   fin.PATRIMONIO ?? null)
       .input('OTR_ING',    sql.Decimal(18,2),   fin.OTR_ING    ?? null)
-      .query(`INSERT INTO GN_NATUR_FIN (COD_EMPR,COD_TERC,ACT_TOTAL,ING_MENS,
+      .query(`INSERT INTO GN_NATUR_FIN (COD_EMPR,COD_TERC,COD_MONE,ACT_TOTAL,ING_MENS,
               PAS_TOTAL,EGR_MENS,PATRIMONIO,OTR_ING)
-              VALUES (@COD_EMPR,@COD_TERC,@ACT_TOTAL,@ING_MENS,
+              VALUES (@COD_EMPR,@COD_TERC,@COD_MONE,@ACT_TOTAL,@ING_MENS,
               @PAS_TOTAL,@EGR_MENS,@PATRIMONIO,@OTR_ING)`);
 
     // 4. GN_TERCE_BANCO — reemplazar

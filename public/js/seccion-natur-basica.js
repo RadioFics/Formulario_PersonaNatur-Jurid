@@ -170,6 +170,11 @@ function onTipTercChange(val) {
     el.style.display = esN ? '' : 'none';
   });
 
+  // accordion-bf-n: solo Natural + vinculación laboral (COD_VINC=10)
+  const accBfn  = document.getElementById('accordion-bf-n');
+  const codVinc = document.getElementById('cod_vinc');
+  if (accBfn) accBfn.style.display = (esN && codVinc && String(codVinc.value) === '10') ? '' : 'none';
+
   // ── Sincronizar TIP_TERC en estado compartido ────────────────────────────
   if (window.formData && window.formData.basica) {
     formData.basica.TIP_TERC = val;

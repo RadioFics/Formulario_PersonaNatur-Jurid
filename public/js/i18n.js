@@ -111,6 +111,9 @@ const I18N_DICT = {
                            en: 'This email may match the email address registered in the previous field' },
   sec1_otr_ciiu:         { es: 'Especifique la actividad económica', en: 'Specify the economic activity' },
   sec1_btn:              { es: 'Continuar → Sección 2',            en: 'Continue → Section 2' },
+  sec1_cot_bolsa:        { es: '¿Su empresa cotiza en bolsa de valores?', en: 'Does your company trade on a stock exchange?' },
+  sec1_nom_bolsa:        { es: '¿En cuál bolsa de valores cotiza?',        en: 'Which stock exchange does it trade on?' },
+  sec1_nom_bolsa_ph:     { es: 'Ej: NYSE, NASDAQ, BVC, LSE…',             en: 'E.g.: NYSE, NASDAQ, BVC, LSE…' },
 
   /* ── Sección 2 ── Representante legal ───────────────────────────────── */
   sec2_title:            { es: 'Información del representante legal', en: 'Legal Representative Information' },
@@ -185,7 +188,7 @@ const I18N_DICT = {
   sec7_btn:              { es: 'Continuar → Sección 8',            en: 'Continue → Section 8' },
 
   /* ── Sección 8 ── Composición accionaria ───────────────────────────── */
-  sec8_title:            { es: 'Composición accionaria',            en: 'Shareholder Composition' },
+  sec8_title:            { es: 'Composición accionaria o propietaria', en: 'Shareholder / Ownership Composition' },
   sec8_nom_acci:         { es: 'Nombre del accionista',             en: 'Shareholder name' },
   sec8_tip_doc:          { es: 'Tipo de documento',                 en: 'Document type' },
   sec8_num_doc:          { es: 'Número de documento',               en: 'Document number' },
@@ -214,12 +217,14 @@ const I18N_DICT = {
 
   /* ── Sección 10 ── Financiera ───────────────────────────────────────── */
   sec10_title:           { es: 'Información financiera',            en: 'Financial Information' },
-  sec10_act_total:       { es: 'Activos totales (COP)',             en: 'Total assets (COP)' },
-  sec10_ing_mens:        { es: 'Ingresos anuales (COP)',             en: 'Annual income (COP)' },
-  sec10_pas_total:       { es: 'Pasivos totales (COP)',             en: 'Total liabilities (COP)' },
-  sec10_egr_mens:        { es: 'Egresos anuales (COP)',             en: 'Annual expenses (COP)' },
-  sec10_patrimonio:      { es: 'Patrimonio (COP)',                  en: 'Equity / Net worth (COP)' },
-  sec10_otr_ing:         { es: 'Otros ingresos (COP)',              en: 'Other income (COP)' },
+  sec10_curr:            { es: 'Moneda de reporte',                 en: 'Reporting currency' },
+  sec10_curr_tip:        { es: 'Seleccione la moneda en que se expresan los valores financieros. Todos los campos de esta sección deben estar en la misma moneda.', en: 'Select the currency in which financial values are expressed. All fields in this section must be in the same currency.' },
+  sec10_act_total:       { es: 'Total activos',                     en: 'Total assets' },
+  sec10_ing_mens:        { es: 'Ingresos anuales',                  en: 'Annual income' },
+  sec10_pas_total:       { es: 'Total pasivos',                     en: 'Total liabilities' },
+  sec10_egr_mens:        { es: 'Egresos anuales',                   en: 'Annual expenses' },
+  sec10_patrimonio:      { es: 'Patrimonio',                        en: 'Equity / Net worth' },
+  sec10_otr_ing:         { es: 'Otros ingresos',                    en: 'Other income' },
   sec10_btn:             { es: 'Continuar → Sección 11',           en: 'Continue → Section 11' },
 
   /* ── Sección 11 ── Bancaria ─────────────────────────────────────────── */
@@ -267,8 +272,8 @@ const I18N_DICT = {
   sec14_rut:             { es: 'RUT (Registro Único Tributario)',   en: 'RUT (Tax Registry)' },
   sec14_cert_banc:       { es: 'Certificación bancaria',            en: 'Bank certification' },
   sec14_cert_exis:       { es: 'Certificado de existencia y representación legal y/o documento equivalente', en: 'Certificate of existence and legal representation and/or equivalent document' },
-  sec14_doc_id_rl:       { es: 'Copia del documento de identidad del Representante Legal', en: 'Copy of the Legal Representative\'s identity document' },
-  sec14_doc_id_n:        { es: 'Copia del documento de identidad',  en: 'Copy of the identity document' },
+  sec14_doc_id_rl:       { es: 'Documento de identidad del Representante Legal', en: 'Legal Representative\'s identity document' },
+  sec14_doc_id_n:        { es: 'Documento de identidad',            en: 'Identity document' },
   sec14_est_fin_1:       { es: 'Estados financieros',               en: 'Financial statements' },
   sec14_est_fin_2:       { es: 'Estados financieros año 2',         en: 'Financial statements year 2' },
   sec14_cert_acci:       { es: 'Certificado de composición accionaria', en: 'Shareholder composition certificate' },
@@ -398,10 +403,14 @@ const I18N_DICT = {
   sec3_dir_oficina_ph:     { es: 'Ej: Cra 7 # 45-12 Of. 301',    en: 'E.g.: 7th Ave # 45-12 Off. 301' },
 
   /* ── Sección 8 — Composición accionaria ─────────────────────────────── */
-  sec8_hint:               { es: 'Registre todos los accionistas o socios de la empresa con su porcentaje de participación.', en: 'Register all shareholders or partners of the company with their ownership percentage.' },
+  sec8_hint:               { es: 'Registre todos los accionistas o socios de la empresa con su porcentaje de participación. Se consideran beneficiarios finales quienes posean el 5% o más de la participación o votación.', en: 'Register all shareholders or partners of the company with their ownership percentage. Beneficial owners are those holding 5% or more of the ownership or voting rights.' },
+  sec8_tip:                { es: 'Se entiende por participación la tenencia de acciones, cuotas sociales, participaciones en sociedades de personas o cualquier otro tipo de interés económico o de control en una entidad. Los accionistas con 5% o más son considerados beneficiarios finales según la normativa SAGRILAFT.', en: 'Participation means holding shares, equity interests, or any other form of economic or control interest in an entity. Shareholders with 5% or more are considered beneficial owners under SAGRILAFT regulations.' },
+  sec8_warn_5pct:          { es: 'El porcentaje de participación es menor al 5%. Los accionistas con menos del 5% generalmente no se consideran beneficiarios finales, pero igualmente deben registrarse.', en: 'Ownership percentage is below 5%. Shareholders with less than 5% are generally not considered beneficial owners, but must still be registered.' },
 
   /* ── Sección 10 — Información financiera ────────────────────────────── */
-  sec10_note:              { es: 'Los valores de ingresos, egresos y demás campos financieros corresponden a cifras anuales en pesos colombianos (COP), salvo los totales de activos, pasivos y patrimonio que son valores de balance.', en: 'Income, expenses and other financial fields correspond to annual figures in Colombian pesos (COP), except for total assets, liabilities and equity which are balance sheet values.' },
+  sec10_note:              { es: 'Ingresos, egresos y otros ingresos corresponden a cifras anuales expresadas en la moneda seleccionada. Activos totales, pasivos totales y patrimonio son valores de balance a la fecha de reporte.', en: 'Income, expenses and other income are annual figures expressed in the selected currency. Total assets, liabilities and equity are balance sheet values at the reporting date.' },
+  sec10_hint_balance:      { es: 'Valor de balance',                  en: 'Balance sheet value' },
+  sec10_hint_anual:        { es: 'Cifra anual',                       en: 'Annual figure' },
   sec10_patrimonio_hint:   { es: 'Calculado automáticamente: Activos − Pasivos', en: 'Auto-calculated: Assets − Liabilities' },
 
   /* ── Sección 14 — Documentos ─────────────────────────────────────────── */
@@ -410,7 +419,7 @@ const I18N_DICT = {
   sec14_vigencia:          { es: '(vigencia menor a 30 días)',     en: '(valid for less than 30 days)' },
   sec14_max30:             { es: '(máx. 30 días de expedición)',   en: '(max. 30 days from issue)' },
   sec14_penultimo:         { es: '(penúltimo y último año fiscal)', en: '(second-to-last and last fiscal year)' },
-  sec14_rl_label:          { es: 'Copia del documento de identidad del Representante Legal', en: 'Copy of Legal Representative\'s identity document' },
+  sec14_rl_label:          { es: 'Documento de identidad del Representante Legal', en: 'Legal Representative\'s identity document' },
   sec14_rl_principal:      { es: 'Representante Legal Principal',  en: 'Primary Legal Representative' },
   sec14_rl_suplente:       { es: 'Representante Legal Suplente',   en: 'Alternate Legal Representative' },
   sec14_select_file_btn:   { es: 'Seleccionar archivo',            en: 'Select file' },

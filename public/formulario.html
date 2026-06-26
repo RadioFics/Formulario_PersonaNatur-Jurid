@@ -103,7 +103,7 @@
         <div class="field" id="field-cod_vinc">
           <label for="cod_vinc"><span data-i18n="sec1_cod_vinc">Tipo de vinculación</span> <span class="req">*</span></label>
           <select id="cod_vinc"
-                  onchange="actualizarFormData('basica','COD_VINC',this.value); limpiarError('field-cod_vinc')">
+                  onchange="actualizarFormData('basica','COD_VINC',this.value); limpiarError('field-cod_vinc'); _onVincChange(this.value)">
             <option value="">— Seleccione —</option>
           </select>
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
@@ -371,6 +371,37 @@
           <input type="text" id="ciiu_n_otro_txt" maxlength="255"
                  data-i18n-ph="ph_describe_ciiu" placeholder="Describa la actividad económica"
                  oninput="actualizarNatur('OTR_CIIU',this.value)" />
+          <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
+        </div>
+      </div>
+
+      <!-- Fila 6J — ¿Cotiza en bolsa? (solo Jurídica) -->
+      <div class="grid-2 solo-juridica" id="row-cot-bolsa">
+        <div class="field field-radio" id="field-cot_bolsa">
+          <label>
+            <span data-i18n="sec1_cot_bolsa">¿Su empresa cotiza en bolsa de valores?</span>
+            <span class="req">*</span>
+          </label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="cot_bolsa" value="S" onchange="onCotBolsaChange('S')">
+              <span data-i18n="yes">Sí</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="cot_bolsa" value="N" onchange="onCotBolsaChange('N')" checked>
+              <span data-i18n="no">No</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field" id="field-nom_bolsa" style="display:none">
+          <label for="nom_bolsa">
+            <span data-i18n="sec1_nom_bolsa">¿En cuál bolsa de valores cotiza?</span>
+            <span class="req">*</span>
+          </label>
+          <input type="text" id="nom_bolsa" maxlength="200"
+                 data-i18n-ph="sec1_nom_bolsa_ph" placeholder="Ej: NYSE, NASDAQ, BVC, LSE…"
+                 oninput="actualizarFormData('basica','NOM_BOLSA',this.value); limpiarError('field-nom_bolsa')" />
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
       </div>
@@ -975,7 +1006,10 @@
     <div class="accordion-header" onclick="toggleAccordion('accordion-ac')">
       <span class="accordion-title">
         <span class="section-num">8</span>
-        <span data-i18n="sec8_title">Composición accionaria</span>
+        <span data-i18n="sec8_title">Composición accionaria o propietaria</span>
+        <span class="ic-info"
+              data-i18n-tip="sec8_tip"
+              data-tip="Se entiende por participación la tenencia de acciones, cuotas sociales, participaciones en sociedades de personas o cualquier otro tipo de interés económico o de control en una entidad. Los accionistas con 5% o más son considerados beneficiarios finales según la normativa SAGRILAFT.">i</span>
       </span>
       <span class="chevron">&#8964;</span>
     </div>
@@ -1137,15 +1171,33 @@
 
     <div class="accordion-body">
 
-      <p class="section-hint" style="background:#E5F5FA;border-left:3px solid var(--color-accent);padding:8px 12px;border-radius:4px;margin-bottom:4px">
-        <strong data-i18n="nota_lbl">Nota:</strong> <span data-i18n="sec10_note">Los valores de ingresos, egresos y demás campos financieros corresponden a cifras anuales en pesos colombianos (COP), salvo los totales de activos, pasivos y patrimonio que son valores de balance.</span>
-      </p>
+      <!-- Selector de moneda -->
+      <div class="grid-2" style="margin-bottom:12px">
+        <div class="field">
+          <label for="fin_moneda">
+            <span data-i18n="sec10_curr">Moneda de reporte</span>
+            <span class="ic-info"
+                  data-i18n-tip="sec10_curr_tip"
+                  data-tip="Seleccione la moneda en que se expresan los valores financieros. Todos los campos de esta sección deben estar en la misma moneda.">i</span>
+            <span class="req">*</span>
+          </label>
+          <select id="fin_moneda"
+                  onchange="onFinMonedaChange(this.value, this.options[this.selectedIndex]?.dataset?.ini || 'COP')">
+          </select>
+        </div>
+      </div>
+
+      <!-- Nota contextual de la sección -->
+      <p class="section-hint" data-i18n="sec10_note">Ingresos, egresos y otros ingresos corresponden a cifras anuales expresadas en la moneda seleccionada. Activos totales, pasivos totales y patrimonio son valores de balance a la fecha de reporte.</p>
 
       <!-- Fila 1 — Activos / Ingresos anuales / Pasivos -->
       <div class="grid-3">
 
         <div class="field" id="field-act_total">
-          <label for="act_total"><span data-i18n="sec10_act_total">Total activos (COP)</span> <span class="req">*</span></label>
+          <label for="act_total">
+            <span data-i18n="sec10_act_total">Total activos</span> <span class="fin-curr-lbl">(COP)</span> <span class="req">*</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_balance">Valor de balance</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="act_total" inputmode="decimal" placeholder="0,00"
@@ -1155,7 +1207,10 @@
         </div>
 
         <div class="field" id="field-ing_mens">
-          <label for="ing_mens"><span data-i18n="sec10_ing_mens">Ingresos anuales (COP)</span> <span class="req">*</span></label>
+          <label for="ing_mens">
+            <span data-i18n="sec10_ing_mens">Ingresos anuales</span> <span class="fin-curr-lbl">(COP)</span> <span class="req">*</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_anual">Cifra anual</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="ing_mens" inputmode="decimal" placeholder="0,00"
@@ -1165,7 +1220,10 @@
         </div>
 
         <div class="field" id="field-pas_total">
-          <label for="pas_total"><span data-i18n="sec10_pas_total">Total pasivos (COP)</span> <span class="req">*</span></label>
+          <label for="pas_total">
+            <span data-i18n="sec10_pas_total">Total pasivos</span> <span class="fin-curr-lbl">(COP)</span> <span class="req">*</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_balance">Valor de balance</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="pas_total" inputmode="decimal" placeholder="0,00"
@@ -1180,7 +1238,10 @@
       <div class="grid-3">
 
         <div class="field" id="field-egr_mens">
-          <label for="egr_mens"><span data-i18n="sec10_egr_mens">Egresos anuales (COP)</span> <span class="req">*</span></label>
+          <label for="egr_mens">
+            <span data-i18n="sec10_egr_mens">Egresos anuales</span> <span class="fin-curr-lbl">(COP)</span> <span class="req">*</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_anual">Cifra anual</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="egr_mens" inputmode="decimal" placeholder="0,00"
@@ -1190,7 +1251,10 @@
         </div>
 
         <div class="field" id="field-patrimonio">
-          <label for="patrimonio"><span data-i18n="sec10_patrimonio">Patrimonio (COP)</span> <span class="req">*</span></label>
+          <label for="patrimonio">
+            <span data-i18n="sec10_patrimonio">Patrimonio</span> <span class="fin-curr-lbl">(COP)</span> <span class="req">*</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_balance">Valor de balance</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="patrimonio" inputmode="decimal" placeholder="0,00"
@@ -1201,7 +1265,10 @@
         </div>
 
         <div class="field" id="field-otr_ing">
-          <label for="otr_ing"><span data-i18n="sec10_otr_ing">Otros ingresos (COP)</span></label>
+          <label for="otr_ing">
+            <span data-i18n="sec10_otr_ing">Otros ingresos</span> <span class="fin-curr-lbl">(COP)</span>
+            <small class="campo-auto-hint" data-i18n="sec10_hint_anual">Cifra anual</small>
+          </label>
           <div class="money-wrapper">
             <span class="money-prefix">$</span>
             <input type="text" id="otr_ing" inputmode="decimal" placeholder="0,00"
@@ -1700,6 +1767,9 @@
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <!--  Scripts JS — orden estricto de carga                                  -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- Modo DEMO (hosting estático sin backend). Inertes si hay servidor real. -->
+<script src="js/static-data.js"></script>
+<script src="js/static-mode.js"></script>
 <script src="js/state.js"></script>
 <script src="js/state-natur.js"></script>
 <script src="js/utils.js"></script>

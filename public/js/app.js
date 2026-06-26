@@ -126,6 +126,23 @@ async function inicializar() {
         agregarOpcionOtroAlTipdoc('bfn_tip_doc_soc');
       }),
 
+      // Moneda de reporte — sección 9 Financiera
+      cargarCatalogo(
+        '/api/catalogo/monedas', 'fin_moneda',
+        'COD_MONE', 'NOM_MONE', 'select_placeholder'
+      ).then(() => {
+        const sel = document.getElementById('fin_moneda');
+        if (!sel) return;
+        const cacheKey = new URL('/api/catalogo/monedas', window.location.origin).toString();
+        const rows = catalogCache[cacheKey] || [];
+        Array.from(sel.options).forEach(opt => {
+          const row = rows.find(r => String(r.COD_MONE) === opt.value);
+          if (row && row.INI_MONE) opt.dataset.ini = String(row.INI_MONE).trim();
+        });
+        sel.value = '20';
+        if (typeof onFinMonedaChange === 'function') onFinMonedaChange('20', 'COP');
+      }),
+
     ]);
   } catch (err) {
     console.error('Error en inicializar():', err);
@@ -712,6 +729,18 @@ async function hidratarFormularioVisual() {
       if (el) el.value = formData.basica[key] || '';
     });
 
+    // Sección 1: COT_BOLSA (solo Jurídica)
+    {
+      const cotBolsa = formData.basica.COT_BOLSA || 'N';
+      const radioCot = document.querySelector(`input[name="cot_bolsa"][value="${cotBolsa}"]`);
+      if (radioCot) radioCot.checked = true;
+      if (typeof onCotBolsaChange === 'function') onCotBolsaChange(cotBolsa);
+      if (cotBolsa === 'S') {
+        const nomInp = document.getElementById('nom_bolsa');
+        if (nomInp) nomInp.value = formData.basica.NOM_BOLSA || '';
+      }
+    }
+
     // Sección 1: cascada/OTRO para País de expedición del documento
     {
       const cpe = formData.basica.COD_PAIS_EXP;
@@ -881,6 +910,20 @@ async function hidratarFormularioVisual() {
     const patrimonioHint = document.getElementById('patrimonio-hint');
     if (patrimonioHint && formData.financiera.PATRIMONIO !== null && formData.financiera.PATRIMONIO !== undefined) {
       patrimonioHint.textContent = 'Valor ingresado manualmente.';
+    }
+
+    // Moneda de reporte (fin_moneda)
+    {
+      const codMone = formData.financiera.COD_MONE;
+      if (codMone) {
+        const selMone = document.getElementById('fin_moneda');
+        if (selMone) {
+          selMone.value = String(codMone);
+          const optSel = selMone.options[selMone.selectedIndex];
+          const ini = (optSel && optSel.dataset.ini) ? optSel.dataset.ini : 'COP';
+          if (typeof onFinMonedaChange === 'function') onFinMonedaChange(String(codMone), ini);
+        }
+      }
     }
 
     // Sección 6: Junta Directiva
