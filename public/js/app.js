@@ -938,6 +938,13 @@ async function hidratarFormularioVisual() {
   }
 }
 
+/* ── Declaración juramento ──────────────────────────────────────────────────── */
+
+function onDeclJuramentoChange(checked) {
+  const field = document.getElementById('field-decl-juramento');
+  if (field) field.classList.toggle('error', !checked);
+}
+
 /**
  * Carga opciones de departamento/ciudad para un bloque de ubicación y restablece valores.
  * No modifica el estado global; solamente rellena los selects del DOM.

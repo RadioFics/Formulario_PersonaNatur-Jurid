@@ -212,6 +212,14 @@ function onTipTercChange(val) {
   const ciiuNField = document.getElementById('field-cod_ciiu_n');
   if (ciiuNField) ciiuNField.style.gridColumn = esN ? 'span 2' : '';
 
+  // ── Tooltip dinámico de "Tipo de persona" ─────────────────────────────────
+  const icTipoPersona = document.getElementById('ic-tipo-persona');
+  if (icTipoPersona) {
+    const tipKey = esN ? 'sec1_tip_natural' : 'sec1_tip_juridica';
+    icTipoPersona.setAttribute('data-i18n-tip', tipKey);
+    if (typeof t === 'function') icTipoPersona.dataset.tip = t(tipKey) || '';
+  }
+
   console.log('[onTipTercChange] modo =', val);
 }
 

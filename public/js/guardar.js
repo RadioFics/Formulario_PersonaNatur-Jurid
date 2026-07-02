@@ -160,8 +160,8 @@ function validarTodo() {
     errores.push('PEP: Debe indicar si la empresa maneja recursos públicos');
   if (!formData.pep.CAR_PUBL)
     errores.push('PEP: Debe indicar si algún representante ejerció cargo público');
-  if (formData.actividades.CERT_INFO !== 'S')
-    errores.push('Certificación: Debe confirmar que la información es verídica');
+  if (!document.getElementById('decl_juramento')?.checked)
+    errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 
   /* ── Sección 12: Beneficiarios finales ───────────────────────────────── */
   if (!formData.beneficiarios.length)
@@ -230,6 +230,7 @@ function _acordeonDeError(msg) {
   if (msg.startsWith('Información financiera'))     return 'accordion-financiera';
   if (msg.startsWith('Información bancaria'))       return 'accordion-bancaria';
   if (msg.startsWith('PEP') || msg.startsWith('Certificación')) return 'accordion-pep';
+  if (msg.startsWith('Política de privacidad') || msg.startsWith('Declaración')) return null; // fuera de acordeones
   if (msg.startsWith('Documentos') || msg.startsWith('Firma'))  return 'accordion-docs';
   return null;
 }
@@ -644,7 +645,9 @@ function _construirPayload() {
     URL_WEB:      b.URL_WEB     || null,
     COT_BOLSA:    b.COT_BOLSA   || 'N',
     NOM_BOLSA:    b.COT_BOLSA === 'S' ? (b.NOM_BOLSA || null) : null,
+    GMAIL_VERIF:  sessionStorage.getItem('SAGRILAFT_gmail') || null,
     ACE_POLI:     true,  // T&C aceptados
+    IND_DECL:     document.getElementById('decl_juramento')?.checked ? 'S' : 'N',
 
     // ── Sección 3 — GN_JURID (sociedad) ────────────────────────────────────
     UBIC_SOC:          s.UBIC_SOC          || null,

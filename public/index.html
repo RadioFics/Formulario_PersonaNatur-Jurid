@@ -52,10 +52,10 @@
       background: #fffdf4;
       border: 1px solid #e8d08a;
       border-radius: 10px;
-      padding: 18px 22px;
+      padding: 26px 24px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 24px;
     }
     .terms-policy-preview {
       max-height: 88px;
@@ -171,6 +171,31 @@
       padding: 12px 14px; font-size: 0.85rem; color: #e65100; line-height: 1.5;
     }
     .legacy-notice a { color: #e65100; font-weight: 700; }
+
+    /* ── Paso Gmail ── */
+    #gmail-step { width: 100%; }
+    .gmail-card {
+      background: #fff; border-radius: 12px; padding: 30px 26px;
+      border: 1px solid #C2E4EF; box-shadow: 0 2px 10px rgba(0,0,0,.08);
+      max-width: 440px; margin: 0 auto; width: 100%;
+    }
+    .gmail-card-title { font-size: 1rem; font-weight: 700; color: var(--color-primary, #1a237e); margin: 0 0 4px; }
+    .gmail-card-sub   { font-size: 0.83rem; color: #616161; margin: 0 0 18px; line-height: 1.5; }
+    .gmail-input-row  { display: flex; gap: 8px; }
+    .gmail-input-row input {
+      flex: 1; padding: 10px 12px; font-size: 0.9rem;
+      border: 1.5px solid var(--color-border, #e0e0e0);
+      border-radius: var(--radius, 8px); outline: none; transition: border-color .18s;
+    }
+    .gmail-input-row input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgba(21,101,192,.15); }
+    .gmail-err      { font-size: 0.81rem; color: #c62828; min-height: 18px; margin: 4px 0 0; }
+    .gmail-otp-hint { font-size: 0.84rem; color: #424242; margin: 0 0 12px; line-height: 1.5; }
+
+    /* ── Scroll-gate del modal de política ── */
+    .pol-scroll-hint { font-size: 0.78rem; color: #757575; text-align: center; margin-top: 4px; display: none; }
+    .pol-scroll-hint.visible { display: block; }
+    #btn-pol-accept:disabled,
+    #btn-pol-accept[disabled] { background: #b0bec5 !important; cursor: default; opacity: 1; }
   </style>
 </head>
 <body onload="initLang()">
@@ -185,14 +210,44 @@
     <p data-i18n="idx_subtitle">Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo</p>
   </div>
 
+  <!-- ── Paso 0: Verificación Gmail ────────────────────────────────────── -->
+  <div id="gmail-step">
+    <div class="gmail-card">
+      <!-- Fase 1: ingreso de correo -->
+      <div id="gmail-ph1">
+        <p class="gmail-card-title">&#128274; Verificación de identidad</p>
+        <p class="gmail-card-sub">Ingrese su correo Gmail. Le enviaremos un código de verificación de 6 dígitos para confirmar su identidad antes de continuar.</p>
+        <div class="gmail-input-row">
+          <input type="email" id="inp-gmail" placeholder="nombre@gmail.com" autocomplete="email" />
+          <button class="btn-sm btn-sm-primary" id="btn-send-otp" onclick="gmailEnviarOTP()">Enviar código</button>
+        </div>
+        <p class="gmail-err" id="gmail-err1"></p>
+      </div>
+      <!-- Fase 2: ingreso de código OTP -->
+      <div id="gmail-ph2" style="display:none">
+        <p class="gmail-otp-hint">Se envió un código de verificación a <strong id="gmail-display"></strong>. Ingréselo aquí:</p>
+        <div class="gmail-input-row">
+          <input type="text" id="inp-otp" maxlength="6" placeholder="000000" inputmode="numeric"
+                 style="letter-spacing:.18em;font-family:monospace;font-size:1.05rem;text-align:center"
+                 oninput="this.value=this.value.replace(/\D/g,'')" />
+          <button class="btn-sm btn-sm-primary" id="btn-verify-otp" onclick="gmailVerificarOTP()">Verificar</button>
+        </div>
+        <p class="gmail-err" id="gmail-err2"></p>
+        <button class="btn-back-step" onclick="gmailVolverEmail()" style="margin-top:10px">&#8592; Cambiar correo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Contenido principal (visible tras verificar Gmail) ──────────── -->
+  <div id="main-content" style="display:none">
+
   <!-- T&C -->
   <div class="terms-box">
     <div class="terms-policy-preview">
-      <p><strong data-i18n="idx_tc_title">Política de tratamiento de datos personales:</strong><span data-i18n="idx_tc_para1"> En cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015, la información recopilada mediante este formulario será utilizada exclusivamente para los procesos de vinculación y gestión de riesgos en el marco del Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SAGRILAFT).</span></p>
-      <p data-i18n="idx_tc_para2">Sus datos serán tratados con estricta confidencialidad y solo serán compartidos con autoridades competentes cuando así lo exija la normativa vigente. Como titular, usted tiene derecho a conocer, actualizar, rectificar y suprimir su información personal. Para ejercer estos derechos o presentar quejas, puede comunicarse directamente con el oficial de cumplimiento de la entidad.</p>
-    </div>
+      <p><strong data-i18n="idx_tc_title">Política de tratamiento de datos personales:</strong><span data-i18n="idx_tc_para1"> Con el fin de dar cumplimiento a las disposiciones legales y regulatorias aplicables en materia de prevención del lavado de activos, la financiación del terrorismo, la financiación de la proliferación de armas de destrucción masiva (LA/FT/FPADM), la corrupción y el soborno transnacional (C/ST), COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA ha desarrollado el presente formulario como instrumento para el conocimiento, identificación y debida diligencia de sus contrapartes, en el marco de su Sistema de Autocontrol y Gestión del Riesgo Integral de LA/FT/FPADM (SAGRILAFT) y su Programa de Transparencia y Ética Empresarial (PTEE).</span></p>
+  
     <label>
-      <input type="checkbox" id="chk-terms" onchange="onTermsChange(this.checked)" />
+      <input type="checkbox" id="chk-terms" onclick="onTermsClick(event)" />
       <span>
         <span data-i18n="idx_terms_read">He leído y acepto la</span>
         <a href="#" onclick="abrirModalPolitica(event)" data-i18n="idx_terms_policy_link">Política de tratamiento de datos personales</a>
@@ -232,6 +287,8 @@
     <span data-i18n="idx_footer">SAGRILAFT &mdash; Persona Natural y Jurídica &nbsp;|&nbsp; Solo para uso interno</span>
   </div>
 
+  </div><!-- /main-content -->
+
 </div>
 
 <!-- Modal Política -->
@@ -242,18 +299,20 @@
       <button class="modal-close-btn" onclick="cerrarModalPolitica()" title="Cerrar">✕</button>
     </div>
     <div class="modal-policy-body">
-      <p><strong>AVISO DE PRIVACIDAD:</strong></p>
-      <p>Desde este punto se puede disponer cualquier mensaje relacionado a las políticas de privacidad.</p>
-      <p><strong>Para que lo tomes en cuenta =P.</strong></p>
+      <p>Con el diligenciamiento y/o firma del presente formulario, autorizo de manera previa, expresa, informada e inequívoca a <strong>COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA</strong> (la &#34;Compañía&#34; o &#34;Collective Mining&#34;) para recolectar, almacenar, usar, consultar, verificar, actualizar, transmitir, transferir y, en general, tratar los datos personales y la información suministrada, así como la documentación aportada como soporte, con la finalidad de adelantar procesos de conocimiento y debida diligencia de contrapartes, identificación y verificación de información, gestión de riesgos, cumplimiento de obligaciones legales, regulatorias y contractuales, prevención del lavado de activos, la financiación del terrorismo, la financiación de la proliferación de armas de destrucción masiva (LA/FT/FPADM), prevención del fraude, la corrupción, el soborno transnacional (C/ST) y demás riesgos asociados al cumplimiento, así como para la ejecución y administración de la relación comercial, contractual o jurídica con la Compañía.</p>
+      <p>Igualmente, autorizo a Collective Mining para consultar, verificar y validar la información suministrada ante fuentes públicas o privadas, registros oficiales, bases de datos, listas restrictivas, listas vinculantes, centrales de información, autoridades competentes y cualquier otra fuente de información que resulte pertinente para el cumplimiento de sus obligaciones legales, regulatorias y de debida diligencia, directamente o a través de terceros especializados.</p>
+      <p>Declaro conocer que, como titular de los datos personales, tengo derecho a conocer, actualizar, rectificar y suprimir mis datos personales, solicitar prueba de esta autorización, revocarla cuando sea procedente, presentar consultas o reclamos y acceder gratuitamente a la información que haya sido objeto de tratamiento, de conformidad con la legislación aplicable y con la Política y Procedimiento de Tratamiento de Datos Personales de Collective Mining. Para ejercer estos derechos o consultar la Política y Procedimiento de Tratamiento de Datos Personales, podré comunicarme al correo electrónico <a href="mailto:notificaciones@collectivemining.com">notificaciones@collectivemining.com</a>. Igualmente, declaro conocer que el suministro de datos sensibles, en caso de ser solicitados, es de carácter facultativo.</p>
+      <p>Finalmente, declaro, bajo la gravedad de juramento, que la información y documentación suministradas en el presente formulario son veraces, completas, exactas, vigentes y corresponden a la realidad, y me comprometo a informar y actualizar oportunamente cualquier modificación que se presente respecto de la información reportada durante la vigencia de la relación con Collective Mining.</p>
     </div>
     <div class="modal-actions">
       <button class="btn-sm btn-sm-secondary" onclick="cerrarModalPolitica()">
         <span data-i18n="idx_modal_pol_close">Cerrar</span>
       </button>
-      <button class="btn-sm btn-sm-primary" onclick="aceptarDesdeModal()">
+      <button class="btn-sm btn-sm-primary" id="btn-pol-accept" onclick="aceptarDesdeModal()" disabled>
         <span data-i18n="idx_modal_pol_accept">Acepto la política</span>
       </button>
     </div>
+    <p class="pol-scroll-hint visible" id="pol-scroll-hint">&#8595; Desplácese para leer la política completa</p>
   </div>
 </div>
 
@@ -318,10 +377,18 @@
 <script>
   'use strict';
 
-  const TERMS_KEY = 'SAGRILAFT_terms_accepted';
+  const TERMS_KEY    = 'SAGRILAFT_terms_accepted';
+  const GMAIL_KEY    = 'SAGRILAFT_gmail';
+  const GMAIL_VER_KEY= 'SAGRILAFT_gmail_verified';
   let _terceroEncontrado = null;
+  let _policyScrolled    = false;
 
+  /* ── Inicialización ── */
   (function init() {
+    // Si el Gmail ya fue verificado en esta sesión, saltar el paso
+    if (sessionStorage.getItem(GMAIL_VER_KEY) === '1') {
+      _mostrarContenidoPrincipal();
+    }
     if (sessionStorage.getItem(TERMS_KEY) === '1') _setTermsUI(true);
 
     // Si viene desde formulario con ?accion=actualizar, abrir modal automáticamente
@@ -334,7 +401,87 @@
         if (inp) { inp.value = numIdenParam; buscarTercero(); }
       }
     }
+
+    // Scroll-gate: habilitar botón cuando el usuario llegue al final del texto
+    const policyBody = document.querySelector('.modal-policy-body');
+    const btnAcep    = document.getElementById('btn-pol-accept');
+    const hintEl     = document.getElementById('pol-scroll-hint');
+    if (policyBody && btnAcep) {
+      policyBody.addEventListener('scroll', () => {
+        if (policyBody.scrollTop + policyBody.clientHeight >= policyBody.scrollHeight - 6) {
+          btnAcep.disabled = false;
+          _policyScrolled  = true;
+          if (hintEl) hintEl.classList.remove('visible');
+        }
+      });
+    }
   })();
+
+  function _mostrarContenidoPrincipal() {
+    document.getElementById('gmail-step').style.display    = 'none';
+    document.getElementById('main-content').style.display  = '';
+  }
+
+  /* ── Gmail — verificación OTP ── */
+  async function gmailEnviarOTP() {
+    const errEl = document.getElementById('gmail-err1');
+    const btn   = document.getElementById('btn-send-otp');
+    errEl.textContent = '';
+    const email = (document.getElementById('inp-gmail').value || '').trim().toLowerCase();
+    if (!email.match(/^[^@\s]+@gmail\.com$/i)) {
+      errEl.textContent = 'Por favor ingrese un correo Gmail válido (nombre@gmail.com).';
+      return;
+    }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+      const res  = await fetch('/api/email/send-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al enviar el código.');
+      document.getElementById('gmail-display').textContent = email;
+      document.getElementById('gmail-ph1').style.display   = 'none';
+      document.getElementById('gmail-ph2').style.display   = '';
+      document.getElementById('inp-otp').focus();
+    } catch (e) {
+      errEl.textContent = e.message;
+      btn.disabled = false; btn.textContent = 'Enviar código';
+    }
+  }
+
+  async function gmailVerificarOTP() {
+    const errEl = document.getElementById('gmail-err2');
+    const btn   = document.getElementById('btn-verify-otp');
+    errEl.textContent = '';
+    const email = (document.getElementById('inp-gmail').value || '').trim().toLowerCase();
+    const otp   = (document.getElementById('inp-otp').value   || '').trim();
+    if (otp.length < 6) { errEl.textContent = 'Ingrese el código de 6 dígitos.'; return; }
+    btn.disabled = true; btn.textContent = 'Verificando…';
+    try {
+      const res  = await fetch('/api/email/verify-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Código incorrecto.');
+      sessionStorage.setItem(GMAIL_KEY,     email);
+      sessionStorage.setItem(GMAIL_VER_KEY, '1');
+      _mostrarContenidoPrincipal();
+    } catch (e) {
+      errEl.textContent = e.message;
+      btn.disabled = false; btn.textContent = 'Verificar';
+    }
+  }
+
+  function gmailVolverEmail() {
+    document.getElementById('gmail-ph2').style.display = 'none';
+    document.getElementById('gmail-ph1').style.display = '';
+    document.getElementById('inp-otp').value           = '';
+    document.getElementById('gmail-err2').textContent  = '';
+    const btn = document.getElementById('btn-send-otp');
+    btn.disabled = false; btn.textContent = 'Enviar código';
+  }
 
   /* ── Términos ── */
   function _setTermsUI(accepted) {
@@ -347,7 +494,17 @@
     if (accepted) sessionStorage.setItem(TERMS_KEY, '1');
     else          sessionStorage.removeItem(TERMS_KEY);
   }
-  function onTermsChange(checked) { _setTermsUI(checked); }
+
+  function onTermsClick(event) {
+    const chk = document.getElementById('chk-terms');
+    if (chk.checked && !_policyScrolled) {
+      chk.checked = false;       // revertir: el usuario debe leer primero
+      _abrirModalConScrollGate();
+      return;
+    }
+    _setTermsUI(chk.checked);
+  }
+
   function onCardClick(event, url) {
     if (sessionStorage.getItem(TERMS_KEY) !== '1') {
       event.preventDefault(); mostrarAvisoTerminos(); return false;
@@ -365,10 +522,22 @@
     document.getElementById('chk-terms').focus();
   }
 
-  /* ── Modal política ── */
-  function abrirModalPolitica(e) { if (e) e.preventDefault(); document.getElementById('modal-politica').classList.add('show'); }
+  /* ── Modal política + scroll-gate ── */
+  function _abrirModalConScrollGate() {
+    const btnAcep    = document.getElementById('btn-pol-accept');
+    const hintEl     = document.getElementById('pol-scroll-hint');
+    const policyBody = document.querySelector('.modal-policy-body');
+    if (btnAcep && !_policyScrolled) {
+      btnAcep.disabled = true;
+      if (hintEl) hintEl.classList.add('visible');
+    }
+    if (policyBody) policyBody.scrollTop = 0;
+    document.getElementById('modal-politica').classList.add('show');
+  }
+
+  function abrirModalPolitica(e) { if (e) e.preventDefault(); _abrirModalConScrollGate(); }
   function cerrarModalPolitica() { document.getElementById('modal-politica').classList.remove('show'); }
-  function aceptarDesdeModal() { cerrarModalPolitica(); _setTermsUI(true); }
+  function aceptarDesdeModal()   { _policyScrolled = true; cerrarModalPolitica(); _setTermsUI(true); }
   document.getElementById('modal-politica').addEventListener('click', function(e) { if (e.target === this) cerrarModalPolitica(); });
 
   /* ── Modal actualizar — helpers de paso ── */

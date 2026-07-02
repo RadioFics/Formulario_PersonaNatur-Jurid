@@ -279,17 +279,14 @@ let _mailerTransport = null;
   }
 })();
 
-async function _enviarCorreo(to, subject, html) {
+async function _enviarCorreo(to, subject, html, text) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@minedax.local';
+  const plainText = text || html.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim();
   if (_mailerTransport) {
-    try {
-      await _mailerTransport.sendMail({ from, to, subject, html });
-      console.log(`📧  Correo enviado a ${to} — "${subject}"`);
-    } catch (e) {
-      console.error(`📧  Error enviando correo a ${to}: ${e.message}`);
-    }
+    await _mailerTransport.sendMail({ from, to, subject, html, text: plainText });
+    console.log(`📧  Correo enviado a ${to} — "${subject}"`);
   } else {
-    console.log(`📧  [SIN SMTP] Para: ${to} | Asunto: ${subject}\n${html.replace(/<[^>]+>/g,' ')}`);
+    console.log(`📧  [SIN SMTP] Para: ${to} | Asunto: ${subject}\n${plainText}`);
   }
 }
 
@@ -308,7 +305,13 @@ async function getPool() {
     console.log('✅  Conectado a SQL Server — MineDax');
     if (!_dbInitialized) {
       _dbInitialized = true;
-      _initDB().catch(err => console.error('⚠️  _initDB():', err.message));
+      // Esperar la migración aquí evita que el primer request use tablas/columnas
+      // que la migración todavía no ha creado (carrera entre _initDB y la query del request).
+      try {
+        await _initDB();
+      } catch (err) {
+        console.error('⚠️  _initDB():', err.message);
+      }
     }
   }
   return pool;
@@ -322,6 +325,11 @@ async function _initDB() {
     IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                    WHERE TABLE_NAME='GN_TERCE' AND COLUMN_NAME='COD_EDIT')
       ALTER TABLE GN_TERCE ADD COD_EDIT CHAR(64) NULL
+  `);
+  await p.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                   WHERE TABLE_NAME='GN_TERCE' AND COLUMN_NAME='IND_DECL')
+      ALTER TABLE GN_TERCE ADD IND_DECL CHAR(1) NULL
   `);
   await p.request().query(`
     IF OBJECT_ID('GN_BORRADOR','U') IS NULL
@@ -358,7 +366,70 @@ async function _initDB() {
       )
     END
   `);
-  console.log('✅  DB schema verificado (COD_EDIT, GN_BORRADOR, GN_ADMIN_USR)');
+  // Tabla de referencia: un Gmail verificado = una fila. GN_NATUR/GN_JURID/GN_BORRADOR
+  // la referencian por FK (ID_GMAIL) en vez de repetir el correo como texto.
+  await p.request().query(`
+    IF OBJECT_ID('GN_GMAIL_VERIF','U') IS NULL
+    BEGIN
+      CREATE TABLE GN_GMAIL_VERIF (
+        ID_GMAIL  INT IDENTITY(1,1) NOT NULL,
+        GMAIL     VARCHAR(150)      NOT NULL,
+        FEC_VERIF DATETIME          NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT PK_GN_GMAIL_VERIF  PRIMARY KEY (ID_GMAIL),
+        CONSTRAINT UQ_GN_GMAIL_VERIF  UNIQUE      (GMAIL)
+      )
+    END
+  `);
+  for (const tbl of ['GN_NATUR', 'GN_JURID', 'GN_BORRADOR']) {
+    // Limpieza: una migración previa guardó el correo como VARCHAR repetido en cada tabla.
+    await p.request().query(`
+      IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_NAME='${tbl}' AND COLUMN_NAME='GMAIL_VERIF' AND DATA_TYPE='varchar')
+        ALTER TABLE dbo.${tbl} DROP COLUMN GMAIL_VERIF
+    `);
+    await p.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_NAME='${tbl}' AND COLUMN_NAME='ID_GMAIL')
+        ALTER TABLE dbo.${tbl} ADD ID_GMAIL INT NULL
+    `);
+    await p.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_${tbl}_GMAIL')
+        ALTER TABLE dbo.${tbl} ADD CONSTRAINT FK_${tbl}_GMAIL
+          FOREIGN KEY (ID_GMAIL) REFERENCES GN_GMAIL_VERIF(ID_GMAIL)
+    `);
+  }
+  // UBIC_SOC admite 'N' (Nacional), 'E' (Extranjera) y 'SC' (Sucursal en Colombia) —
+  // la columna estaba en CHAR(1) y el CHECK original solo permitía 'E'/'N', sin 'SC'.
+  await p.request().query(`
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name='CHK_GN_JURID_UBIC')
+      ALTER TABLE dbo.GN_JURID DROP CONSTRAINT CHK_GN_JURID_UBIC
+  `);
+  await p.request().query(`
+    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_NAME='GN_JURID' AND COLUMN_NAME='UBIC_SOC' AND CHARACTER_MAXIMUM_LENGTH < 2)
+      ALTER TABLE dbo.GN_JURID ALTER COLUMN UBIC_SOC VARCHAR(2) NULL
+  `);
+  await p.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name='CHK_GN_JURID_UBIC')
+      ALTER TABLE dbo.GN_JURID ADD CONSTRAINT CHK_GN_JURID_UBIC
+        CHECK (UBIC_SOC IN ('E','N','SC'))
+  `);
+  console.log('✅  DB schema verificado (COD_EDIT, IND_DECL, GN_BORRADOR, GN_ADMIN_USR, GN_GMAIL_VERIF, UBIC_SOC)');
+}
+
+// Resuelve un Gmail verificado a su ID_GMAIL en GN_GMAIL_VERIF, creando la fila si no existe.
+// `r` es una fábrica de requests (p.request o un request ligado a una transacción).
+async function _obtenerIdGmail(r, gmail) {
+  const g = String(gmail || '').trim().toLowerCase();
+  if (!g) return null;
+  const sel = await r()
+    .input('GMAIL', sql.VarChar(150), g)
+    .query(`SELECT ID_GMAIL FROM GN_GMAIL_VERIF WHERE GMAIL=@GMAIL`);
+  if (sel.recordset.length) return sel.recordset[0].ID_GMAIL;
+  const ins = await r()
+    .input('GMAIL', sql.VarChar(150), g)
+    .query(`INSERT INTO GN_GMAIL_VERIF (GMAIL) OUTPUT INSERTED.ID_GMAIL VALUES (@GMAIL)`);
+  return ins.recordset[0].ID_GMAIL;
 }
 
 // ─── Helpers de código de edición ────────────────────────────────────────────
@@ -561,8 +632,8 @@ app.post('/api/admin/registrar', async (req, res) => {
       .input('USR',        sql.VarChar(50),   usuario)
       .input('NOM',        sql.VarChar(100),  nomReal)
       .input('EMAIL',      sql.VarChar(150),  email)
-      .input('PWD_HASH',   sql.Char(64),      pwdHash)
-      .input('TOK_APROB',  sql.Char(64),      tokenHash)
+      .input('PWD_HASH',   sql.VarChar(64),      pwdHash)
+      .input('TOK_APROB',  sql.VarChar(64),      tokenHash)
       .query(`INSERT INTO GN_ADMIN_USR (USR_ADMIN,NOM_REAL,EMAIL,PWD_HASH,ESTADO,TOK_APROB)
               VALUES (@USR,@NOM,@EMAIL,@PWD_HASH,'P',@TOK_APROB)`);
 
@@ -600,7 +671,7 @@ app.get('/api/admin/aprobar/:token', async (req, res) => {
   try {
     const p = await getPool();
     const r = await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
       .query(`SELECT ID_ADMIN, USR_ADMIN, NOM_REAL, EMAIL, ESTADO FROM GN_ADMIN_USR WHERE TOK_APROB=@TOK`);
     if (!r.recordset.length)
       return res.status(404).send('<h2>Token inválido o ya procesado.</h2>');
@@ -609,7 +680,7 @@ app.get('/api/admin/aprobar/:token', async (req, res) => {
       return res.send(`<h2>Esta solicitud ya fue procesada (estado: ${ESTADO}).</h2>`);
 
     await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
       .query(`UPDATE GN_ADMIN_USR SET ESTADO='A', TOK_APROB=NULL, FEC_APROB=GETDATE() WHERE TOK_APROB=@TOK`);
 
     await _enviarCorreo(
@@ -642,7 +713,7 @@ app.get('/api/admin/rechazar/:token', async (req, res) => {
   try {
     const p = await getPool();
     const r = await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
       .query(`SELECT USR_ADMIN, NOM_REAL, EMAIL, ESTADO FROM GN_ADMIN_USR WHERE TOK_APROB=@TOK`);
     if (!r.recordset.length)
       return res.status(404).send('<h2>Token inválido o ya procesado.</h2>');
@@ -651,7 +722,7 @@ app.get('/api/admin/rechazar/:token', async (req, res) => {
       return res.send(`<h2>Esta solicitud ya fue procesada (estado: ${ESTADO}).</h2>`);
 
     await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
       .query(`UPDATE GN_ADMIN_USR SET ESTADO='R', TOK_APROB=NULL WHERE TOK_APROB=@TOK`);
 
     await _enviarCorreo(
@@ -695,7 +766,7 @@ app.post('/api/admin/recuperar', async (req, res) => {
 
       await p.request()
         .input('USR',  sql.VarChar(50), String(usuario))
-        .input('TOK',  sql.Char(64),    tokenHash)
+        .input('TOK',  sql.VarChar(64),    tokenHash)
         .input('VENC', sql.DateTime,    vencimiento)
         .query(`UPDATE GN_ADMIN_USR SET TOK_RESET=@TOK, TOK_VENC=@VENC WHERE USR_ADMIN=@USR AND ESTADO='A'`);
 
@@ -732,15 +803,15 @@ app.post('/api/admin/restablecer', async (req, res) => {
   try {
     const p = await getPool();
     const r = await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
       .query(`SELECT USR_ADMIN FROM GN_ADMIN_USR WHERE TOK_RESET=@TOK AND TOK_VENC > GETDATE() AND ESTADO='A'`);
     if (!r.recordset.length)
       return res.status(400).json({ error: 'El enlace es inválido o ha expirado.' });
 
     const pwdHash = _hashCodigo(clave);
     await p.request()
-      .input('TOK', sql.Char(64), tokenHash)
-      .input('PWD', sql.Char(64), pwdHash)
+      .input('TOK', sql.VarChar(64), tokenHash)
+      .input('PWD', sql.VarChar(64), pwdHash)
       .query(`UPDATE GN_ADMIN_USR SET PWD_HASH=@PWD, TOK_RESET=NULL, TOK_VENC=NULL WHERE TOK_RESET=@TOK`);
 
     res.json({ success: true });
@@ -1075,10 +1146,10 @@ app.post('/api/juridica', async (req, res) => {
     const req1 = new sql.Request(transaction);
 
     // ── GN_TERCE ──────────────────────────────────────────────────────────────
-    req1.input('TIP_TERC',    sql.Char(1),      TIP_TERC_JURID);
+    req1.input('TIP_TERC',    sql.VarChar(1),      TIP_TERC_JURID);
     req1.input('COD_TPDOC',   sql.Int,           d.COD_TPDOC   || 8);
     req1.input('NUM_IDEN',    sql.VarChar(20),   d.NUM_IDEN);
-    req1.input('DIG_VERI',    sql.Char(1),       d.DIG_VERI    || null);
+    req1.input('DIG_VERI',    sql.VarChar(1),       d.DIG_VERI    || null);
     req1.input('NOM_COMP',    sql.VarChar(255),  d.NOM_COMP);
     req1.input('COD_PAIS_EXP',sql.VarChar(10),   d.COD_PAIS_EXP);
     req1.input('DIR_TERC',    sql.VarChar(255),  d.DIR_TERC);
@@ -1103,10 +1174,10 @@ app.post('/api/juridica', async (req, res) => {
     req2.input('COD_CIIU',     sql.VarChar(10),   d.COD_CIIU     || null);
     req2.input('URL_WEB',      sql.VarChar(255),  d.URL_WEB      || null);
     // Sección 3 — Información de la sociedad
-    req2.input('UBIC_SOC',     sql.Char(1),        d.UBIC_SOC     || null);
+    req2.input('UBIC_SOC',     sql.VarChar(2),        d.UBIC_SOC     || null);
     req2.input('COD_PAIS_SOC', sql.VarChar(10),   d.COD_PAIS_SOC || null);
     req2.input('TIP_EMPR',     sql.VarChar(10),   d.TIP_EMPR     || null);
-    req2.input('GRUP_EMPR',    sql.Char(1),        d.GRUP_EMPR    || null);
+    req2.input('GRUP_EMPR',    sql.VarChar(1),        d.GRUP_EMPR    || null);
     req2.input('TIP_SOCIE',    sql.VarChar(10),   d.TIP_SOCIE    || null);
 
     await req2.query(`
@@ -1174,7 +1245,7 @@ app.post('/api/representante-legal', async (req, res) => {
 
       const r = new sql.Request(transaction);
       r.input('NUM_IDEN',  sql.VarChar(20),   NUM_IDEN);
-      r.input('TIP_REPR',  sql.Char(1),        rl.TIP_REPR);
+      r.input('TIP_REPR',  sql.VarChar(1),        rl.TIP_REPR);
       r.input('NOM_REPR',  sql.VarChar(100),   rl.NOM_REPR);
       r.input('APE_REPR',  sql.VarChar(100),   rl.APE_REPR);
       r.input('TIP_DOCU',  sql.Int,             Number(rl.TIP_DOCU));
@@ -1291,7 +1362,7 @@ app.post('/api/cumplimiento', async (req, res) => {
     const r0 = new sql.Request(transaction);
     r0.input('NUM_IDEN',  sql.VarChar(20),       NUM_IDEN);
     r0.input('DESC_NORM', sql.VarChar(sql.MAX),  DESC_NORM || null);
-    r0.input('TIE_JUNTA', sql.Char(1),            TIE_JUNTA || 'N');
+    r0.input('TIE_JUNTA', sql.VarChar(1),            TIE_JUNTA || 'N');
     r0.input('SIS_PREVE', sql.VarChar(255),       TIE_JUNTA === 'S' ? (SIS_PREVE || null) : null);
 
     await r0.query(`
@@ -1309,7 +1380,7 @@ app.post('/api/cumplimiento', async (req, res) => {
 
         const r = new sql.Request(transaction);
         r.input('NUM_IDEN',  sql.VarChar(20),   NUM_IDEN);
-        r.input('TIP_REPR',  sql.Char(1),        of.TIP_REPR);
+        r.input('TIP_REPR',  sql.VarChar(1),        of.TIP_REPR);
         r.input('TIP_DOCU',  sql.Int,             of.TIP_DOCU  ? Number(of.TIP_DOCU)  : null);
         r.input('NUM_DOCU',  sql.VarChar(20),    of.NUM_DOCU  || null);
         r.input('FEC_EXPE',  sql.Date,            of.FEC_EXPE  ? new Date(of.FEC_EXPE) : null);
@@ -1366,7 +1437,7 @@ app.post('/api/junta-directiva', async (req, res) => {
     const dept = (!d.COD_DEPT || d.COD_DEPT === 'NA') ? null : d.COD_DEPT;
     const r = new sql.Request(txn);
     r.input('NUM_IDEN',  sql.VarChar(20),  NUM_IDEN);
-    r.input('TIP_REPR',  sql.Char(1),       TIP_REPR);
+    r.input('TIP_REPR',  sql.VarChar(1),       TIP_REPR);
     r.input('TIP_MIEM',  sql.VarChar(100),  d.TIP_MIEM  || null);
     r.input('NOM_MIEM',  sql.VarChar(100),  d.NOM_MIEM  || null);
     r.input('APE_MIEM',  sql.VarChar(100),  d.APE_MIEM  || null);
@@ -1423,8 +1494,8 @@ app.post('/api/revisores-fiscales', async (req, res) => {
     const dept = (!d.COD_DEPT || d.COD_DEPT === 'NA') ? null : d.COD_DEPT;
     const r = new sql.Request(txn);
     r.input('NUM_IDEN',     sql.VarChar(20),  NUM_IDEN);
-    r.input('TIP_REPR',     sql.Char(1),       TIP_REPR);
-    r.input('TIE_REVIS',    sql.Char(1),       TIE_REVIS || 'N');
+    r.input('TIP_REPR',     sql.VarChar(1),       TIP_REPR);
+    r.input('TIE_REVIS',    sql.VarChar(1),       TIE_REVIS || 'N');
     r.input('NOM_REVI',     sql.VarChar(100),  d.NOM_REVI     || null);
     r.input('APE_REVI',     sql.VarChar(100),  d.APE_REVI     || null);
     r.input('RAZ_REVI',     sql.VarChar(255),  d.RAZ_REVI     || null);
@@ -1438,7 +1509,7 @@ app.post('/api/revisores-fiscales', async (req, res) => {
     r.input('CEL_REVI',     sql.VarChar(30),   d.CEL_REVI     || null);
     r.input('TEL_REVI',     sql.VarChar(30),   d.TEL_REVI     || null);
     r.input('MAIL_REVI',    sql.VarChar(100),  d.MAIL_REVI    || null);
-    r.input('REVI_FIRMA',    sql.Char(1),          d.REVI_FIRMA   || 'N');
+    r.input('REVI_FIRMA',    sql.VarChar(1),          d.REVI_FIRMA   || 'N');
     r.input('RAZ_FIRMA',     sql.VarChar(255),     d.RAZ_FIRMA    || null);
     r.input('TIP_DOCU_FIR',  sql.Int,               d.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : (d.TIP_DOCU_FIR ? Number(d.TIP_DOCU_FIR) : null));
     r.input('OTR_TPDOC_FIR', sql.VarChar(100),     d.OTR_TPDOC_FIR || null);
@@ -1470,7 +1541,7 @@ app.post('/api/revisores-fiscales', async (req, res) => {
       // Solo insertar fila cabecera con TIE_REVIS='N'
       const r0 = new sql.Request(transaction);
       r0.input('NUM_IDEN',  sql.VarChar(20), NUM_IDEN);
-      r0.input('TIE_REVIS', sql.Char(1),      'N');
+      r0.input('TIE_REVIS', sql.VarChar(1),      'N');
       await r0.query(`INSERT INTO GN_JURID_RF (NUM_IDEN,TIE_REVIS) VALUES (@NUM_IDEN,@TIE_REVIS)`);
     }
 
@@ -2500,15 +2571,16 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('COD_TPDOC', sql.Int,         toInt(d.COD_TPDOC) || 8)
       .input('DIG_VERI',  sql.SmallInt,    toInt(d.DIG_VERI))
       .input('NOM_COMP',  sql.VarChar(240),String(d.NOM_COMP).substring(0,240))
-      .input('DIR_TERC',  sql.Char(120),   toChar(d.DIR_TERC))
-      .input('TEL_TERC',  sql.Char(30),    toChar(d.TEL_TERC))
-      .input('TEL_TERC2', sql.Char(40),    toChar(d.TEL_TERC2))
+      .input('DIR_TERC',  sql.VarChar(120),   toChar(d.DIR_TERC))
+      .input('TEL_TERC',  sql.VarChar(30),    toChar(d.TEL_TERC))
+      .input('TEL_TERC2', sql.VarChar(40),    toChar(d.TEL_TERC2))
       .input('DIR_MAIL',  sql.VarChar(150),toChar(d.DIR_MAIL))
       .query(`UPDATE GN_TERCE SET COD_TPDOC=@COD_TPDOC,DIG_VERI=@DIG_VERI,NOM_COMP=@NOM_COMP,
               DIR_TERC=@DIR_TERC,TEL_TERC=@TEL_TERC,TEL_TERC2=@TEL_TERC2,DIR_MAIL=@DIR_MAIL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     // 2. UPDATE GN_JURID
+    const idGmailUpd = await _obtenerIdGmail(r, d.GMAIL_VERIF);
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
@@ -2521,20 +2593,21 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
       .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
       .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_ORIG_SOC === 'OTRO' ? null : d.COD_PAIS_ORIG_SOC))
-      .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
+      .input('UBIC_SOC',    sql.VarChar(2),      toChar(d.UBIC_SOC))
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
-      .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
-      .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
+      .input('GRUP_EMPR',     sql.VarChar(1),      toChar(d.GRUP_EMPR))
+      .input('CTRL_DECLA',    sql.VarChar(1),      toChar(d.CTRL_DECLA))
       .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
       .input('DESC_GRUPO',    sql.VarChar(sql.MAX), toChar(d.DESC_GRUPO))
       .input('COD_PAIS_EXP',  sql.Int,          toInt(d.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
       .input('COD_MPIO_EXP',  sql.Int,          toInt(d.COD_MPIO_EXP))
-      .input('COT_BOLSA',     sql.Char(1),      toChar(d.COT_BOLSA) || 'N')
+      .input('COT_BOLSA',     sql.VarChar(1),      toChar(d.COT_BOLSA) || 'N')
       .input('NOM_BOLSA',     sql.VarChar(200), d.COT_BOLSA === 'S' ? toChar(d.NOM_BOLSA) : null)
+      .input('ID_GMAIL',      sql.Int,          idGmailUpd)
       .query(`UPDATE GN_JURID SET TIP_VINC=@TIP_VINC,OTR_VINC=@OTR_VINC,
               MAIL_SARL=@MAIL_SARL,COD_CIIU=@COD_CIIU,OTR_CIIU=@OTR_CIIU,
               URL_WEB=@URL_WEB,TIP_SOCIE=@TIP_SOCIE,OTR_SOCIE=@OTR_SOCIE,
@@ -2544,7 +2617,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
               CTRL_DECLA=@CTRL_DECLA,CAL_GRUPO=@CAL_GRUPO,DESC_GRUPO=@DESC_GRUPO,
               COD_PAIS_EXP=@COD_PAIS_EXP,OTR_PAIS_EXP=@OTR_PAIS_EXP,
               COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP,
-              COT_BOLSA=@COT_BOLSA,NOM_BOLSA=@NOM_BOLSA
+              COT_BOLSA=@COT_BOLSA,NOM_BOLSA=@NOM_BOLSA,ID_GMAIL=@ID_GMAIL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const del = async tabla =>
@@ -2559,7 +2632,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
         if (!p.NOM_REPR && !p.APE_REPR) continue;
         await r()
           .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-          .input('TIP_REPR', sql.Char(1),     rol==='Principal'?'P':'S')
+          .input('TIP_REPR', sql.VarChar(1),     rol==='Principal'?'P':'S')
           .input('NOM_REPR', sql.VarChar(60), toChar(p.NOM_REPR))
           .input('APE_REPR', sql.VarChar(60), toChar(p.APE_REPR))
           .input('TIP_DOCU', sql.Int,         toInt(p.TIP_DOCU))
@@ -2596,19 +2669,19 @@ app.put('/api/actualizar-completo', async (req, res) => {
     const tieCump = d.cump_TIE_JUNTA || 'N';
     await r()
       .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-      .input('TIE_NORM', sql.Char(1),     toChar(d.TIE_NORM) || 'N')
+      .input('TIE_NORM', sql.VarChar(1),     toChar(d.TIE_NORM) || 'N')
       .input('NORM_LAFT',sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',sql.VarChar(200),toChar(d.SIS_PREVE))
       .input('OTR_PREVE',sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',sql.VarChar(500),toChar(d.DESC_NORM))
-      .input('TIE_JUNTA',sql.Char(1),    tieCump)
+      .input('TIE_JUNTA',sql.VarChar(1),    tieCump)
       .query(`INSERT INTO GN_JURID_CUMP(COD_EMPR,COD_TERC,TIE_NORM,NORM_LAFT,SIS_PREVE,OTR_PREVE,DESC_NORM,TIE_JUNTA)
               VALUES(@COD_EMPR,@COD_TERC,@TIE_NORM,@NORM_LAFT,@SIS_PREVE,@OTR_PREVE,@DESC_NORM,@TIE_JUNTA)`);
     for (const p of (Array.isArray(d.oficiales)?d.oficiales:[])) {
       if (!p.NOM_RESP) continue;
       await r()
           .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-          .input('TIP_REPR', sql.Char(1),     p.TIP_REPR || 'P')
+          .input('TIP_REPR', sql.VarChar(1),     p.TIP_REPR || 'P')
           .input('TIP_SIST', sql.VarChar(10), toChar(p.TIP_SIST))
           .input('TIP_DOCU', sql.Int,         toInt(p.TIP_DOCU))
           .input('NUM_DOCU', sql.VarChar(20), toChar(p.NUM_DOCU))
@@ -2636,7 +2709,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!m.NOM_MIEM) continue;
       await r()
           .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-          .input('TIP_REPR', sql.Char(1),     m.TIP_REPR || 'P')
+          .input('TIP_REPR', sql.VarChar(1),     m.TIP_REPR || 'P')
           .input('TIP_MIEM', sql.VarChar(10), toChar(m.TIP_MIEM))
           .input('NOM_MIEM', sql.VarChar(60), toChar(m.NOM_MIEM))
           .input('APE_MIEM', sql.VarChar(60), toChar(m.APE_MIEM))
@@ -2666,9 +2739,9 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!rv.NOM_REVI && !rv.RAZ_REVI) continue;
       await r()
           .input('COD_EMPR',    sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-          .input('TIP_REPR',    sql.Char(1),     rv.TIP_REPR || 'P')
-          .input('TIP_PERS',    sql.Char(1),     toChar(rv.TIP_PERS) || 'N')
-          .input('TIE_REVIS',   sql.Char(1),     tieRevis)
+          .input('TIP_REPR',    sql.VarChar(1),     rv.TIP_REPR || 'P')
+          .input('TIP_PERS',    sql.VarChar(1),     toChar(rv.TIP_PERS) || 'N')
+          .input('TIE_REVIS',   sql.VarChar(1),     tieRevis)
           .input('NOM_REVI',    sql.VarChar(60), toChar(rv.NOM_REVI))
           .input('APE_REVI',    sql.VarChar(60), toChar(rv.APE_REVI))
           .input('RAZ_REVI',    sql.VarChar(120),toChar(rv.RAZ_REVI))
@@ -2683,7 +2756,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
           .input('CEL_REVI',    sql.VarChar(30),  toChar(rv.CEL_REVI))
           .input('TEL_REVI',    sql.VarChar(30),  toChar(rv.TEL_REVI))
           .input('MAIL_REVI',   sql.VarChar(100), toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',   sql.Char(1),      toChar(rv.REVI_FIRMA)||'N')
+          .input('REVI_FIRMA',   sql.VarChar(1),      toChar(rv.REVI_FIRMA)||'N')
           .input('RAZ_FIRMA',    sql.VarChar(120), toChar(rv.RAZ_FIRMA))
           .input('TIP_DOCU_FIR', sql.Int,          rv.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : toInt(rv.TIP_DOCU_FIR))
           .input('OTR_TPDOC_FIR',sql.VarChar(100), toChar(rv.OTR_TPDOC_FIR))
@@ -2703,7 +2776,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!ac.NOM_ACCI && !ac.RAZ_ACCI) continue;
       await r()
         .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-        .input('TIP_PERS', sql.Char(1),     toChar(ac.TIP_PERS) || 'N')
+        .input('TIP_PERS', sql.VarChar(1),     toChar(ac.TIP_PERS) || 'N')
         .input('NOM_ACCI', sql.VarChar(60), toChar(ac.NOM_ACCI))
         .input('APE_ACCI', sql.VarChar(60), toChar(ac.APE_ACCI))
         .input('RAZ_ACCI', sql.VarChar(120),toChar(ac.RAZ_ACCI))
@@ -2752,7 +2825,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
         .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',   sql.Char(1),       toChar(b.CUEN_EXTR)||'N')
+        .input('CUEN_EXTR',   sql.VarChar(1),       toChar(b.CUEN_EXTR)||'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX), Array.isArray(b.cuentasExt) && b.cuentasExt.length > 0 ? JSON.stringify(b.cuentasExt) : null)
         .query(`INSERT INTO GN_TERCE_BANCO(COD_EMPR,COD_TERC,COD_BANCO,OTR_BANCO,TIP_CUEN,OTR_CUEN,NUM_CUEN,CUEN_EXTR,CUENTAS_EXT)
                 VALUES(@COD_EMPR,@COD_TERC,@COD_BANCO,@OTR_BANCO,@TIP_CUEN,@OTR_CUEN,@NUM_CUEN,@CUEN_EXTR,@CUENTAS_EXT)`);
@@ -2762,7 +2835,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
     await del('GN_JURID_PEP');
     const pep = d.pep || {};
     await r().input('COD_EMPR',sql.SmallInt,COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-             .input('MAN_RPUB',sql.Char(1),pep.MAN_RPUB||'N').input('CAR_PUBL',sql.Char(1),pep.CAR_PUBL||'N')
+             .input('MAN_RPUB',sql.VarChar(1),pep.MAN_RPUB||'N').input('CAR_PUBL',sql.VarChar(1),pep.CAR_PUBL||'N')
              .query(`INSERT INTO GN_JURID_PEP(COD_EMPR,COD_TERC,MAN_RPUB,CAR_PUBL)VALUES(@COD_EMPR,@COD_TERC,@MAN_RPUB,@CAR_PUBL)`);
 
     // 12. GN_JURID_ACT
@@ -2770,14 +2843,14 @@ app.put('/api/actualizar-completo', async (req, res) => {
     const act = d.actividades || {};
     await r()
       .input('COD_EMPR',    sql.SmallInt,COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-      .input('OPER_VA',     sql.Char(1), act.OPER_VA     ||'N')
-      .input('ACT_VA_FIAT', sql.Char(1), act.ACT_VA_FIAT ||'N')
-      .input('ACT_VA_VA',   sql.Char(1), act.ACT_VA_VA   ||'N')
-      .input('ACT_TRANS',   sql.Char(1), act.ACT_TRANS   ||'N')
-      .input('ACT_CUSTO',   sql.Char(1), act.ACT_CUSTO   ||'N')
-      .input('ACT_SERV_FIN',sql.Char(1), act.ACT_SERV_FIN||'N')
-      .input('ACT_SERV_VAP',sql.Char(1), act.ACT_SERV_VAP||'N')
-      .input('CERT_INFO',   sql.Char(1), act.CERT_INFO   ||'N')
+      .input('OPER_VA',     sql.VarChar(1), act.OPER_VA     ||'N')
+      .input('ACT_VA_FIAT', sql.VarChar(1), act.ACT_VA_FIAT ||'N')
+      .input('ACT_VA_VA',   sql.VarChar(1), act.ACT_VA_VA   ||'N')
+      .input('ACT_TRANS',   sql.VarChar(1), act.ACT_TRANS   ||'N')
+      .input('ACT_CUSTO',   sql.VarChar(1), act.ACT_CUSTO   ||'N')
+      .input('ACT_SERV_FIN',sql.VarChar(1), act.ACT_SERV_FIN||'N')
+      .input('ACT_SERV_VAP',sql.VarChar(1), act.ACT_SERV_VAP||'N')
+      .input('CERT_INFO',   sql.VarChar(1), act.CERT_INFO   ||'N')
       .query(`INSERT INTO GN_JURID_ACT(COD_EMPR,COD_TERC,OPER_VA,ACT_VA_FIAT,ACT_VA_VA,ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
               VALUES(@COD_EMPR,@COD_TERC,@OPER_VA,@ACT_VA_FIAT,@ACT_VA_VA,@ACT_TRANS,@ACT_CUSTO,@ACT_SERV_FIN,@ACT_SERV_VAP,@CERT_INFO)`);
 
@@ -2787,7 +2860,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       if (!bf.NOM_BENE && !bf.RAZ_BENE) continue;
       await r()
         .input('COD_EMPR', sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
-        .input('TIP_BENE', sql.Char(1),     (['N','J'].includes(bf.TIP_BENE) ? bf.TIP_BENE : 'N'))
+        .input('TIP_BENE', sql.VarChar(1),     (['N','J'].includes(bf.TIP_BENE) ? bf.TIP_BENE : 'N'))
         .input('NOM_BENE', sql.VarChar(60), toChar(bf.NOM_BENE))
         .input('APE_BENE', sql.VarChar(60), toChar(bf.APE_BENE))
         .input('RAZ_BENE', sql.VarChar(120),toChar(bf.RAZ_BENE))
@@ -2916,29 +2989,31 @@ app.post('/api/guardar-completo', async (req, res) => {
     // ── 1. GN_TERCE ──────────────────────────────────────────────────────────
     const resTerce = await r()
       .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
-      .input('TIP_TERC',   sql.Char(1),     TIP_TERC_JURID)
+      .input('TIP_TERC',   sql.VarChar(1),     TIP_TERC_JURID)
       .input('COD_TPDOC',  sql.Int,         toInt(d.COD_TPDOC) || 8)
       .input('NUM_IDEN',   sql.VarChar(20), d.NUM_IDEN)
       .input('DIG_VERI',   sql.SmallInt,    toInt(d.DIG_VERI))
       .input('NOM_COMP',   sql.VarChar(240),String(d.NOM_COMP).substring(0, 240))
-      .input('DIR_TERC',   sql.Char(120),   toChar(d.DIR_TERC))
-      .input('TEL_TERC',   sql.Char(30),    toChar(d.TEL_TERC))
-      .input('TEL_TERC2',  sql.Char(40),    toChar(d.TEL_TERC2))
+      .input('DIR_TERC',   sql.VarChar(120),   toChar(d.DIR_TERC))
+      .input('TEL_TERC',   sql.VarChar(30),    toChar(d.TEL_TERC))
+      .input('TEL_TERC2',  sql.VarChar(40),    toChar(d.TEL_TERC2))
       .input('DIR_MAIL',   sql.VarChar(150),toChar(d.DIR_MAIL))
-      .input('COD_EDIT',   sql.Char(64),    hashEdicion)
+      .input('COD_EDIT',   sql.VarChar(64),    hashEdicion)
+      .input('IND_DECL',   sql.VarChar(1),     d.IND_DECL || 'N')
       .query(`
         INSERT INTO GN_TERCE
           (COD_EMPR, TIP_TERC, COD_TPDOC, NUM_IDEN, DIG_VERI, NOM_COMP,
-           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT)
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT, IND_DECL)
         OUTPUT INSERTED.COD_TERC
         VALUES
           (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @NUM_IDEN, @DIG_VERI, @NOM_COMP,
-           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT)
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT, @IND_DECL)
       `);
 
     const COD_TERC = resTerce.recordset[0].COD_TERC;
 
     // ── 2. GN_JURID ──────────────────────────────────────────────────────────
+    const idGmailJ = await _obtenerIdGmail(r, d.GMAIL_VERIF);
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
@@ -2951,20 +3026,21 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('TIP_SOCIE',   sql.VarChar(10),  toChar(d.TIP_SOCIE))
       .input('OTR_SOCIE',   sql.VarChar(255), toChar(d.OTR_SOCIE))
       .input('COD_PAIS_ORI',sql.Int,          toInt(d.COD_PAIS_ORIG_SOC === 'OTRO' ? null : d.COD_PAIS_ORIG_SOC))
-      .input('UBIC_SOC',    sql.Char(1),      toChar(d.UBIC_SOC))
+      .input('UBIC_SOC',    sql.VarChar(2),      toChar(d.UBIC_SOC))
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
-      .input('GRUP_EMPR',     sql.Char(1),      toChar(d.GRUP_EMPR))
-      .input('CTRL_DECLA',    sql.Char(1),      toChar(d.CTRL_DECLA))
+      .input('GRUP_EMPR',     sql.VarChar(1),      toChar(d.GRUP_EMPR))
+      .input('CTRL_DECLA',    sql.VarChar(1),      toChar(d.CTRL_DECLA))
       .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
       .input('DESC_GRUPO',    sql.VarChar(sql.MAX), toChar(d.DESC_GRUPO))
       .input('COD_PAIS_EXP',  sql.Int,          toInt(d.COD_PAIS_EXP))
       .input('OTR_PAIS_EXP',  sql.VarChar(100), toChar(d.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP',  sql.Int,          toInt(d.COD_DEPT_EXP))
       .input('COD_MPIO_EXP',  sql.Int,          toInt(d.COD_MPIO_EXP))
-      .input('COT_BOLSA',     sql.Char(1),      toChar(d.COT_BOLSA) || 'N')
+      .input('COT_BOLSA',     sql.VarChar(1),      toChar(d.COT_BOLSA) || 'N')
       .input('NOM_BOLSA',     sql.VarChar(200), d.COT_BOLSA === 'S' ? toChar(d.NOM_BOLSA) : null)
+      .input('ID_GMAIL',      sql.Int,          idGmailJ)
       .query(`
         INSERT INTO GN_JURID
           (COD_EMPR, COD_TERC, TIP_VINC, OTR_VINC, MAIL_SARL, COD_CIIU, OTR_CIIU,
@@ -2972,14 +3048,14 @@ app.post('/api/guardar-completo', async (req, res) => {
            COD_PAIS_SOC, OTR_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
            CTRL_DECLA, CAL_GRUPO, DESC_GRUPO,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-           COT_BOLSA, NOM_BOLSA)
+           COT_BOLSA, NOM_BOLSA, ID_GMAIL)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @OTR_VINC, @MAIL_SARL, @COD_CIIU, @OTR_CIIU,
            @URL_WEB, @TIP_SOCIE, @OTR_SOCIE, @COD_PAIS_ORI, @UBIC_SOC,
            @COD_PAIS_SOC, @OTR_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
            @CTRL_DECLA, @CAL_GRUPO, @DESC_GRUPO,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP,
-           @COT_BOLSA, @NOM_BOLSA)
+           @COT_BOLSA, @NOM_BOLSA, @ID_GMAIL)
       `);
 
     // ── 3. GN_JURID_RL — Representantes legales ───────────────────────────────
@@ -2992,7 +3068,7 @@ app.post('/api/guardar-completo', async (req, res) => {
         await r()
           .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
           .input('COD_TERC',  sql.BigInt,      COD_TERC)
-          .input('TIP_REPR',  sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIP_REPR',  sql.VarChar(1),     rol === 'Principal' ? 'P' : 'S')
           .input('NOM_REPR',  sql.VarChar(60), toChar(p.NOM_REPR))
           .input('APE_REPR',  sql.VarChar(60), toChar(p.APE_REPR))
           .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
@@ -3040,12 +3116,12 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',   sql.BigInt,      COD_TERC)
-      .input('TIE_NORM',   sql.Char(1),     toChar(d.TIE_NORM) || 'N')
+      .input('TIE_NORM',   sql.VarChar(1),     toChar(d.TIE_NORM) || 'N')
       .input('NORM_LAFT',  sql.VarChar(200),toChar(d.NORM_LAFT))
       .input('SIS_PREVE',  sql.VarChar(200),toChar(d.SIS_PREVE))
       .input('OTR_PREVE',  sql.VarChar(255),toChar(d.OTR_PREVE))
       .input('DESC_NORM',  sql.VarChar(500),toChar(d.DESC_NORM))
-      .input('TIE_JUNTA',  sql.Char(1),     tieCump)
+      .input('TIE_JUNTA',  sql.VarChar(1),     tieCump)
       .query(`
         INSERT INTO GN_JURID_CUMP (COD_EMPR, COD_TERC, TIE_NORM, NORM_LAFT, SIS_PREVE, OTR_PREVE, DESC_NORM, TIE_JUNTA)
         VALUES (@COD_EMPR, @COD_TERC, @TIE_NORM, @NORM_LAFT, @SIS_PREVE, @OTR_PREVE, @DESC_NORM, @TIE_JUNTA)
@@ -3058,7 +3134,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',  sql.BigInt,      COD_TERC)
-        .input('TIP_REPR',  sql.Char(1),     p.TIP_REPR || 'P')
+        .input('TIP_REPR',  sql.VarChar(1),     p.TIP_REPR || 'P')
         .input('TIP_SIST',  sql.VarChar(10), toChar(p.TIP_SIST))
         .input('TIP_DOCU',  sql.Int,         toInt(p.TIP_DOCU))
         .input('NUM_DOCU',  sql.VarChar(20), toChar(p.NUM_DOCU))
@@ -3094,7 +3170,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',  sql.BigInt,      COD_TERC)
-        .input('TIP_REPR',  sql.Char(1),     m.TIP_REPR || 'P')
+        .input('TIP_REPR',  sql.VarChar(1),     m.TIP_REPR || 'P')
         .input('TIP_MIEM',  sql.VarChar(10), toChar(m.TIP_MIEM))
         .input('NOM_MIEM',  sql.VarChar(60), toChar(m.NOM_MIEM))
         .input('APE_MIEM',  sql.VarChar(60), toChar(m.APE_MIEM))
@@ -3134,8 +3210,8 @@ app.post('/api/guardar-completo', async (req, res) => {
             await r()
               .input('COD_EMPR',  sql.SmallInt, COD_EMPR)
               .input('COD_TERC',  sql.BigInt,   COD_TERC)
-              .input('TIP_REPR',  sql.Char(1),  'P')
-              .input('TIE_REVIS', sql.Char(1),  tieRevis)
+              .input('TIP_REPR',  sql.VarChar(1),  'P')
+              .input('TIE_REVIS', sql.VarChar(1),  tieRevis)
               .query(`INSERT INTO GN_JURID_RF (COD_EMPR, COD_TERC, TIP_REPR, TIE_REVIS)
                       VALUES (@COD_EMPR, @COD_TERC, @TIP_REPR, @TIE_REVIS)`);
           }
@@ -3144,9 +3220,9 @@ app.post('/api/guardar-completo', async (req, res) => {
         await r()
           .input('COD_EMPR',      sql.SmallInt,    COD_EMPR)
           .input('COD_TERC',      sql.BigInt,      COD_TERC)
-          .input('TIP_REPR',      sql.Char(1),     rol === 'Principal' ? 'P' : 'S')
-          .input('TIP_PERS',      sql.Char(1),     toChar(rv.TIP_PERS) || 'N')
-          .input('TIE_REVIS',     sql.Char(1),     tieRevis)
+          .input('TIP_REPR',      sql.VarChar(1),     rol === 'Principal' ? 'P' : 'S')
+          .input('TIP_PERS',      sql.VarChar(1),     toChar(rv.TIP_PERS) || 'N')
+          .input('TIE_REVIS',     sql.VarChar(1),     tieRevis)
           .input('NOM_REVI',      sql.VarChar(60), toChar(rv.NOM_REVI))
           .input('APE_REVI',      sql.VarChar(60), toChar(rv.APE_REVI))
           .input('RAZ_REVI',      sql.VarChar(120),toChar(rv.RAZ_REVI))
@@ -3161,7 +3237,7 @@ app.post('/api/guardar-completo', async (req, res) => {
           .input('CEL_REVI',      sql.VarChar(30),  toChar(rv.CEL_REVI))
           .input('TEL_REVI',      sql.VarChar(30),  toChar(rv.TEL_REVI))
           .input('MAIL_REVI',     sql.VarChar(100), toChar(rv.MAIL_REVI))
-          .input('REVI_FIRMA',    sql.Char(1),       toChar(rf.REVI_FIRMA) || 'N')
+          .input('REVI_FIRMA',    sql.VarChar(1),       toChar(rf.REVI_FIRMA) || 'N')
           .input('RAZ_FIRMA',     sql.VarChar(120),  toChar(rf.RAZ_FIRMA))
           .input('TIP_DOCU_FIR',  sql.Int,           rf.TIP_DOCU_FIR === 'OTR_TPDOC' ? null : toInt(rf.TIP_DOCU_FIR))
           .input('OTR_TPDOC_FIR', sql.VarChar(100),  toChar(rf.OTR_TPDOC_FIR))
@@ -3191,7 +3267,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt,      COD_EMPR)
         .input('COD_TERC',  sql.BigInt,        COD_TERC)
-        .input('TIP_PERS',  sql.Char(1),       toChar(ac.TIP_PERS) || 'N')
+        .input('TIP_PERS',  sql.VarChar(1),       toChar(ac.TIP_PERS) || 'N')
         .input('NOM_ACCI',  sql.VarChar(60),   toChar(ac.NOM_ACCI))
         .input('APE_ACCI',  sql.VarChar(60),   toChar(ac.APE_ACCI))
         .input('RAZ_ACCI',  sql.VarChar(120),  toChar(ac.RAZ_ACCI))
@@ -3251,7 +3327,7 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('TIP_CUEN',    sql.Int,          toInt(b.TIP_CUEN))
         .input('OTR_CUEN',    sql.VarChar(255), toChar(b.OTR_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),  toChar(b.NUM_CUEN))
-        .input('CUEN_EXTR',   sql.Char(1),           toChar(b.CUEN_EXTR) || 'N')
+        .input('CUEN_EXTR',   sql.VarChar(1),           toChar(b.CUEN_EXTR) || 'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX),  Array.isArray(b.cuentasExt) && b.cuentasExt.length > 0 ? JSON.stringify(b.cuentasExt) : null)
         .query(`
           INSERT INTO GN_TERCE_BANCO
@@ -3268,8 +3344,8 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('COD_TERC', sql.BigInt,   COD_TERC)
-      .input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || 'N')
-      .input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || 'N')
+      .input('MAN_RPUB', sql.VarChar(1),  pep.MAN_RPUB || 'N')
+      .input('CAR_PUBL', sql.VarChar(1),  pep.CAR_PUBL || 'N')
       .query(`INSERT INTO GN_JURID_PEP (COD_EMPR, COD_TERC, MAN_RPUB, CAR_PUBL)
               VALUES (@COD_EMPR, @COD_TERC, @MAN_RPUB, @CAR_PUBL)`);
 
@@ -3278,14 +3354,14 @@ app.post('/api/guardar-completo', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
-      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
-      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
-      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
-      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
-      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
-      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
-      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
-      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .input('OPER_VA',      sql.VarChar(1),  act.OPER_VA      || 'N')
+      .input('ACT_VA_FIAT',  sql.VarChar(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.VarChar(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.VarChar(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.VarChar(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.VarChar(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.VarChar(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.VarChar(1),  act.CERT_INFO    || 'N')
       .query(`
         INSERT INTO GN_JURID_ACT
           (COD_EMPR, COD_TERC, OPER_VA, ACT_VA_FIAT, ACT_VA_VA, ACT_TRANS, ACT_CUSTO,
@@ -3302,7 +3378,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',  sql.BigInt,      COD_TERC)
-        .input('TIP_BENE',  sql.Char(1),     (['N','J'].includes(bf.TIP_BENE) ? bf.TIP_BENE : 'N'))
+        .input('TIP_BENE',  sql.VarChar(1),     (['N','J'].includes(bf.TIP_BENE) ? bf.TIP_BENE : 'N'))
         .input('NOM_BENE',  sql.VarChar(60), toChar(bf.NOM_BENE))
         .input('APE_BENE',  sql.VarChar(60), toChar(bf.APE_BENE))
         .input('RAZ_BENE',  sql.VarChar(120),toChar(bf.RAZ_BENE))
@@ -3438,30 +3514,31 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
 
     const resTerce = await r()
       .input('COD_EMPR',  sql.SmallInt,    COD_EMPR)
-      .input('TIP_TERC',  sql.Char(1),     TIP_TERC_NATUR)
+      .input('TIP_TERC',  sql.VarChar(1),     TIP_TERC_NATUR)
       .input('COD_TPDOC', sql.Int,         toInt(b.COD_TPDOC) || 8)
       .input('OTR_TPDOC', sql.VarChar(100),b.OTR_TPDOC || null)
       .input('NUM_IDEN',  sql.VarChar(20), b.NUM_IDEN)
-      .input('NOM_TERC',  sql.Char(40),    (b.NOM_TERC || '').substring(0,40))
+      .input('NOM_TERC',  sql.VarChar(40),    (b.NOM_TERC || '').substring(0,40))
       .input('SEG_NOMB',  sql.VarChar(40), b.SEG_NOMB || null)
-      .input('APE_TERC',  sql.Char(40),    (b.APE_TERC || '').substring(0,40))
+      .input('APE_TERC',  sql.VarChar(40),    (b.APE_TERC || '').substring(0,40))
       .input('SEG_APEL',  sql.VarChar(40), b.SEG_APEL || null)
       .input('NOM_COMP',  sql.VarChar(240),nomComp.substring(0,240))
-      .input('DIR_TERC',  sql.Char(120),   b.DIR_TERC  || null)
-      .input('TEL_TERC',  sql.Char(30),    b.TEL_TERC  || null)
-      .input('TEL_TERC2', sql.Char(40),    b.TEL_TERC2 || null)
+      .input('DIR_TERC',  sql.VarChar(120),   b.DIR_TERC  || null)
+      .input('TEL_TERC',  sql.VarChar(30),    b.TEL_TERC  || null)
+      .input('TEL_TERC2', sql.VarChar(40),    b.TEL_TERC2 || null)
       .input('DIR_MAIL',  sql.VarChar(150),b.DIR_MAIL  || null)
-      .input('COD_EDIT',  sql.Char(64),    hashEdicion)
+      .input('COD_EDIT',  sql.VarChar(64),    hashEdicion)
+      .input('IND_DECL',  sql.VarChar(1),     b.IND_DECL || 'N')
       .query(`
         INSERT INTO GN_TERCE
           (COD_EMPR, TIP_TERC, COD_TPDOC, OTR_TPDOC, NUM_IDEN,
            NOM_TERC, SEG_NOMB, APE_TERC, SEG_APEL, NOM_COMP,
-           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT)
+           DIR_TERC, TEL_TERC, TEL_TERC2, DIR_MAIL, COD_EDIT, IND_DECL)
         OUTPUT INSERTED.COD_TERC
         VALUES
           (@COD_EMPR, @TIP_TERC, @COD_TPDOC, @OTR_TPDOC, @NUM_IDEN,
            @NOM_TERC, @SEG_NOMB, @APE_TERC, @SEG_APEL, @NOM_COMP,
-           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT)
+           @DIR_TERC, @TEL_TERC, @TEL_TERC2, @DIR_MAIL, @COD_EDIT, @IND_DECL)
       `);
 
     const COD_TERC = resTerce.recordset[0].COD_TERC;
@@ -3469,6 +3546,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     // ── 2. GN_NATUR ──────────────────────────────────────────────────────────
     // COD_NACIO, COD_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP son int en la BD.
     // COD_DEPT_EXP puede llegar como 'NA' (pais extranjero) → null.
+    const idGmailN = await _obtenerIdGmail(r, b.GMAIL_VERIF);
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
@@ -3484,22 +3562,23 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP', sql.Int,          toInt(b.COD_DEPT_EXP))
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
-      .input('PART_SOC',        sql.Char(1),       b.PART_SOC    || 'N')
+      .input('PART_SOC',        sql.VarChar(1),       b.PART_SOC    || 'N')
       .input('RAZ_SOC',         sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC          || null) : null)
       .input('TIP_DOC_SOC',     sql.Int,           b.PART_SOC === 'S' ? (b.TIP_DOC_SOC === 'OTR_TPDOC' ? null : toInt(b.TIP_DOC_SOC)) : null)
       .input('OTR_TIP_DOC_SOC', sql.VarChar(100),  b.PART_SOC === 'S' ? (b.OTR_TIP_DOC_SOC || null) : null)
       .input('NUM_DOC_SOC',     sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC      || null) : null)
+      .input('ID_GMAIL',        sql.Int,           idGmailN)
       .query(`
         INSERT INTO GN_NATUR
           (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO,
            ACT_PRINC, COD_CIIU, OTR_CIIU, FEC_EXPE,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC)
+           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC, ID_GMAIL)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO, @OTR_NACIO,
            @ACT_PRINC, @COD_CIIU, @OTR_CIIU, @FEC_EXPE,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP,
-           @PART_SOC, @RAZ_SOC, @TIP_DOC_SOC, @OTR_TIP_DOC_SOC, @NUM_DOC_SOC)
+           @PART_SOC, @RAZ_SOC, @TIP_DOC_SOC, @OTR_TIP_DOC_SOC, @NUM_DOC_SOC, @ID_GMAIL)
       `);
 
     // ── 3. GN_NATUR_FIN ──────────────────────────────────────────────────────
@@ -3535,7 +3614,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
         .input('COD_BANCO',   sql.Int,         toInt(cuenta.COD_BANCO))
         .input('TIP_CUEN',    sql.Int,         toInt(cuenta.TIP_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30), cuenta.NUM_CUEN   || null)
-        .input('CUEN_EXTR',   sql.Char(1),           cuenta.CUEN_EXTR || 'N')
+        .input('CUEN_EXTR',   sql.VarChar(1),           cuenta.CUEN_EXTR || 'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX),  Array.isArray(cuenta.cuentasExt) && cuenta.cuentasExt.length > 0 ? JSON.stringify(cuenta.cuentasExt) : null)
         .query(`
           INSERT INTO GN_TERCE_BANCO
@@ -3552,8 +3631,8 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR', sql.SmallInt, COD_EMPR)
       .input('COD_TERC', sql.BigInt,   COD_TERC)
-      .input('MAN_RPUB', sql.Char(1),  pep.MAN_RPUB || 'N')
-      .input('CAR_PUBL', sql.Char(1),  pep.CAR_PUBL || 'N')
+      .input('MAN_RPUB', sql.VarChar(1),  pep.MAN_RPUB || 'N')
+      .input('CAR_PUBL', sql.VarChar(1),  pep.CAR_PUBL || 'N')
       .query(`
         INSERT INTO GN_NATUR_PEP (COD_EMPR, COD_TERC, MAN_RPUB, CAR_PUBL)
         VALUES (@COD_EMPR, @COD_TERC, @MAN_RPUB, @CAR_PUBL)
@@ -3564,14 +3643,14 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
-      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
-      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
-      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
-      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
-      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
-      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
-      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
-      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .input('OPER_VA',      sql.VarChar(1),  act.OPER_VA      || 'N')
+      .input('ACT_VA_FIAT',  sql.VarChar(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.VarChar(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.VarChar(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.VarChar(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.VarChar(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.VarChar(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.VarChar(1),  act.CERT_INFO    || 'N')
       .query(`
         INSERT INTO GN_NATUR_ACT
           (COD_EMPR, COD_TERC, OPER_VA,
@@ -4202,7 +4281,7 @@ app.get('/api/exportar-consolidado-natural', requireAuth, async (req, res) => {
     const pool = await getPool();
     const rq = pool.request();
     rq.input('COD_EMPR',  sql.SmallInt, COD_EMPR);
-    rq.input('TIP_TERC',  sql.Char(1),  TIP_TERC_NATUR);
+    rq.input('TIP_TERC',  sql.VarChar(1),  TIP_TERC_NATUR);
 
     const [personales, financiera, bancaria] = await Promise.all([
       rq.query(`
@@ -4239,7 +4318,7 @@ app.get('/api/exportar-consolidado-natural', requireAuth, async (req, res) => {
 
       pool.request()
         .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('TIP_TERC', sql.Char(1),  TIP_TERC_NATUR)
+        .input('TIP_TERC', sql.VarChar(1),  TIP_TERC_NATUR)
         .query(`
           SELECT t.NUM_IDEN AS [Número de identificación],
             f.ACT_TOTAL AS [Activos totales ($)], f.ING_MENS AS [Ingresos mensuales ($)],
@@ -4252,7 +4331,7 @@ app.get('/api/exportar-consolidado-natural', requireAuth, async (req, res) => {
 
       pool.request()
         .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('TIP_TERC', sql.Char(1),  TIP_TERC_NATUR)
+        .input('TIP_TERC', sql.VarChar(1),  TIP_TERC_NATUR)
         .query(`
           SELECT t.NUM_IDEN AS [Número de identificación],
             mb.NOM_BANCO AS [Entidad bancaria],
@@ -4306,7 +4385,7 @@ app.get('/api/exportar-consolidado-juridica', requireAuth, async (req, res) => {
     const [empresas, financiera, bancaria] = await Promise.all([
       pool.request()
         .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('TIP_TERC', sql.Char(1),  TIP_TERC_JURID)
+        .input('TIP_TERC', sql.VarChar(1),  TIP_TERC_JURID)
         .query(`
           SELECT
             td.NOM_TPDOC                                  AS [Tipo de documento],
@@ -4333,7 +4412,7 @@ app.get('/api/exportar-consolidado-juridica', requireAuth, async (req, res) => {
 
       pool.request()
         .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('TIP_TERC', sql.Char(1),  TIP_TERC_JURID)
+        .input('TIP_TERC', sql.VarChar(1),  TIP_TERC_JURID)
         .query(`
           SELECT t.NUM_IDEN AS [NIT],
             f.ACT_TOTAL AS [Activos totales ($)], f.ING_MENS AS [Ingresos mensuales ($)],
@@ -4346,7 +4425,7 @@ app.get('/api/exportar-consolidado-juridica', requireAuth, async (req, res) => {
 
       pool.request()
         .input('COD_EMPR', sql.SmallInt, COD_EMPR)
-        .input('TIP_TERC', sql.Char(1),  TIP_TERC_JURID)
+        .input('TIP_TERC', sql.VarChar(1),  TIP_TERC_JURID)
         .query(`
           SELECT t.NUM_IDEN AS [NIT],
             mb.NOM_BANCO AS [Entidad bancaria],
@@ -4530,14 +4609,14 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('COD_EMPR',   sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',   sql.BigInt,      COD_TERC)
       .input('COD_TPDOC',  sql.Int,         toInt(b.COD_TPDOC) || 8)
-      .input('NOM_TERC',   sql.Char(40),    (b.NOM_TERC || '').substring(0, 40))
+      .input('NOM_TERC',   sql.VarChar(40),    (b.NOM_TERC || '').substring(0, 40))
       .input('SEG_NOMB',   sql.VarChar(40), b.SEG_NOMB || null)
-      .input('APE_TERC',   sql.Char(40),    (b.APE_TERC || '').substring(0, 40))
+      .input('APE_TERC',   sql.VarChar(40),    (b.APE_TERC || '').substring(0, 40))
       .input('SEG_APEL',   sql.VarChar(40), b.SEG_APEL || null)
       .input('NOM_COMP',   sql.VarChar(240),nomComp.substring(0, 240))
-      .input('DIR_TERC',   sql.Char(120),   b.DIR_TERC  || null)
-      .input('TEL_TERC',   sql.Char(30),    b.TEL_TERC  || null)
-      .input('TEL_TERC2',  sql.Char(40),    b.TEL_TERC2 || null)
+      .input('DIR_TERC',   sql.VarChar(120),   b.DIR_TERC  || null)
+      .input('TEL_TERC',   sql.VarChar(30),    b.TEL_TERC  || null)
+      .input('TEL_TERC2',  sql.VarChar(40),    b.TEL_TERC2 || null)
       .input('DIR_MAIL',   sql.VarChar(150),b.DIR_MAIL  || null)
       .query(`UPDATE GN_TERCE
               SET COD_TPDOC=@COD_TPDOC, NOM_TERC=@NOM_TERC, SEG_NOMB=@SEG_NOMB,
@@ -4546,6 +4625,7 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     // 2. UPDATE GN_NATUR
+    const idGmailNUpd = await _obtenerIdGmail(r, b.GMAIL_VERIF);
     await r()
       .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
       .input('COD_TERC',    sql.BigInt,      COD_TERC)
@@ -4561,18 +4641,20 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('OTR_PAIS_EXP', sql.VarChar(100), toChar(b.OTR_PAIS_EXP))
       .input('COD_DEPT_EXP', sql.Int,          toInt(b.COD_DEPT_EXP))
       .input('COD_MPIO_EXP', sql.Int,          toInt(b.COD_MPIO_EXP))
-      .input('PART_SOC',        sql.Char(1),       b.PART_SOC    || 'N')
+      .input('PART_SOC',        sql.VarChar(1),       b.PART_SOC    || 'N')
       .input('RAZ_SOC',         sql.NVarChar(200), b.PART_SOC === 'S' ? (b.RAZ_SOC          || null) : null)
       .input('TIP_DOC_SOC',     sql.Int,           b.PART_SOC === 'S' ? (b.TIP_DOC_SOC === 'OTR_TPDOC' ? null : toInt(b.TIP_DOC_SOC)) : null)
       .input('OTR_TIP_DOC_SOC', sql.VarChar(100),  b.PART_SOC === 'S' ? (b.OTR_TIP_DOC_SOC || null) : null)
       .input('NUM_DOC_SOC',     sql.VarChar(20),   b.PART_SOC === 'S' ? (b.NUM_DOC_SOC      || null) : null)
+      .input('ID_GMAIL',        sql.Int,           idGmailNUpd)
       .query(`UPDATE GN_NATUR
               SET TIP_VINC=@TIP_VINC, MAIL_SARL=@MAIL_SARL, COD_NACIO=@COD_NACIO, OTR_NACIO=@OTR_NACIO,
                   ACT_PRINC=@ACT_PRINC, COD_CIIU=@COD_CIIU, OTR_CIIU=@OTR_CIIU, FEC_EXPE=@FEC_EXPE,
                   COD_PAIS_EXP=@COD_PAIS_EXP, OTR_PAIS_EXP=@OTR_PAIS_EXP,
                   COD_DEPT_EXP=@COD_DEPT_EXP, COD_MPIO_EXP=@COD_MPIO_EXP,
                   PART_SOC=@PART_SOC, RAZ_SOC=@RAZ_SOC, TIP_DOC_SOC=@TIP_DOC_SOC,
-                  OTR_TIP_DOC_SOC=@OTR_TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC
+                  OTR_TIP_DOC_SOC=@OTR_TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC,
+                  ID_GMAIL=@ID_GMAIL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const del = async tabla => r()
@@ -4606,7 +4688,7 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
         .input('COD_BANCO',   sql.Int,        toInt(ban.COD_BANCO))
         .input('TIP_CUEN',    sql.VarChar(20),toChar(ban.TIP_CUEN))
         .input('NUM_CUEN',    sql.VarChar(30),toChar(ban.NUM_CUEN))
-        .input('CUEN_EXTR',   sql.Char(1),          ban.CUEN_EXTR || 'N')
+        .input('CUEN_EXTR',   sql.VarChar(1),          ban.CUEN_EXTR || 'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX), Array.isArray(ban.cuentasExt) && ban.cuentasExt.length > 0 ? JSON.stringify(ban.cuentasExt) : null)
         .query(`INSERT INTO GN_TERCE_BANCO (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,
                 NUM_CUEN,CUEN_EXTR,CUENTAS_EXT)
@@ -4620,8 +4702,8 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       await r()
         .input('COD_EMPR',  sql.SmallInt, COD_EMPR)
         .input('COD_TERC',  sql.BigInt,   COD_TERC)
-        .input('MAN_RPUB',  sql.Char(1),  toChar(pep.MAN_RPUB))
-        .input('CAR_PUBL',  sql.Char(1),  toChar(pep.CAR_PUBL))
+        .input('MAN_RPUB',  sql.VarChar(1),  toChar(pep.MAN_RPUB))
+        .input('CAR_PUBL',  sql.VarChar(1),  toChar(pep.CAR_PUBL))
         .query(`INSERT INTO GN_NATUR_PEP (COD_EMPR,COD_TERC,MAN_RPUB,CAR_PUBL)
                 VALUES (@COD_EMPR,@COD_TERC,@MAN_RPUB,@CAR_PUBL)`);
     }
@@ -4631,14 +4713,14 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
     await r()
       .input('COD_EMPR',     sql.SmallInt, COD_EMPR)
       .input('COD_TERC',     sql.BigInt,   COD_TERC)
-      .input('OPER_VA',      sql.Char(1),  act.OPER_VA      || 'N')
-      .input('ACT_VA_FIAT',  sql.Char(1),  act.ACT_VA_FIAT  || 'N')
-      .input('ACT_VA_VA',    sql.Char(1),  act.ACT_VA_VA    || 'N')
-      .input('ACT_TRANS',    sql.Char(1),  act.ACT_TRANS    || 'N')
-      .input('ACT_CUSTO',    sql.Char(1),  act.ACT_CUSTO    || 'N')
-      .input('ACT_SERV_FIN', sql.Char(1),  act.ACT_SERV_FIN || 'N')
-      .input('ACT_SERV_VAP', sql.Char(1),  act.ACT_SERV_VAP || 'N')
-      .input('CERT_INFO',    sql.Char(1),  act.CERT_INFO    || 'N')
+      .input('OPER_VA',      sql.VarChar(1),  act.OPER_VA      || 'N')
+      .input('ACT_VA_FIAT',  sql.VarChar(1),  act.ACT_VA_FIAT  || 'N')
+      .input('ACT_VA_VA',    sql.VarChar(1),  act.ACT_VA_VA    || 'N')
+      .input('ACT_TRANS',    sql.VarChar(1),  act.ACT_TRANS    || 'N')
+      .input('ACT_CUSTO',    sql.VarChar(1),  act.ACT_CUSTO    || 'N')
+      .input('ACT_SERV_FIN', sql.VarChar(1),  act.ACT_SERV_FIN || 'N')
+      .input('ACT_SERV_VAP', sql.VarChar(1),  act.ACT_SERV_VAP || 'N')
+      .input('CERT_INFO',    sql.VarChar(1),  act.CERT_INFO    || 'N')
       .query(`INSERT INTO GN_NATUR_ACT (COD_EMPR,COD_TERC,OPER_VA,ACT_VA_FIAT,ACT_VA_VA,
               ACT_TRANS,ACT_CUSTO,ACT_SERV_FIN,ACT_SERV_VAP,CERT_INFO)
               VALUES (@COD_EMPR,@COD_TERC,@OPER_VA,@ACT_VA_FIAT,@ACT_VA_VA,
@@ -4664,13 +4746,14 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
 const BORRADOR_TTL_MS = 72 * 60 * 60 * 1000; // 72 horas
 
 app.post('/api/borrador', async (req, res) => {
-  const { tokenDraft, tipTerc, numIdenTxt, datosJson } = req.body || {};
+  const { tokenDraft, tipTerc, numIdenTxt, datosJson, gmailVerif } = req.body || {};
   if (!tipTerc || !datosJson)
     return res.status(400).json({ error: 'tipTerc y datosJson son requeridos.' });
   try {
     const p        = await getPool();
     const fecVenc  = new Date(Date.now() + BORRADOR_TTL_MS);
     const ahora    = new Date();
+    const idGmail  = await _obtenerIdGmail(() => p.request(), gmailVerif);
     if (tokenDraft) {
       const upd = await p.request()
         .input('TOKEN',    sql.UniqueIdentifier, tokenDraft)
@@ -4679,8 +4762,9 @@ app.post('/api/borrador', async (req, res) => {
         .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
         .input('FEC_GUAR', sql.DateTime,          ahora)
         .input('FEC_VENC', sql.DateTime,          fecVenc)
+        .input('ID_GMAIL', sql.Int,               idGmail)
         .query(`UPDATE GN_BORRADOR SET NUM_IDEN_TXT=@NUM_IDEN, DATOS_JSON=@DATOS,
-                FEC_GUAR=@FEC_GUAR, FEC_VENC=@FEC_VENC
+                FEC_GUAR=@FEC_GUAR, FEC_VENC=@FEC_VENC, ID_GMAIL=@ID_GMAIL
                 WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
       if (upd.rowsAffected[0] > 0)
         return res.json({ success: true, tokenDraft, fechaGuardado: ahora.toISOString() });
@@ -4689,14 +4773,15 @@ app.post('/api/borrador', async (req, res) => {
     await p.request()
       .input('TOKEN',    sql.UniqueIdentifier, newToken)
       .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
-      .input('TIP_TERC', sql.Char(1),           tipTerc)
+      .input('TIP_TERC', sql.VarChar(1),           tipTerc)
       .input('NUM_IDEN', sql.VarChar(20),       numIdenTxt || null)
       .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
       .input('FEC_GUAR', sql.DateTime,          ahora)
       .input('FEC_VENC', sql.DateTime,          fecVenc)
+      .input('ID_GMAIL', sql.Int,               idGmail)
       .query(`INSERT INTO GN_BORRADOR
-              (TOKEN_DRAFT,COD_EMPR,TIP_TERC,NUM_IDEN_TXT,DATOS_JSON,FEC_GUAR,FEC_VENC)
-              VALUES (@TOKEN,@COD_EMPR,@TIP_TERC,@NUM_IDEN,@DATOS,@FEC_GUAR,@FEC_VENC)`);
+              (TOKEN_DRAFT,COD_EMPR,TIP_TERC,NUM_IDEN_TXT,DATOS_JSON,FEC_GUAR,FEC_VENC,ID_GMAIL)
+              VALUES (@TOKEN,@COD_EMPR,@TIP_TERC,@NUM_IDEN,@DATOS,@FEC_GUAR,@FEC_VENC,@ID_GMAIL)`);
     res.json({ success: true, tokenDraft: newToken, fechaGuardado: ahora.toISOString() });
   } catch (err) {
     _responderError(res, err, req);
@@ -4754,6 +4839,57 @@ app.delete('/api/borrador', async (req, res) => {
   } catch (err) {
     _responderError(res, err, req);
   }
+});
+
+/* ── OTP para verificación de Gmail ─────────────────────────────────────────── */
+const _otpStore = new Map(); // email → { otp, expires }
+
+app.post('/api/email/send-otp', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email.match(/^[^@\s]+@gmail\.com$/i))
+      return res.status(400).json({ error: 'Solo se aceptan correos Gmail (@gmail.com).' });
+
+    const otp     = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutos
+
+    // Enviar primero — solo almacenar si el correo se entrega con éxito
+    await _enviarCorreo(
+      email,
+      'Su código de verificación – Collective Mining',
+      `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#212121">
+        <p>Hola,</p>
+        <p>Ingrese el siguiente código para verificar su identidad en el formulario SAGRILAFT de <strong>Collective Mining Limited Sucursal Colombia</strong>:</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:20px 24px;text-align:center;margin:20px 0">
+          <span style="font-size:2rem;font-family:monospace;letter-spacing:.25em;font-weight:700;color:#1a237e">${otp}</span>
+        </div>
+        <p>Este código es válido por <strong>10 minutos</strong>. Si usted no solicitó este código, puede ignorar este mensaje.</p>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0"/>
+        <p style="font-size:.8rem;color:#757575">Collective Mining Limited Sucursal Colombia — NIT 901.264.223-4<br>Este es un mensaje automático, no responda a este correo.</p>
+      </body></html>`,
+      `Hola,\n\nIngrese el siguiente código para verificar su identidad en el formulario SAGRILAFT de Collective Mining:\n\n  ${otp}\n\nEste código es válido por 10 minutos. Si usted no solicitó este código, puede ignorar este mensaje.\n\nCollective Mining Limited Sucursal Colombia — NIT 901.264.223-4`
+    );
+    _otpStore.set(email, { otp, expires });
+    res.json({ success: true });
+  } catch (err) {
+    _responderError(res, err, req);
+  }
+});
+
+app.post('/api/email/verify-otp', (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const otp   = (req.body.otp   || '').trim();
+  const entry = _otpStore.get(email);
+  if (!entry)
+    return res.status(400).json({ error: 'No hay un código pendiente para este correo.' });
+  if (Date.now() > entry.expires) {
+    _otpStore.delete(email);
+    return res.status(400).json({ error: 'El código ha expirado. Solicite uno nuevo.' });
+  }
+  if (otp !== entry.otp)
+    return res.status(400).json({ error: 'Código incorrecto. Verifique e intente de nuevo.' });
+  _otpStore.delete(email);
+  res.json({ success: true, email });
 });
 
 /* ── Manejador de errores global ─────────────────────────────────────────────── */

@@ -330,7 +330,6 @@ function convertirABuscable(selectId) {
  * Llamar UNA VEZ desde DOMContentLoaded (en app.js).
  */
 function inicializarTooltips() {
-  // Crear o reutilizar el div global
   let tip = document.getElementById('_ic_tooltip_global');
   if (!tip) {
     tip = document.createElement('div');
@@ -338,42 +337,118 @@ function inicializarTooltips() {
     document.body.appendChild(tip);
   }
 
-  function _mostrar(el) {
-    tip.textContent = el.dataset.tip || '';
-    tip.style.display = 'block';
-    tip.style.opacity  = '1';
+  let _pinnedEl = null;
 
+  function _posicionar(el) {
     const rect = el.getBoundingClientRect();
     const tw   = tip.offsetWidth;
     const th   = tip.offsetHeight;
-
-    // Intentar posicionar ENCIMA del ícono; si no cabe, posicionar DEBAJO
     let top  = rect.top - th - 7;
     let left = rect.left + rect.width / 2 - tw / 2;
-
     if (top < 6) top = rect.bottom + 7;
-
-    // Clampear horizontalmente al viewport con margen de 8px
-    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
-
+    // Clampear al viewport con margen de 8px
+    top  = Math.max(8, Math.min(top,  window.innerHeight - th - 8));
+    left = Math.max(8, Math.min(left, window.innerWidth  - tw - 8));
     tip.style.top  = top  + 'px';
     tip.style.left = left + 'px';
   }
 
-  function _ocultar() {
-    tip.style.display = 'none';
+  function _mostrarHover(el) {
+    if (_pinnedEl) return; // no interferir con tooltip anclado
+    tip.classList.remove('pinned');
+    tip.innerHTML = '';
+    const rawText  = el.dataset.tip || '';
+    const parrafos = rawText.split('\n\n').map(p => p.trim()).filter(Boolean);
+    if (parrafos.length > 1) {
+      parrafos.forEach(p => {
+        const pEl = document.createElement('p');
+        pEl.className   = 'tip-para';
+        pEl.textContent = p;
+        tip.appendChild(pEl);
+      });
+    } else {
+      tip.textContent = rawText;
+    }
+    tip.style.display = 'block';
+    tip.style.opacity  = '1';
+    _posicionar(el);
   }
 
-  // Delegar eventos en document para capturar íconos añadidos dinámicamente
+  function _construirContenidoAnclado(el) {
+    tip.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.className   = 'tip-close-btn';
+    btn.textContent = '✕';
+    btn.title       = 'Cerrar';
+    btn.addEventListener('click', e => { e.stopPropagation(); _desanclar(); });
+    tip.appendChild(btn);
+
+    const rawText  = el.dataset.tip || '';
+    const parrafos = rawText.split('\n\n').map(p => p.trim()).filter(Boolean);
+    if (parrafos.length > 1) {
+      parrafos.forEach(p => {
+        const pEl = document.createElement('p');
+        pEl.className   = 'tip-para';
+        pEl.textContent = p;
+        tip.appendChild(pEl);
+      });
+    } else {
+      const txt = document.createElement('span');
+      txt.className   = 'tip-text';
+      txt.textContent = rawText;
+      tip.appendChild(txt);
+    }
+  }
+
+  function _anclar(el) {
+    if (_pinnedEl === el) { _desanclar(); return; }
+    if (_pinnedEl) _desanclar(false);
+    _pinnedEl = el;
+    el.classList.add('ic-pinned');
+    tip.classList.add('pinned');
+    _construirContenidoAnclado(el);
+    tip.style.display = 'block';
+    tip.style.opacity  = '1';
+    _posicionar(el);
+  }
+
+  function _desanclar(ocultarTip = true) {
+    if (_pinnedEl) { _pinnedEl.classList.remove('ic-pinned'); _pinnedEl = null; }
+    tip.classList.remove('pinned');
+    if (ocultarTip) { tip.style.display = 'none'; tip.innerHTML = ''; }
+  }
+
+  function _ocultar() {
+    if (!_pinnedEl) tip.style.display = 'none';
+  }
+
+  // Hover: mostrar/ocultar solo si no hay tooltip anclado
   document.addEventListener('mouseover', e => {
     const el = e.target.closest('.ic-info[data-tip]');
-    if (el) _mostrar(el);
+    if (el) _mostrarHover(el);
   });
   document.addEventListener('mouseout', e => {
     if (e.target.closest('.ic-info[data-tip]')) _ocultar();
   });
-  // Ocultar al hacer scroll (evita que el tooltip quede flotando)
-  window.addEventListener('scroll', _ocultar, { passive: true });
+
+  // Clic: anclar/desanclar — capture phase para interceptar antes de handlers inline
+  document.addEventListener('click', e => {
+    const el = e.target.closest('.ic-info[data-tip]');
+    if (el) {
+      e.stopPropagation(); // evita que el clic abra/cierre acordeones u otros handlers
+      e.preventDefault();  // evita que <label for="..."> reenvíe el clic al input asociado
+      _anclar(el);
+      return;
+    }
+    // Clic fuera del tooltip → desanclar
+    if (_pinnedEl && !tip.contains(e.target)) _desanclar();
+  }, true); // true = fase de captura
+
+  // Scroll: reposicionar si está anclado, ocultar si no
+  window.addEventListener('scroll', () => {
+    if (_pinnedEl) _posicionar(_pinnedEl);
+    else _ocultar();
+  }, { passive: true });
 }
 
 /* ── Campo condicional "Otros" ──────────────────────────────────────────────── */

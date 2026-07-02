@@ -233,7 +233,7 @@ function _crearGrupoBancoEl(cuenta) {
     <div class="grupo-body" id="banco_body_${id}">
       <div class="grid-4">
         <div class="field col-full" id="field-banco_${id}_banco">
-          <label><span data-i18n="sec11_entidad">${typeof t==='function'?t('sec11_entidad'):'Entidad bancaria'}</span> <span class="ic-info" data-tip="${typeof t==='function'?t('sec11_cert_tip'):'Esta es la cuenta bancaria a la que llegarán los pagos y donde se realizarán los movimientos bancarios correspondientes. Debe coincidir con la certificación bancaria adjuntada en los documentos.'}" data-i18n-tip="sec11_cert_tip">i</span> <span class="req">*</span></label>
+          <label><span data-i18n="sec11_entidad">${typeof t==='function'?t('sec11_entidad'):'Entidad bancaria'}</span> <span class="ic-info" data-tip="${typeof t==='function'?t('sec11_cert_tip'):'Corresponde a la cuenta bancaria registrada por el titular, la cual será utilizada para recibir pagos y realizar las operaciones financieras derivadas de la relación comercial. La información suministrada deberá coincidir con la certificación bancaria vigente adjunta al formulario.'}" data-i18n-tip="sec11_cert_tip">i</span> <span class="req">*</span></label>
           <select id="banco_${id}_banco"
                   onchange="actualizarBanco(${id},'COD_BANCO',this.value);actualizarTituloBanco(${id});limpiarError('field-banco_${id}_banco');_bancoOtrosChange(${id},'banco')">
             ${bo}

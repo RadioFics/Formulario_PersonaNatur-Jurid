@@ -52,6 +52,7 @@ async function guardarBorradorServidor() {
       tipTerc,
       numIdenTxt,
       datosJson,
+      gmailVerif:  sessionStorage.getItem('SAGRILAFT_gmail') || null,
     };
 
     const resp = await fetch('/api/borrador', {

@@ -77,8 +77,8 @@ function validarTodoNatural() {
     errores.push('PEP: Indique si maneja recursos públicos');
   if (!formData.pep.CAR_PUBL)
     errores.push('PEP: Indique si ejerció cargo público');
-  if (formData.actividades.CERT_INFO !== 'S')
-    errores.push('Certificación: Confirme que la información es verídica');
+  if (!document.getElementById('decl_juramento')?.checked)
+    errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 
   return errores;
 }
@@ -111,6 +111,7 @@ function _construirPayloadNatural() {
     COD_VINC:     db.COD_VINC,     // → TIP_VINC en GN_NATUR
     OTR_TPDOC:    db.OTR_TPDOC,
     MAIL_SARL:    n.MAIL_SARL,
+    GMAIL_VERIF:  sessionStorage.getItem('SAGRILAFT_gmail') || null,
     COD_NACIO:    n.COD_NACIO,
     OTR_NACIO:    n.OTR_NACIO,
     COD_CIIU:     n.COD_CIIU,
@@ -138,10 +139,11 @@ function _construirPayloadNatural() {
       ACT_CUSTO:    act.ACT_CUSTO    || 'N',
       ACT_SERV_FIN: act.ACT_SERV_FIN || 'N',
       ACT_SERV_VAP: act.ACT_SERV_VAP || 'N',
-      CERT_INFO:    act.CERT_INFO    || 'N',
+      CERT_INFO:    'S', // aceptado en index.html
     },
     documentos: formData.documentos,
     ACE_POLI:   true,  // T&C aceptados (verificado en index.html)
+    IND_DECL:   document.getElementById('decl_juramento')?.checked ? 'S' : 'N',
   };
 }
 
