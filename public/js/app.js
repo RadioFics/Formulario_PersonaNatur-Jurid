@@ -464,12 +464,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const _numIden = _qp.get('numIden');
 
   if (_modo === 'actualizar' && _numIden) {
-    // Cargar datos desde la BD; ignorar borrador local
+    // Cargar datos desde la BD (registro final o borrador en progreso)
     await _cargarRegistroExistente(_numIden);
   } else {
-    const hasDraft = cargarBorrador();
-    if (hasDraft) {
-      mostrarToast('Borrador restaurado desde la sesión anterior.', 'info');
+    // "Crear registro" siempre arranca desde cero — no se restaura nada de
+    // localStorage. El guardado de progreso es manual (botón "Guardar
+    // progreso") y solo se reanuda vía "Actualizar registro" con el número
+    // de documento + código de edición.
+    try { localStorage.removeItem('sarlaft_draft_token'); } catch (_) {}
+
+    // Tipo de persona elegido en el selector de la portada (index.html)
+    const tipoParam = _qp.get('tipo');
+    if (tipoParam === 'N' || tipoParam === 'J') {
+      const selTipTerc = document.getElementById('tip_terc');
+      if (selTipTerc) selTipTerc.value = tipoParam;
+      if (typeof onTipTercChange === 'function') onTipTercChange(tipoParam);
     }
   }
 
@@ -518,10 +527,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Inicializar idioma (restaura preferencia guardada en localStorage).
   if (typeof initLang === 'function') initLang();
 
-  // Guardado automático de borrador al interactuar con el formulario.
-  document.body.addEventListener('input', guardarBorradorDebounced);
-  document.body.addEventListener('change', guardarBorradorDebounced);
-  window.addEventListener('beforeunload', guardarBorrador);
+  // Guardado automático de borrador al interactuar con el formulario —
+  // solo activo en modo actualizar (registro ya existente). En "Crear
+  // registro" el guardado es exclusivamente manual (botón "Guardar progreso").
+  if (_modo === 'actualizar') {
+    document.body.addEventListener('input', guardarBorradorDebounced);
+    document.body.addEventListener('change', guardarBorradorDebounced);
+    window.addEventListener('beforeunload', guardarBorrador);
+  }
 
   // Adaptar UI para modo actualizar
   if (_modo === 'actualizar') {
@@ -564,6 +577,17 @@ async function _cargarRegistroExistente(numIden) {
       return;
     }
     const datos = await resp.json();
+
+    // ── Borrador en progreso (aún no finalizado) — hidratar directo del JSON ──
+    if (datos.esBorrador) {
+      const parsed = JSON.parse(datos.datosJson);
+      _mergeFormDataDesdeJSON(parsed);
+      if (datos.tokenDraft && typeof _setBorradorToken === 'function') {
+        _setBorradorToken(datos.tokenDraft);
+      }
+      mostrarToast('Borrador cargado ✔', 'success');
+      return;
+    }
 
     // ── Persona Natural — cargar en el objeto de estado correcto ──────────────
     if (datos.TIP_TERC === 'N' && window.formDataNatur) {
@@ -617,12 +641,19 @@ async function _cargarRegistroExistente(numIden) {
         }
       }
 
+      // Declaración jurada (Sección 13) — independiente del tipo de persona
+      const declCheckN = document.getElementById('decl_juramento');
+      if (declCheckN) declCheckN.checked = datos.basica?.IND_DECL === 'S';
+
       mostrarToast('Registro de Persona Natural cargado.', 'success');
       return;
     }
 
     // ── Persona Jurídica — comportamiento original ────────────────────────────
     if (datos.basica)        Object.assign(formData.basica,      datos.basica);
+    // Declaración jurada (Sección 13) — independiente del tipo de persona
+    const declCheckJ = document.getElementById('decl_juramento');
+    if (declCheckJ) declCheckJ.checked = datos.basica?.IND_DECL === 'S';
     if (datos.sociedad)      Object.assign(formData.sociedad,    datos.sociedad);
     if (datos.financiera)    Object.assign(formData.financiera,  datos.financiera);
     if (datos.pep)           Object.assign(formData.pep,         datos.pep);
@@ -731,13 +762,15 @@ async function hidratarFormularioVisual() {
 
     // Sección 1: COT_BOLSA (solo Jurídica)
     {
-      const cotBolsa = formData.basica.COT_BOLSA || 'N';
-      const radioCot = document.querySelector(`input[name="cot_bolsa"][value="${cotBolsa}"]`);
-      if (radioCot) radioCot.checked = true;
-      if (typeof onCotBolsaChange === 'function') onCotBolsaChange(cotBolsa);
-      if (cotBolsa === 'S') {
-        const nomInp = document.getElementById('nom_bolsa');
-        if (nomInp) nomInp.value = formData.basica.NOM_BOLSA || '';
+      const cotBolsa = formData.basica.COT_BOLSA;
+      if (cotBolsa) {
+        const radioCot = document.querySelector(`input[name="cot_bolsa"][value="${cotBolsa}"]`);
+        if (radioCot) radioCot.checked = true;
+        if (typeof onCotBolsaChange === 'function') onCotBolsaChange(cotBolsa);
+        if (cotBolsa === 'S') {
+          const nomInp = document.getElementById('nom_bolsa');
+          if (nomInp) nomInp.value = formData.basica.NOM_BOLSA || '';
+        }
       }
     }
 
@@ -813,20 +846,26 @@ async function hidratarFormularioVisual() {
     }
 
     // Sección 3: Sociedad
-    const ubic = formData.sociedad.UBIC_SOC || 'N';
-    const socUbic = document.getElementById('soc_ubic');
-    if (socUbic) socUbic.value = ubic;
-    await onUbicacionChange(ubic);
+    const ubic = formData.sociedad.UBIC_SOC;
+    if (ubic) {
+      const socUbic = document.getElementById('soc_ubic');
+      if (socUbic) socUbic.value = ubic;
+      await onUbicacionChange(ubic);
+    }
 
     const socMap = {
       soc_tip_empr:  'TIP_EMPR',
       soc_grup_empr: 'GRUP_EMPR',
       soc_pais:      'COD_PAIS_SOC',
+      soc_pct_part:  'PCT_PART_MIXTA',
     };
     Object.entries(socMap).forEach(([id, key]) => {
       const el = document.getElementById(id);
       if (el) el.value = formData.sociedad[key] || '';
     });
+    if (formData.sociedad.TIP_EMPR === 'MIXTA' && typeof onTipoEmpresaChange === 'function') {
+      onTipoEmpresaChange('MIXTA');
+    }
     // Hidratar campo "Otro país" en sección 3 si aplica
     if (formData.sociedad.COD_PAIS_SOC === 'OTRO') {
       onSocPaisChange('OTRO');
@@ -856,8 +895,10 @@ async function hidratarFormularioVisual() {
     // renderListaPaises ya maneja los valores.
 
     // Sección 5: Cumplimiento — los campos son dinámicos (renderListaCump)
-    const tieNormRadio = document.querySelector(`input[name="cump_tie_norm"][value="${formData.cumplimiento.TIE_NORM || 'N'}"]`);
-    if (tieNormRadio) tieNormRadio.checked = true;
+    if (formData.cumplimiento.TIE_NORM) {
+      const tieNormRadio = document.querySelector(`input[name="cump_tie_norm"][value="${formData.cumplimiento.TIE_NORM}"]`);
+      if (tieNormRadio) tieNormRadio.checked = true;
+    }
     if (formData.cumplimiento.TIE_NORM === 'S') {
       onTieNormChange('S');
       const descNorm = document.getElementById('cump_desc_norm');
@@ -883,9 +924,11 @@ async function hidratarFormularioVisual() {
     if (pepRadioCar) pepRadioCar.checked = true;
 
     // Sección 11B: Actividades
-    const operVA = formData.actividades.OPER_VA || 'N';
-    const radioOperVA = document.querySelector(`input[name="oper_va"][value="${operVA}"]`);
-    if (radioOperVA) radioOperVA.checked = true;
+    const operVA = formData.actividades.OPER_VA;
+    if (operVA) {
+      const radioOperVA = document.querySelector(`input[name="oper_va"][value="${operVA}"]`);
+      if (radioOperVA) radioOperVA.checked = true;
+    }
     const vaWrap = document.getElementById('va-checkboxes-wrap');
     if (vaWrap) vaWrap.style.display = operVA === 'S' ? '' : 'none';
     ['act_va_fiat','act_va_va','act_trans','act_custo','act_serv_fin','act_serv_vap','cert_info']

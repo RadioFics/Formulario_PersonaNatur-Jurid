@@ -52,10 +52,8 @@ function _repoblarTipoDocumento(tipTerc) {
     sel.appendChild(opt);
   });
 
-  // Agregar opción "Otro tipo" solo en modo Natural
-  if (tipTerc === 'N') {
-    agregarOpcionOtroAlTipdoc(sel);
-  }
+  // Agregar opción "Otro tipo" en ambos modos
+  agregarOpcionOtroAlTipdoc(sel);
 
   if (tipTerc === 'J' && filtrados.length === 1) {
     sel.value = filtrados[0].COD_TPDOC;
@@ -176,9 +174,13 @@ function onTipTercChange(val) {
   if (accBfn) accBfn.style.display = (esN && codVinc && String(codVinc.value) === '10') ? '' : 'none';
 
   // ── Sincronizar TIP_TERC en estado compartido ────────────────────────────
-  if (window.formData && window.formData.basica) {
+  if (formData && formData.basica) {
     formData.basica.TIP_TERC = val;
   }
+  // Reflejar el valor en el select — necesario cuando se llama programáticamente
+  // (carga de un registro/borrador existente), no solo desde su propio onchange.
+  const selTipTerc = document.getElementById('tip_terc');
+  if (selTipTerc && selTipTerc.value !== val) selTipTerc.value = val;
 
   // ── Limpiar aviso de duplicado ────────────────────────────────────────────
   const aviso = document.getElementById('aviso-duplicado');

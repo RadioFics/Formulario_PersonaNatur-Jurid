@@ -25,12 +25,13 @@ window.formDataNatur = {
     COD_CIIU:     null,
     OTR_CIIU:     null,   // texto libre cuando CIIU = 'OTRO'
     FEC_EXPE:     null,
-    COD_PAIS_EXP: '1',
+    COD_PAIS_EXP: null,
+    OTR_PAIS_EXP: null,   // texto libre cuando país de expedición = 'OTRO'
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
   },
   beneficiariosN: {
-    PART_SOC:        'N',
+    PART_SOC:        null,
     RAZ_SOC:         null,
     TIP_DOC_SOC:     null,
     OTR_TIP_DOC_SOC: null,

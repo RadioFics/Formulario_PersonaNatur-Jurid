@@ -51,10 +51,20 @@ function validarTodo() {
     errores.push('Información básica: Email SAGRILAFT inválido o vacío');
   if (!formData.basica.COD_VINC)
     errores.push('Información básica: Tipo de vinculación requerido');
+  if (document.getElementById('row-vinc-otro')?.style.display !== 'none' && !formData.basica.OTR_VINC)
+    errores.push('Información básica: Especifique el tipo de vinculación');
   if (!formData.basica.COD_CIIU)
     errores.push('Información básica: Actividad CIIU requerida');
+  if (formData.basica.COD_CIIU === 'OTRO' && !formData.basica.OTR_CIIU)
+    errores.push('Información básica: Especifique la actividad CIIU');
+  if (formData.basica.COD_PAIS_EXP === 'OTRO' && !formData.basica.OTR_PAIS_EXP)
+    errores.push('Información básica: Especifique el país de constitución');
   if (!formData.basica.DIR_TERC)
     errores.push('Información básica: Dirección requerida');
+  if (!formData.basica.COT_BOLSA)
+    errores.push('Información básica: Indique si cotiza en bolsa de valores');
+  if (formData.basica.COT_BOLSA === 'S' && (!formData.basica.NOM_BOLSA || !String(formData.basica.NOM_BOLSA).trim()))
+    errores.push('Información básica: Indique en cuál bolsa de valores cotiza');
 
   /* ── Sección 2: Representante legal ──────────────────────────────────── */
   const rp = formData.representantes[0];
@@ -64,20 +74,29 @@ function validarTodo() {
   if (rp.TIP_DOCU === 'OTR_TPDOC' && !rp.OTR_TPDOC) errores.push('Representante legal: Especifique el tipo de documento del Principal');
   if (!rp.NUM_DOCU) errores.push('Representante legal: Número de documento del Principal requerido');
   if (!rp.COD_PAIS) errores.push('Representante legal: País del Principal requerido');
+  if (rp.COD_PAIS === 'OTRO' && !rp.OTR_PAIS) errores.push('Representante legal: Especifique el país del Principal');
   formData.representantes.slice(1).forEach((r, i) => {
     if (r.TIP_DOCU === 'OTR_TPDOC' && !r.OTR_TPDOC)
       errores.push(`Representante legal: Especifique el tipo de documento del Suplente ${i + 1}`);
+    if (r.COD_PAIS === 'OTRO' && !r.OTR_PAIS)
+      errores.push(`Representante legal: Especifique el país del Suplente ${i + 1}`);
   });
 
   /* ── Sección 3: Sociedad ─────────────────────────────────────────────── */
+  if (!formData.sociedad.UBIC_SOC)
+    errores.push('Información de la sociedad: Ubicación de la sociedad requerida');
   if (!formData.sociedad.TIP_EMPR)
     errores.push('Información de la sociedad: Tipo de empresa requerido');
   if (!formData.sociedad.GRUP_EMPR)
     errores.push('Información de la sociedad: Grupo empresarial requerido');
   if (formData.sociedad.UBIC_SOC === 'E' && !formData.sociedad.COD_PAIS_SOC)
     errores.push('Información de la sociedad: País requerido para empresa extranjera');
+  if (formData.sociedad.UBIC_SOC === 'E' && formData.sociedad.COD_PAIS_SOC === 'OTRO' && !formData.sociedad.OTR_PAIS_SOC)
+    errores.push('Información de la sociedad: Especifique el país de la empresa extranjera');
   if (formData.sociedad.UBIC_SOC === 'SC' && !formData.sociedad.COD_PAIS_ORIG_SOC)
     errores.push('Información de la sociedad: País de origen requerido para Sucursal en Colombia');
+  if (formData.sociedad.UBIC_SOC === 'SC' && formData.sociedad.COD_PAIS_ORIG_SOC === 'OTRO' && !formData.sociedad.OTR_PAIS_ORIG_SOC)
+    errores.push('Información de la sociedad: Especifique el país de origen de la sucursal');
   if (formData.sociedad.GRUP_EMPR === 'S') {
     if (!formData.sociedad.CTRL_DECLA)
       errores.push('Información de la sociedad: Indique si las situaciones de control están declaradas en el CERL');
@@ -98,16 +117,18 @@ function validarTodo() {
     errores.push('Países de operación: Especifique el nombre del país en las entradas "Otro"');
 
   /* ── Sección 5: Cumplimiento ─────────────────────────────────────────── */
-  if (formData.cumplimiento.TIE_NORM === 'S') {
-    if (!formData.cumplimiento.DESC_NORM || !String(formData.cumplimiento.DESC_NORM).trim())
-      errores.push('Sistema de cumplimiento: Descripción de normatividad requerida');
-  }
-  formData.cumplimiento.oficiales.forEach((o, i) => {
-    if (o.TIP_DOCU === 'OTR_TPDOC' && !o.OTR_TPDOC)
-      errores.push(`Sistema de cumplimiento: Especifique el tipo de documento del oficial ${i + 1}`);
-  });
+  if (!formData.cumplimiento.TIE_NORM)
+    errores.push('Sistema de cumplimiento: Indique si está sujeta a normatividad LA/FT');
+  if (!formData.cumplimiento.TIE_JUNTA)
+    errores.push('Sistema de cumplimiento: Indique si tiene sistema de prevención de riesgos implementado');
+  // Delega en el validador de sección: normativa, sistema de prevención (incl. "Otro"),
+  // y oficiales de cumplimiento (incl. tipo de documento "Otro").
+  if (typeof validarSeccionCumplimiento === 'function' && !validarSeccionCumplimiento())
+    errores.push('Sistema de cumplimiento: Complete los campos obligatorios de normativa, sistema de prevención u oficiales de cumplimiento');
 
   /* ── Sección 6: Junta directiva ──────────────────────────────────────── */
+  if (!formData.juntaDirectiva.TIE_JUNTA)
+    errores.push('Junta directiva: Indique si tiene junta directiva o consejo de administración');
   if (formData.juntaDirectiva.TIE_JUNTA === 'S') {
     if (formData.juntaDirectiva.miembros.length === 0)
       errores.push('Junta directiva: Debe agregar al menos un miembro');
@@ -116,6 +137,8 @@ function validarTodo() {
   }
 
   /* ── Sección 7: Revisores fiscales ───────────────────────────────────── */
+  if (!formData.revisores.TIE_REVIS)
+    errores.push('Revisores fiscales: Indique si tiene revisor fiscal');
   if (formData.revisores.TIE_REVIS === 'S') {
     if (formData.revisores.revisores.length === 0)
       errores.push('Revisores fiscales: Debe agregar al menos un revisor');
@@ -142,24 +165,32 @@ function validarTodo() {
     errores.push('Información bancaria: Registre al menos una cuenta bancaria');
   formData.bancaria.forEach((b, i) => {
     if (!b.COD_BANCO) errores.push(`Información bancaria: Cuenta ${i + 1} sin entidad bancaria`);
+    if (document.getElementById(`field-banco_${b._id}_banco_otro`)?.style.display !== 'none' && !b.OTR_BANCO)
+      errores.push(`Información bancaria: Cuenta ${i + 1}, especifique la entidad bancaria`);
     if (!b.TIP_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin tipo de cuenta`);
+    if (document.getElementById(`field-banco_${b._id}_tipcuen_otro`)?.style.display !== 'none' && !b.OTR_CUEN)
+      errores.push(`Información bancaria: Cuenta ${i + 1}, especifique el tipo de cuenta`);
     if (!b.NUM_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin número de cuenta`);
     if (b.CUEN_EXTR === 'S') {
       if (!b.cuentasExt || b.cuentasExt.length === 0)
         errores.push(`Información bancaria: Cuenta ${i + 1} debe registrar al menos una cuenta extranjera`);
       (b.cuentasExt || []).forEach((ext, j) => {
         if (!ext.COD_PAIS_EXT) errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin país`);
+        if (ext.COD_PAIS_EXT === 'OTRO' && !ext.OTR_PAIS_EXT)
+          errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1}, especifique el país`);
         if (!ext.NOM_ENT_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin entidad`);
         if (!ext.TIP_CUE_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin tipo de cuenta`);
       });
     }
   });
 
-  /* ── Sección 11: PEP ─────────────────────────────────────────────────── */
+  /* ── Sección 11: PEP + Activos virtuales ──────────────────────────────── */
   if (!formData.pep.MAN_RPUB)
     errores.push('PEP: Debe indicar si la empresa maneja recursos públicos');
   if (!formData.pep.CAR_PUBL)
     errores.push('PEP: Debe indicar si algún representante ejerció cargo público');
+  if (!formData.actividades.OPER_VA)
+    errores.push('Activos virtuales: Debe indicar si opera con activos virtuales');
   if (!document.getElementById('decl_juramento')?.checked)
     errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 
@@ -656,6 +687,7 @@ function _construirPayload() {
     COD_PAIS_ORIG_SOC: s.COD_PAIS_ORIG_SOC || null,
     OTR_PAIS_ORIG_SOC: s.OTR_PAIS_ORIG_SOC || null,
     TIP_EMPR:     s.TIP_EMPR     || null,
+    PCT_PART_MIXTA: s.PCT_PART_MIXTA || null,
     GRUP_EMPR:    s.GRUP_EMPR    || null,
     CTRL_DECLA:   s.CTRL_DECLA   || null,
     CAL_GRUPO:    s.CAL_GRUPO    || null,
@@ -670,7 +702,6 @@ function _construirPayload() {
     // ── Sección 5 — Cumplimiento (GN_JURID_CUMP) ───────────────────────────
     TIE_NORM:       c.TIE_NORM    || 'N',
     DESC_NORM:      c.DESC_NORM   || null,
-    NORM_LAFT:      c.NORM_LAFT   || null,
     cump_TIE_JUNTA: c.TIE_JUNTA  || 'N',
     SIS_PREVE:      c.SIS_PREVE   || null,
     OTR_PREVE:      c.OTR_PREVE   || null,

@@ -95,7 +95,7 @@
         <div class="field">
           <label><span data-i18n="sec1_tip_terc">Tipo de persona</span> <span class="ic-info" id="ic-tipo-persona" data-i18n-tip="sec1_tip_juridica" data-tip="">i</span></label>
           <select id="tip_terc" onchange="onTipTercChange(this.value)">
-            <option value="J" selected data-i18n="sec1_juridica">Persona jurídica</option>
+            <option value="J" data-i18n="sec1_juridica">Persona jurídica</option>
             <option value="N" data-i18n="sec1_natural">Persona natural</option>
           </select>
         </div>
@@ -388,7 +388,7 @@
               <span data-i18n="yes">Sí</span>
             </label>
             <label class="radio-option">
-              <input type="radio" name="cot_bolsa" value="N" onchange="onCotBolsaChange('N')" checked>
+              <input type="radio" name="cot_bolsa" value="N" onchange="onCotBolsaChange('N')">
               <span data-i18n="no">No</span>
             </label>
           </div>
@@ -601,7 +601,8 @@
           <label for="soc_ubic"><span data-i18n="sec3_ubicacion">Ubicación de la sociedad</span> <span class="req">*</span></label>
           <select id="soc_ubic"
                   onchange="onUbicacionChange(this.value); limpiarError('field-soc_ubic')">
-            <option value="N" selected data-i18n="sec3_opt_nacional">Nacional</option>
+            <option value="" selected data-i18n="select_placeholder">— Seleccione —</option>
+            <option value="N" data-i18n="sec3_opt_nacional">Nacional</option>
             <option value="SC" data-i18n="sec3_opt_sucursal">Sucursal en Colombia</option>
             <option value="E" data-i18n="sec3_opt_extranjera">Extranjera</option>
           </select>
@@ -653,13 +654,21 @@
         <div class="field" id="field-soc_tip_empr">
           <label for="soc_tip_empr"><span data-i18n="sec3_tipo_empr">Tipo de empresa</span> <span class="req">*</span></label>
           <select id="soc_tip_empr"
-                  onchange="actualizarSociedad('TIP_EMPR',this.value); limpiarError('field-soc_tip_empr')">
+                  onchange="actualizarSociedad('TIP_EMPR',this.value); onTipoEmpresaChange(this.value); limpiarError('field-soc_tip_empr')">
             <option value="" data-i18n="select_placeholder">— Seleccione —</option>
             <option value="PUBLICA" data-i18n="sec3_opt_publica">Pública</option>
             <option value="PRIVADA" data-i18n="sec3_opt_privada">Privada</option>
             <option value="MIXTA" data-i18n="sec3_opt_mixta">Mixta</option>
           </select>
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
+        </div>
+
+        <!-- % de participación — visible solo cuando Tipo de empresa = Mixta -->
+        <div class="field" id="field-soc_pct_part" style="display:none">
+          <label for="soc_pct_part"><span data-i18n="sec3_pct_part">% de participación</span></label>
+          <input type="text" id="soc_pct_part" maxlength="6" inputmode="decimal"
+                 placeholder="Ej: 51" data-i18n-ph="sec3_pct_part_ph"
+                 oninput="this.value=this.value.replace(/[^0-9.]/g,'');actualizarSociedad('PCT_PART_MIXTA',this.value)" />
         </div>
 
         <div class="field" id="field-soc_grup_empr" style="grid-column: span 2">
@@ -800,7 +809,7 @@
                    onchange="onTieNormChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
-            <input type="radio" name="cump_tie_norm" value="N" checked
+            <input type="radio" name="cump_tie_norm" value="N"
                    onchange="onTieNormChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
@@ -823,16 +832,6 @@
           <span class="error-msg"><span data-i18n="required_field">Campo requerido</span></span>
         </div>
 
-        <div class="field col-full" id="field-cump_norm_laft">
-          <label for="cump_norm_laft"><span data-i18n="sec5_norm_laft">Referencia específica de normatividad LA/FT</span>
-            <span style="font-size:.7rem;font-weight:400;text-transform:none" data-i18n="sec5_norm_laft_eg">(ej.: Ley 526/1999, Decreto 1674/2023, SAGRILAFT…)</span>
-          </label>
-          <input type="text" id="cump_norm_laft" maxlength="255"
-                 placeholder="Nombre o número de la norma LA/FT aplicable"
-                 data-i18n-ph="sec5_norm_laft_ph"
-                 oninput="actualizarCump('NORM_LAFT',this.value)" />
-        </div>
-
         <!-- ¿Tiene sistema implementado? -->
         <div class="field field-radio">
           <label><span data-i18n="sec5_tie_sist">¿Tiene sistema de prevención de riesgos implementado?</span> <span class="req">*</span></label>
@@ -842,7 +841,7 @@
                      onchange="onTieneSistemaChange('S')"> <span data-i18n="yes">Sí</span>
             </label>
             <label class="radio-option">
-              <input type="radio" name="cump_tie_sist" value="N" checked
+              <input type="radio" name="cump_tie_sist" value="N"
                      onchange="onTieneSistemaChange('N')"> <span data-i18n="no">No</span>
             </label>
           </div>
@@ -918,7 +917,7 @@
                    onchange="onTieneJuntaChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
-            <input type="radio" name="jd_tie_junta" value="N" checked
+            <input type="radio" name="jd_tie_junta" value="N"
                    onchange="onTieneJuntaChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
@@ -970,7 +969,7 @@
                    onchange="onTieneRevisorChange('S')"> <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
-            <input type="radio" name="rf_tie_revis" value="N" checked
+            <input type="radio" name="rf_tie_revis" value="N"
                    onchange="onTieneRevisorChange('N')"> <span data-i18n="no">No</span>
           </label>
         </div>
@@ -1015,8 +1014,6 @@
     </div>
 
     <div class="accordion-body">
-
-      <p style="font-size:.82rem;color:#616161;margin-bottom:4px" data-i18n="sec8_hint">Registre todos los accionistas o socios de la empresa con su porcentaje de participación.</p>
 
       <!-- Lista de accionistas — renderizada por seccion-ac.js -->
       <div id="ac-grupos-list" class="grupo-lista"></div>
@@ -1097,7 +1094,7 @@
             <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
-            <input type="radio" name="part_soc" value="N" onchange="onPartSocChange('N')" checked>
+            <input type="radio" name="part_soc" value="N" onchange="onPartSocChange('N')">
             <span data-i18n="no">No</span>
           </label>
         </div>
@@ -1407,7 +1404,7 @@
             <span data-i18n="yes">Sí</span>
           </label>
           <label class="radio-option">
-            <input type="radio" name="oper_va" value="N" checked
+            <input type="radio" name="oper_va" value="N"
                    onchange="actualizarOperVA('N')">
             <span data-i18n="no">No</span>
           </label>
@@ -1720,6 +1717,35 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
+<!--  Modal — Progreso guardado (borrador, GN_BORRADOR)                      -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-progreso-guardado">
+  <div class="modal-card">
+    <div class="confirm-icon">&#128190;</div>
+    <p class="confirm-title">Progreso guardado</p>
+    <p class="confirm-body">
+      Su avance se guardó como borrador. Anote el número de documento y el código de
+      edición — los necesitará para continuar más tarde desde <strong>"Actualizar registro"</strong>
+      en la página de inicio.
+    </p>
+    <div class="confirm-id" id="progreso-num-iden">&#8212;</div>
+    <div id="progreso-edit-code-box" style="margin-top:16px;padding:14px 16px;
+         background:#fff8e1;border:1.5px solid #f0c040;border-radius:8px;
+         font-size:.88rem;color:#5a3e00">
+      <strong>⚠️ Código de edición:</strong>
+      <code id="progreso-codigo-edicion"
+            style="font-size:1.1rem;letter-spacing:.15em;background:#fff3cd;padding:2px 8px;border-radius:4px"></code>
+      <br><span style="font-size:.8rem;color:#7a5800">Guarde este código — será necesario para continuar este registro.</span>
+    </div>
+    <div class="confirm-actions">
+      <button class="btn btn-primary" type="button" onclick="cerrarModalProgreso()">
+        Entendido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
 <!--  Modal — Error al guardar                                              -->
 <!-- ════════════════════════════════════════════════════════════
 <!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -1855,11 +1881,14 @@ async function verificarDuplicado(numIden) {
       const nombre   = data.NOM_COMP || data.NOM_TERC || '';
       const tipLabel = data.TIP_TERC === 'N' ? 'Persona Natural' : 'Persona Jur\xEDdica';
       const pill = `<span class="dup-modal-pill">${tipLabel}</span>`;
+      const mensajeExiste = data.esBorrador
+        ? 'Ya tiene un borrador guardado con este n\xFAmero de documento.<br>Use el bot\xF3n de abajo para continuarlo desde <strong>Actualizar registro</strong>.'
+        : 'Este n\xFAmero ya existe en el sistema.<br>Use el bot\xF3n de abajo para ir directamente a <strong>Actualizar registro</strong>.';
       document.getElementById('modal-duplicado-msg').innerHTML =
         `${pill}` +
         (nombre ? `<br><strong style="font-size:1rem;color:#212121">${nombre}</strong><br>` : '') +
         `Documento: <code>${numIden}</code><br><br>` +
-        'Este n\xFAmero ya existe en el sistema.<br>Use el bot\xF3n de abajo para ir directamente a <strong>Actualizar registro</strong>.';
+        mensajeExiste;
       document.getElementById('modal-duplicado').classList.add('show');
     } else {
       _numIdenBloqueado  = false;
@@ -1938,20 +1967,32 @@ async function guardarProgreso() {
   const btn = document.getElementById('btn-save-draft');
   if (btn) btn.disabled = true;
 
-  if (typeof guardarBorrador === 'function') guardarBorrador();
-
   if (typeof guardarBorradorServidor === 'function') {
     const result = await guardarBorradorServidor();
     if (result && result.ok) {
-      mostrarToast('Progreso guardado en el servidor ✔', 'success');
+      if (result.codigoEdicion) {
+        _mostrarModalProgreso(formData.basica.NUM_IDEN, result.codigoEdicion);
+      } else {
+        mostrarToast('Progreso guardado en el servidor ✔', 'success');
+      }
     } else {
-      mostrarToast('Progreso guardado localmente. No se pudo sincronizar con el servidor.', 'warning');
+      mostrarToast('No se pudo guardar el progreso. Verifique su conexión e intente de nuevo.', 'error');
     }
-  } else {
-    mostrarToast('Progreso guardado localmente ✔', 'success');
   }
 
   _actualizarEstadoBotonGuardar();
+}
+
+function _mostrarModalProgreso(numIden, codigoEdicion) {
+  const numEl = document.getElementById('progreso-num-iden');
+  const codEl = document.getElementById('progreso-codigo-edicion');
+  if (numEl) numEl.textContent = numIden || '—';
+  if (codEl) codEl.textContent = codigoEdicion;
+  document.getElementById('modal-progreso-guardado').classList.add('show');
+}
+
+function cerrarModalProgreso() {
+  document.getElementById('modal-progreso-guardado').classList.remove('show');
 }
 
 /* ── Manejo de ?modo=actualizar&numIden=XXX ─────────────────────────────── */

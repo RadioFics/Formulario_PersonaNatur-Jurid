@@ -19,7 +19,7 @@ const formData = {
     NUM_IDEN:     '',
     DIG_VERI:     '',   // Dígito de verificación del NIT (GN_TERCE)
     NOM_COMP:     '',
-    COD_PAIS_EXP: '1',
+    COD_PAIS_EXP: null,
     OTR_PAIS_EXP: '',   // texto libre cuando país = 'OTRO'
     COD_DEPT_EXP: null,
     COD_MPIO_EXP: null,
@@ -33,7 +33,7 @@ const formData = {
     COD_CIIU:     null,
     OTR_CIIU:     '',   // texto libre cuando CIIU = "Otro"
     URL_WEB:      '',
-    COT_BOLSA:    'N',  // ¿Cotiza en bolsa de valores?
+    COT_BOLSA:    null,  // ¿Cotiza en bolsa de valores?
     NOM_BOLSA:    null,  // Nombre de la bolsa (si COT_BOLSA='S')
   },
 
@@ -45,19 +45,20 @@ const formData = {
   representantes: [
     {
       TIP_REPR: 'P', NOM_REPR: '', APE_REPR: '', TIP_DOCU: null, OTR_TPDOC: null,
-      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: '1', OTR_PAIS: '',
+      NUM_DOCU: '', FEC_EXPE: '', COD_PAIS: null, OTR_PAIS: '',
       COD_DEPT: null, COD_MPIO: null, DIR_REPR: '', CEL_REPR: '', TEL_REPR: '', MAIL_REPR: '',
     },
   ],
 
   // Sección 3 — Información de la sociedad
   sociedad: {
-    UBIC_SOC:          'N',   // 'N' = Nacional | 'E' = Extranjera | 'SC' = Sucursal en Colombia
+    UBIC_SOC:          null,  // 'N' = Nacional | 'E' = Extranjera | 'SC' = Sucursal en Colombia
     COD_PAIS_SOC:      null,  // solo si UBIC_SOC = 'E'
     OTR_PAIS_SOC:      '',    // texto libre cuando COD_PAIS_SOC = 'OTRO' (Extranjera)
     COD_PAIS_ORIG_SOC: null,  // solo si UBIC_SOC = 'SC' (Sucursal) — país de origen
     OTR_PAIS_ORIG_SOC: '',    // texto libre cuando COD_PAIS_ORIG_SOC = 'OTRO'
     TIP_EMPR:          null,  // 'PUBLICA' | 'PRIVADA' | 'MIXTA'
+    PCT_PART_MIXTA:    null,  // % de participación — solo si TIP_EMPR = 'MIXTA'
     GRUP_EMPR:    null,  // 'S' | 'N'
     // Campos del cascada de grupo empresarial (solo cuando GRUP_EMPR = 'S')
     CTRL_DECLA:   null,  // ¿Situaciones declaradas en CERL? 'S' | 'N'
@@ -72,10 +73,10 @@ const formData = {
 
   // Sección 5 — Sistema de cumplimiento
   cumplimiento: {
-    TIE_NORM:  'N',  // radio: ¿sujeta a normatividad LA/FT? — 'S' | 'N'
+    TIE_NORM:  null,  // radio: ¿sujeta a normatividad LA/FT? — 'S' | 'N'
     DESC_NORM: '',   // textarea: ¿cuál(es) regulación(es)?
     NORM_LAFT: '',   // Referencia específica normativa LA/FT
-    TIE_JUNTA: 'N', // radio: ¿tiene sistema implementado? — 'S' | 'N'
+    TIE_JUNTA: null, // radio: ¿tiene sistema implementado? — 'S' | 'N'
 
     // Solo aplican cuando TIE_JUNTA = 'S':
     SIS_PREVE: null,  // Tipo de sistema (abreviatura o valor seleccionado)
@@ -88,13 +89,13 @@ const formData = {
 
   // Sección 6 — Junta directiva / Consejo de administración
   juntaDirectiva: {
-    TIE_JUNTA: 'N',    // 'S' | 'N'
+    TIE_JUNTA: null,    // 'S' | 'N'
     miembros:  [],     // array de { _id, Principal, Suplente }
   },
 
   // Sección 7 — Revisores fiscales
   revisores: {
-    TIE_REVIS: 'N',
+    TIE_REVIS: null,
     revisores: [],     // array de { _id, Principal, Suplente }
   },
 
@@ -123,7 +124,7 @@ const formData = {
 
   // Sección 11b — Actividades con activos virtuales
   actividades: {
-    OPER_VA:      'N',
+    OPER_VA:      null,
     ACT_VA_FIAT:  'N',
     ACT_VA_VA:    'N',
     ACT_TRANS:    'N',
@@ -209,8 +210,12 @@ function guardarBorrador() {
 
 /**
  * Guarda el estado actual en localStorage con debounce.
+ * Solo activo en modo actualizar (registro ya existente) — en "Crear
+ * registro" el guardado es exclusivamente manual (botón "Guardar progreso").
  */
 function guardarBorradorDebounced() {
+  const modo = new URLSearchParams(window.location.search).get('modo');
+  if (modo !== 'actualizar') return;
   clearTimeout(_draftTimer);
   _draftTimer = setTimeout(guardarBorrador, 300);
 }
@@ -228,25 +233,14 @@ function borrarBorrador() {
 }
 
 /**
- * Carga el borrador desde localStorage.
- * Primero intenta con la clave NIT-específica (si NUM_IDEN está en la URL),
- * luego con la clave genérica.
- * Devuelve true si se encontró un borrador válido.
+ * Fusiona un objeto de borrador ya parseado (forma { ...formData, _natur }
+ * — la misma que produce guardarBorrador()/guardarBorradorServidor()) en
+ * formData/formDataNatur. Usado al reanudar un borrador guardado en el
+ * servidor (GN_BORRADOR) desde "Actualizar registro".
+ * Devuelve true si se aplicó algo.
  */
-function cargarBorrador() {
+function _mergeFormDataDesdeJSON(datos) {
   try {
-    // Detectar numIden desde la URL (?numIden=...)
-    const urlParams = new URLSearchParams(window.location.search);
-    const numIdenUrl = urlParams.get('numIden') || '';
-    const claveEspecifica = numIdenUrl
-      ? `${BORRADOR_BASE_KEY}_${numIdenUrl}`
-      : null;
-
-    const raw = (claveEspecifica && localStorage.getItem(claveEspecifica))
-      || localStorage.getItem(BORRADOR_BASE_KEY);
-
-    if (!raw) return false;
-    const datos = JSON.parse(raw);
     if (!datos || typeof datos !== 'object') return false;
 
     // Restaurar formData (jurídica y campos compartidos)
@@ -267,7 +261,7 @@ function cargarBorrador() {
 
     return true;
   } catch (err) {
-    console.error('cargarBorrador():', err);
+    console.error('_mergeFormDataDesdeJSON():', err);
     return false;
   }
 }

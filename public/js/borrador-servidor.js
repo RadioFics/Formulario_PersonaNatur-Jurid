@@ -36,14 +36,16 @@ function _clearBorradorToken() {
 /**
  * Guarda el estado actual del formulario en el servidor.
  * Actualiza el token local si el servidor devuelve uno nuevo.
- * @returns {Promise<{ok: boolean, fechaGuardado?: string}>}
+ * @returns {Promise<{ok: boolean, fechaGuardado?: string, codigoEdicion?: string|null}>}
+ *   codigoEdicion viene presente solo la primera vez que el borrador recibe
+ *   un número de documento (debe mostrarse al usuario para poder reanudarlo).
  */
 async function guardarBorradorServidor() {
   try {
-    const tipTerc    = (window.formData?.basica?.TIP_TERC === 'N') ? 'N' : 'E';
-    const numIdenTxt = String(window.formData?.basica?.NUM_IDEN || '').trim() || null;
+    const tipTerc    = (formData?.basica?.TIP_TERC === 'N') ? 'N' : 'E';
+    const numIdenTxt = String(formData?.basica?.NUM_IDEN || '').trim() || null;
 
-    const datos = { ...(window.formData || {}) };
+    const datos = { ...(formData || {}) };
     if (window.formDataNatur) datos._natur = window.formDataNatur;
     const datosJson = JSON.stringify(datos);
 
@@ -64,7 +66,7 @@ async function guardarBorradorServidor() {
     if (!resp.ok) return { ok: false };
     const data = await resp.json();
     if (data.tokenDraft) _setBorradorToken(data.tokenDraft);
-    return { ok: true, fechaGuardado: data.fechaGuardado };
+    return { ok: true, fechaGuardado: data.fechaGuardado, codigoEdicion: data.codigoEdicion || null };
   } catch (_) {
     return { ok: false };
   }

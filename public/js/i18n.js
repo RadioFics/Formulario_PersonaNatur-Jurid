@@ -136,6 +136,8 @@ const I18N_DICT = {
   sec3_extranjera:       { es: 'Extranjera',                        en: 'Foreign' },
   sec3_sucursal:         { es: 'Sucursal en Colombia',              en: 'Branch in Colombia' },
   sec3_tipo_empr:        { es: 'Tipo de empresa',                   en: 'Company type' },
+  sec3_pct_part:         { es: '% de participación',                en: '% of participation' },
+  sec3_pct_part_ph:      { es: 'Ej: 51',                             en: 'E.g.: 51' },
   sec3_publica:          { es: 'Pública',                           en: 'Public' },
   sec3_privada:          { es: 'Privada',                           en: 'Private' },
   sec3_mixta:            { es: 'Mixta',                             en: 'Mixed' },
@@ -343,14 +345,14 @@ const I18N_DICT = {
 
   /* ── Página de inicio (index.html) ─────────────────────────────────── */
   idx_title:              { es: 'Registro — Persona Jurídica y Natural', en: 'Registration — Natural & Legal Persons' },
-  idx_subtitle:           { es: 'Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo',
-                            en: 'Anti-Money Laundering and Terrorist Financing Risk Management System' },
+  idx_subtitle:           { es: 'SAGRILAFT: Sistema de Autocontrol y Gestión del Riesgo Integral de Lavado de Activos, Financiación del Terrorismo y Financiación de la Proliferación de Armas de Destrucción Masiva. PTEE: Programa de Transparencia y Ética Empresarial.',
+                            en: 'SAGRILAFT: Self-Control and Comprehensive Risk Management System for Money Laundering, Terrorist Financing, and Financing of the Proliferation of Weapons of Mass Destruction. PTEE: Business Transparency and Ethics Program.' },
   idx_terms_read:         { es: 'He leído y acepto la',                  en: 'I have read and accept the' },
   idx_terms_policy_link:  { es: 'Política de tratamiento de datos personales', en: 'Personal data processing policy' },
   idx_terms_authorize:    { es: 'y autorizo el uso de mis datos conforme a los términos indicados.', en: 'and I authorize the use of my data as indicated in the terms.' },
   idx_terms_badge:        { es: '✅ Términos aceptados — puede continuar', en: '✅ Terms accepted — you may proceed' },
   idx_tc_title:           { es: 'Política de tratamiento de datos personales:', en: 'Personal Data Processing Policy:' },
-  idx_tc_para1:           { es: ' En cumplimiento de la Ley 1581 de 2012 y el Decreto 1074 de 2015, la información recopilada mediante este formulario será utilizada exclusivamente para los procesos de vinculación y gestión de riesgos en el marco del Sistema de Administración del Riesgo de Lavado de Activos y Financiación del Terrorismo (SAGRILAFT).', en: ' In compliance with Law 1581 of 2012 and Decree 1074 of 2015, the information collected through this form will be used exclusively for onboarding and risk management processes under the System for the Administration of the Risk of Money Laundering and Terrorism Financing (SAGRILAFT).' },
+  idx_tc_para1:           { es: ' Con el fin de dar cumplimiento a las disposiciones legales y regulatorias aplicables en materia de prevención del lavado de activos, la financiación del terrorismo, la financiación de la proliferación de armas de destrucción masiva (LA/FT/FPADM), la corrupción y el soborno transnacional (C/ST), COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA ha desarrollado el presente formulario como instrumento para el conocimiento, identificación y debida diligencia de sus contrapartes, en el marco de su Sistema de Autocontrol y Gestión del Riesgo Integral de LA/FT/FPADM (SAGRILAFT) y su Programa de Transparencia y Ética Empresarial (PTEE).', en: ' In order to comply with the legal and regulatory provisions applicable to the prevention of money laundering, terrorist financing, the financing of the proliferation of weapons of mass destruction (ML/TF/PWMD), corruption and transnational bribery (C/TB), COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA has developed this form as an instrument for the knowledge, identification and due diligence of its counterparties, within the framework of its Comprehensive Risk Self-Control and Management System for ML/TF/PWMD (SAGRILAFT) and its Business Transparency and Ethics Program (PTEE).' },
   idx_tc_para2:           { es: 'Sus datos serán tratados con estricta confidencialidad y solo serán compartidos con autoridades competentes cuando así lo exija la normativa vigente. Como titular, usted tiene derecho a conocer, actualizar, rectificar y suprimir su información personal. Para ejercer estos derechos o presentar quejas, puede comunicarse directamente con el oficial de cumplimiento de la entidad.', en: 'Your data will be treated with strict confidentiality and will only be shared with competent authorities when required by applicable regulations. As the data subject, you have the right to access, update, correct, and delete your personal information. To exercise these rights or file a complaint, please contact the entity\'s compliance officer directly.' },
   idx_card_create_title:  { es: 'Crear registro',                        en: 'Create record' },
   idx_card_create_desc:   { es: 'Diligencie el formulario completo para registrar una nueva persona natural o jurídica en el sistema.',
@@ -366,6 +368,9 @@ const I18N_DICT = {
   idx_footer:             { es: 'SAGRILAFT — Persona Natural y Jurídica  |  Solo para uso interno',
                             en: 'SAGRILAFT — Natural & Legal Persons  |  Internal use only' },
   idx_modal_pol_title:    { es: 'Política de tratamiento de datos',      en: 'Data processing policy' },
+  idx_modal_tipo_title:   { es: '¿Qué tipo de registro va a crear?',     en: 'What type of record are you creating?' },
+  idx_modal_tipo_body:    { es: 'Seleccione la naturaleza del tercero para iniciar el formulario con esa opción predeterminada. Podrá cambiarla dentro del formulario en cualquier momento.',
+                            en: 'Select the type of party to start the form with that option preselected. You can change it inside the form at any time.' },
   idx_modal_pol_close:    { es: 'Cerrar',                                en: 'Close' },
   idx_modal_pol_accept:   { es: 'Acepto la política',                    en: 'I accept the policy' },
   idx_modal_upd_title:    { es: '🔍 Buscar registro existente',          en: '🔍 Search existing record' },
@@ -425,7 +430,6 @@ const I18N_DICT = {
   sec3_dir_oficina_ph:     { es: 'Ej: Cra 7 # 45-12 Of. 301',    en: 'E.g.: 7th Ave # 45-12 Off. 301' },
 
   /* ── Sección 8 — Composición accionaria ─────────────────────────────── */
-  sec8_hint:               { es: 'Registre todos los accionistas o socios de la empresa con su porcentaje de participación. Se consideran beneficiarios finales quienes posean el 5% o más de la participación o votación.', en: 'Register all shareholders or partners of the company with their ownership percentage. Beneficial owners are those holding 5% or more of the ownership or voting rights.' },
   sec8_tip:                { es: 'Se entiende por participación la tenencia de acciones, cuotas sociales, partes de interés o cualquier otro derecho económico o de control en una entidad. Registre todos los accionistas, socios o propietarios, indicando el porcentaje de participación de cada uno.', en: 'Participation means holding shares, equity interests, ownership stakes, or any other economic or control right in an entity. Register all shareholders, partners, or owners, indicating the ownership percentage of each one.' },
   sec8_warn_5pct:          { es: 'El porcentaje de participación es menor al 5%. Los accionistas con menos del 5% generalmente no se consideran beneficiarios finales, pero igualmente deben registrarse.', en: 'Ownership percentage is below 5%. Shareholders with less than 5% are generally not considered beneficial owners, but must still be registered.' },
 

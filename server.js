@@ -833,9 +833,21 @@ app.post('/api/verificar-codigo-edicion', async (req, res) => {
       .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
       .input('NUM_IDEN', sql.VarChar(20), String(numIden))
       .query(`SELECT COD_EDIT FROM GN_TERCE WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN=@NUM_IDEN`);
-    if (!result.recordset.length)
+
+    let codEditRow = result.recordset.length ? result.recordset[0] : null;
+    if (!codEditRow) {
+      // Sin registro final — revisar si es un borrador en progreso.
+      const draft = await p.request()
+        .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+        .input('NUM_IDEN', sql.VarChar(20), String(numIden))
+        .query(`SELECT TOP 1 COD_EDIT FROM GN_BORRADOR
+                WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN_TXT=@NUM_IDEN AND FEC_VENC > GETDATE()
+                ORDER BY FEC_GUAR DESC`);
+      if (draft.recordset.length) codEditRow = draft.recordset[0];
+    }
+    if (!codEditRow)
       return res.json({ valido: false, razon: 'noEncontrado' });
-    const codEdit = (result.recordset[0].COD_EDIT || '').trim();
+    const codEdit = (codEditRow.COD_EDIT || '').trim();
     if (!codEdit) {
       // Registro legacy — solo el admin puede editar
       if (req.session && req.session.isAdmin)
@@ -951,6 +963,7 @@ app.get('/api/catalogo/paises', async (req, res) => {
       `SELECT COD_PAIS, NOM_PAIS, IND_PRINCI, NOM_EN
          FROM MAE_PAIS
         WHERE COD_PAIS > 0
+          AND IND_ONU = 'S'
           AND NOM_PAIS NOT LIKE 'Otro%'
         ORDER BY CASE WHEN IND_PRINCI = 'S' THEN 0 ELSE 1 END, NOM_PAIS`
     );
@@ -1701,6 +1714,22 @@ app.get('/api/verificar-identidad/:numIden', async (req, res) => {
     if (result.recordset.length > 0) {
       const row = result.recordset[0];
       res.json({ existe: true, ...row, tieneCodEdit: row.TIENE_COD_EDIT === 1 });
+      return;
+    }
+
+    // Sin registro final — revisar si hay un borrador en progreso con este número.
+    const draft = await pool.request()
+      .input('NUM_IDEN', sql.VarChar(20), numIden)
+      .input('COD_EMPR', sql.SmallInt,    COD_EMPR)
+      .query(`SELECT TOP 1 TIP_TERC, COD_EDIT FROM GN_BORRADOR
+              WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN_TXT=@NUM_IDEN AND FEC_VENC > GETDATE()
+              ORDER BY FEC_GUAR DESC`);
+    if (draft.recordset.length > 0) {
+      const d = draft.recordset[0];
+      res.json({
+        existe: true, esBorrador: true, NUM_IDEN: numIden, TIP_TERC: d.TIP_TERC,
+        NOM_COMP: null, tieneCodEdit: !!d.COD_EDIT,
+      });
     } else {
       res.json({ existe: false });
     }
@@ -1775,6 +1804,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           ISNULL(j.OTR_PAIS_SOC,'')                     AS [${L('Otro país de constitución','Other country of incorporation')}],
           CASE j.TIP_EMPR WHEN 'PUBLICA' THEN '${L('Pública','Public')}' WHEN 'PRIVADA' THEN '${L('Privada','Private')}' WHEN 'MIXTA' THEN '${L('Mixta','Mixed')}' ELSE ISNULL(j.TIP_EMPR,'') END
                                                         AS [${L('Tipo de empresa','Company category')}],
+          ISNULL(CONVERT(VARCHAR,j.PCT_PART_MIXTA),'')  AS [${L('% de participación','% of participation')}],
           CASE j.GRUP_EMPR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                                         AS [${L('Pertenece a grupo empresarial','Belongs to business group')}],
           CASE j.CTRL_DECLA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
@@ -1957,6 +1987,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
                                                         AS [${L('Tipo','Type')}],
           bf.NOM_BENE                                   AS [${L('Nombre','First name')}],
           bf.APE_BENE                                   AS [${L('Apellido','Last name')}],
+          ISNULL(CONVERT(VARCHAR,bf.PCT_PART),'')       AS [${L('% de participación','% of participation')}],
           bf.RAZ_BENE                                   AS [${L('Razón social','Company name')}],
           ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
           ISNULL(bf.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
@@ -1979,7 +2010,6 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
       q(`SELECT
           CASE c.TIE_NORM WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                                         AS [${L('¿Sujeta a normatividad LA/FT?','Subject to AML/CTF regulations?')}],
-          ISNULL(c.NORM_LAFT,'')                        AS [${L('Normativa LA/FT aplicable','Applicable AML/CTF regulation')}],
           ISNULL(c.DESC_NORM,'')                        AS [${L('Descripción de la normativa','Regulation description')}],
           CASE c.TIE_JUNTA WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                                         AS [${L('¿Tiene sistema implementado?','Has implemented system?')}],
@@ -2292,6 +2322,31 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         if (!req.session || !req.session.isAdmin)
           return res.status(401).json({ error: 'adminRequerido', mensaje: 'Este registro requiere sesión de administrador para editar.' });
       }
+    } else {
+      // Sin registro final — buscar un borrador en progreso con este número.
+      const draftRow = await pool.request()
+        .input('COD_EMPR', sql.SmallInt, COD_EMPR)
+        .input('NUM_IDEN', sql.VarChar(20), numIden)
+        .query(`SELECT TOP 1 TOKEN_DRAFT, TIP_TERC, DATOS_JSON, COD_EDIT FROM GN_BORRADOR
+                WHERE COD_EMPR=@COD_EMPR AND NUM_IDEN_TXT=@NUM_IDEN AND FEC_VENC > GETDATE()
+                ORDER BY FEC_GUAR DESC`);
+      if (!draftRow.recordset.length)
+        return res.status(404).json({ error: 'Registro no encontrado.' });
+      const draft   = draftRow.recordset[0];
+      const codEdit = (draft.COD_EDIT || '').trim();
+      if (codEdit) {
+        if (!codigoEdicion)
+          return res.status(401).json({ error: 'codigoRequerido', mensaje: 'Código de edición requerido.' });
+        if (_hashCodigo(codigoEdicion.trim()) !== codEdit)
+          return res.status(403).json({ error: 'codigoInvalido', mensaje: 'Código de edición incorrecto.' });
+      } else {
+        if (!req.session || !req.session.isAdmin)
+          return res.status(401).json({ error: 'adminRequerido', mensaje: 'Este borrador requiere sesión de administrador para editar.' });
+      }
+      return res.json({
+        esBorrador: true, TIP_TERC: draft.TIP_TERC,
+        datosJson: draft.DATOS_JSON, tokenDraft: draft.TOKEN_DRAFT,
+      });
     }
     // ── Fin verificación ─────────────────────────────────────────────────────
 
@@ -2302,10 +2357,10 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     const basica = await r().query(`
       SELECT t.COD_TERC, t.TIP_TERC, t.COD_TPDOC, t.OTR_TPDOC, t.NUM_IDEN, t.DIG_VERI,
              t.NOM_COMP, t.NOM_TERC, t.SEG_NOMB, t.APE_TERC, t.SEG_APEL,
-             t.DIR_TERC, t.TEL_TERC, t.TEL_TERC2, t.DIR_MAIL,
+             t.DIR_TERC, t.TEL_TERC, t.TEL_TERC2, t.DIR_MAIL, t.IND_DECL,
              j.TIP_VINC AS COD_VINC, j.OTR_VINC, j.MAIL_SARL,
              j.COD_CIIU, j.OTR_CIIU, j.URL_WEB, j.COT_BOLSA, j.NOM_BOLSA,
-             j.UBIC_SOC, j.COD_PAIS_SOC, j.OTR_PAIS_SOC, j.COD_PAIS_ORI, j.TIP_EMPR, j.GRUP_EMPR,
+             j.UBIC_SOC, j.COD_PAIS_SOC, j.OTR_PAIS_SOC, j.COD_PAIS_ORI, j.TIP_EMPR, j.PCT_PART_MIXTA, j.GRUP_EMPR,
              j.TIP_SOCIE, j.OTR_SOCIE,
              j.COD_PAIS_EXP, j.OTR_PAIS_EXP, j.COD_DEPT_EXP, j.COD_MPIO_EXP
       FROM GN_TERCE t
@@ -2325,7 +2380,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         rC().query(`SELECT TIP_VINC AS COD_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO, ACT_PRINC,
                           COD_CIIU, OTR_CIIU, CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
                           COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-                          PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC
+                          PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_DOC_SOC AS OTR_TIP_DOC_SOC, NUM_DOC_SOC
                    FROM GN_NATUR WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
         rC().query(`SELECT COD_MONE, ACT_TOTAL, ING_MENS, PAS_TOTAL, EGR_MENS, PATRIMONIO, OTR_ING
                    FROM GN_NATUR_FIN WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`),
@@ -2349,6 +2404,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
           DIR_TERC: row.DIR_TERC,   TEL_TERC: row.TEL_TERC,
           TEL_TERC2: row.TEL_TERC2, DIR_MAIL: row.DIR_MAIL,
           COD_VINC: nRow.COD_VINC,  // se lee desde GN_NATUR
+          IND_DECL: row.IND_DECL,
         },
         naturBasica: {
           NOM_TERC:    row.NOM_TERC,     SEG_NOMB:    row.SEG_NOMB,
@@ -2431,7 +2487,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
     const bfRes  = await rC().query(`
       SELECT TIP_BENE, NOM_BENE, APE_BENE, RAZ_BENE, TIP_DOCU, NUM_DOCU,
              CONVERT(varchar(10),FEC_EXPE,23) AS FEC_EXPE,
-             COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO, DIR_BENE, TEL_BENE, MAIL_BENE
+             COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO, DIR_BENE, TEL_BENE, MAIL_BENE, PCT_PART
       FROM GN_JURID_BF WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     const firmaRes = await rC().query(`
@@ -2461,6 +2517,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         COD_CIIU:  row.COD_CIIU,  OTR_CIIU:  row.OTR_CIIU,   URL_WEB:  row.URL_WEB,
         COD_PAIS_EXP: row.COD_PAIS_EXP, OTR_PAIS_EXP: row.OTR_PAIS_EXP,
         COD_DEPT_EXP: row.COD_DEPT_EXP, COD_MPIO_EXP: row.COD_MPIO_EXP,
+        IND_DECL: row.IND_DECL,
       },
       sociedad: {
         UBIC_SOC:          row.UBIC_SOC,
@@ -2468,7 +2525,7 @@ app.get('/api/cargar-completo/:numIden', async (req, res) => {
         OTR_PAIS_SOC:      row.UBIC_SOC === 'E' ? (row.OTR_PAIS_SOC || '') : '',
         COD_PAIS_ORIG_SOC: row.UBIC_SOC === 'SC' ? (row.COD_PAIS_ORI ? String(row.COD_PAIS_ORI) : null) : null,
         OTR_PAIS_ORIG_SOC: row.UBIC_SOC === 'SC' ? (row.OTR_PAIS_SOC || '') : '',
-        TIP_EMPR: row.TIP_EMPR, GRUP_EMPR: row.GRUP_EMPR,
+        TIP_EMPR: row.TIP_EMPR, PCT_PART_MIXTA: row.PCT_PART_MIXTA, GRUP_EMPR: row.GRUP_EMPR,
         TIP_SOCIE: row.TIP_SOCIE, OTR_SOCIE: row.OTR_SOCIE,
         REL_GRUPO: cumpMain.REL_GRUPO || '',
       },
@@ -2575,8 +2632,10 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('TEL_TERC',  sql.VarChar(30),    toChar(d.TEL_TERC))
       .input('TEL_TERC2', sql.VarChar(40),    toChar(d.TEL_TERC2))
       .input('DIR_MAIL',  sql.VarChar(150),toChar(d.DIR_MAIL))
+      .input('IND_DECL',  sql.VarChar(1),      d.IND_DECL || 'N')
       .query(`UPDATE GN_TERCE SET COD_TPDOC=@COD_TPDOC,DIG_VERI=@DIG_VERI,NOM_COMP=@NOM_COMP,
-              DIR_TERC=@DIR_TERC,TEL_TERC=@TEL_TERC,TEL_TERC2=@TEL_TERC2,DIR_MAIL=@DIR_MAIL
+              DIR_TERC=@DIR_TERC,TEL_TERC=@TEL_TERC,TEL_TERC2=@TEL_TERC2,DIR_MAIL=@DIR_MAIL,
+              IND_DECL=@IND_DECL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     // 2. UPDATE GN_JURID
@@ -2597,6 +2656,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
+      .input('PCT_PART_MIXTA',sql.Decimal(5,2), toDec(d.PCT_PART_MIXTA))
       .input('GRUP_EMPR',     sql.VarChar(1),      toChar(d.GRUP_EMPR))
       .input('CTRL_DECLA',    sql.VarChar(1),      toChar(d.CTRL_DECLA))
       .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
@@ -2613,7 +2673,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
               URL_WEB=@URL_WEB,TIP_SOCIE=@TIP_SOCIE,OTR_SOCIE=@OTR_SOCIE,
               COD_PAIS_ORI=@COD_PAIS_ORI,UBIC_SOC=@UBIC_SOC,
               COD_PAIS_SOC=@COD_PAIS_SOC,OTR_PAIS_SOC=@OTR_PAIS_SOC,
-              TIP_EMPR=@TIP_EMPR,GRUP_EMPR=@GRUP_EMPR,
+              TIP_EMPR=@TIP_EMPR,PCT_PART_MIXTA=@PCT_PART_MIXTA,GRUP_EMPR=@GRUP_EMPR,
               CTRL_DECLA=@CTRL_DECLA,CAL_GRUPO=@CAL_GRUPO,DESC_GRUPO=@DESC_GRUPO,
               COD_PAIS_EXP=@COD_PAIS_EXP,OTR_PAIS_EXP=@OTR_PAIS_EXP,
               COD_DEPT_EXP=@COD_DEPT_EXP,COD_MPIO_EXP=@COD_MPIO_EXP,
@@ -2875,10 +2935,11 @@ app.put('/api/actualizar-completo', async (req, res) => {
         .input('TEL_BENE', sql.VarChar(30),  toChar(bf.TEL_BENE))
         .input('MAIL_BENE',sql.VarChar(100), toChar(bf.MAIL_BENE))
         .input('OTR_TPDOC',sql.VarChar(100), toChar(bf.OTR_TPDOC))
+        .input('PCT_PART', sql.Decimal(5,2), toDec(bf.PCT_PART))
         .query(`INSERT INTO GN_JURID_BF(COD_EMPR,COD_TERC,TIP_BENE,NOM_BENE,APE_BENE,RAZ_BENE,TIP_DOCU,NUM_DOCU,
-                FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE,OTR_TPDOC)
+                FEC_EXPE,COD_PAIS,OTR_PAIS,COD_DEPT,COD_MPIO,DIR_BENE,TEL_BENE,MAIL_BENE,OTR_TPDOC,PCT_PART)
                 VALUES(@COD_EMPR,@COD_TERC,@TIP_BENE,@NOM_BENE,@APE_BENE,@RAZ_BENE,@TIP_DOCU,@NUM_DOCU,
-                @FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE,@OTR_TPDOC)`);
+                @FEC_EXPE,@COD_PAIS,@OTR_PAIS,@COD_DEPT,@COD_MPIO,@DIR_BENE,@TEL_BENE,@MAIL_BENE,@OTR_TPDOC,@PCT_PART)`);
     }
 
     // 14. GN_JURID_FIRMA
@@ -3030,6 +3091,7 @@ app.post('/api/guardar-completo', async (req, res) => {
       .input('COD_PAIS_SOC',  sql.Int,          toInt(d.COD_PAIS_SOC))
       .input('OTR_PAIS_SOC',  sql.VarChar(100), toChar(d.UBIC_SOC === 'SC' ? d.OTR_PAIS_ORIG_SOC : d.OTR_PAIS_SOC))
       .input('TIP_EMPR',      sql.VarChar(10),  toChar(d.TIP_EMPR))
+      .input('PCT_PART_MIXTA',sql.Decimal(5,2), toDec(d.PCT_PART_MIXTA))
       .input('GRUP_EMPR',     sql.VarChar(1),      toChar(d.GRUP_EMPR))
       .input('CTRL_DECLA',    sql.VarChar(1),      toChar(d.CTRL_DECLA))
       .input('CAL_GRUPO',     sql.VarChar(20),  toChar(d.CAL_GRUPO))
@@ -3045,14 +3107,14 @@ app.post('/api/guardar-completo', async (req, res) => {
         INSERT INTO GN_JURID
           (COD_EMPR, COD_TERC, TIP_VINC, OTR_VINC, MAIL_SARL, COD_CIIU, OTR_CIIU,
            URL_WEB, TIP_SOCIE, OTR_SOCIE, COD_PAIS_ORI, UBIC_SOC,
-           COD_PAIS_SOC, OTR_PAIS_SOC, TIP_EMPR, GRUP_EMPR,
+           COD_PAIS_SOC, OTR_PAIS_SOC, TIP_EMPR, PCT_PART_MIXTA, GRUP_EMPR,
            CTRL_DECLA, CAL_GRUPO, DESC_GRUPO,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
            COT_BOLSA, NOM_BOLSA, ID_GMAIL)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @OTR_VINC, @MAIL_SARL, @COD_CIIU, @OTR_CIIU,
            @URL_WEB, @TIP_SOCIE, @OTR_SOCIE, @COD_PAIS_ORI, @UBIC_SOC,
-           @COD_PAIS_SOC, @OTR_PAIS_SOC, @TIP_EMPR, @GRUP_EMPR,
+           @COD_PAIS_SOC, @OTR_PAIS_SOC, @TIP_EMPR, @PCT_PART_MIXTA, @GRUP_EMPR,
            @CTRL_DECLA, @CAL_GRUPO, @DESC_GRUPO,
            @COD_PAIS_EXP, @OTR_PAIS_EXP, @COD_DEPT_EXP, @COD_MPIO_EXP,
            @COT_BOLSA, @NOM_BOLSA, @ID_GMAIL)
@@ -3393,15 +3455,16 @@ app.post('/api/guardar-completo', async (req, res) => {
         .input('TEL_BENE',  sql.VarChar(30),  toChar(bf.TEL_BENE))
         .input('MAIL_BENE', sql.VarChar(100), toChar(bf.MAIL_BENE))
         .input('OTR_TPDOC', sql.VarChar(100), toChar(bf.OTR_TPDOC))
+        .input('PCT_PART',  sql.Decimal(5,2), toDec(bf.PCT_PART))
         .query(`
           INSERT INTO GN_JURID_BF
             (COD_EMPR, COD_TERC, TIP_BENE, NOM_BENE, APE_BENE, RAZ_BENE,
              TIP_DOCU, NUM_DOCU, FEC_EXPE, COD_PAIS, OTR_PAIS, COD_DEPT, COD_MPIO,
-             DIR_BENE, TEL_BENE, MAIL_BENE, OTR_TPDOC)
+             DIR_BENE, TEL_BENE, MAIL_BENE, OTR_TPDOC, PCT_PART)
           VALUES
             (@COD_EMPR, @COD_TERC, @TIP_BENE, @NOM_BENE, @APE_BENE, @RAZ_BENE,
              @TIP_DOCU, @NUM_DOCU, @FEC_EXPE, @COD_PAIS, @OTR_PAIS, @COD_DEPT, @COD_MPIO,
-             @DIR_BENE, @TEL_BENE, @MAIL_BENE, @OTR_TPDOC)
+             @DIR_BENE, @TEL_BENE, @MAIL_BENE, @OTR_TPDOC, @PCT_PART)
         `);
     }
 
@@ -3573,7 +3636,7 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
           (COD_EMPR, COD_TERC, TIP_VINC, MAIL_SARL, COD_NACIO, OTR_NACIO,
            ACT_PRINC, COD_CIIU, OTR_CIIU, FEC_EXPE,
            COD_PAIS_EXP, OTR_PAIS_EXP, COD_DEPT_EXP, COD_MPIO_EXP,
-           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_TIP_DOC_SOC, NUM_DOC_SOC, ID_GMAIL)
+           PART_SOC, RAZ_SOC, TIP_DOC_SOC, OTR_DOC_SOC, NUM_DOC_SOC, ID_GMAIL)
         VALUES
           (@COD_EMPR, @COD_TERC, @TIP_VINC, @MAIL_SARL, @COD_NACIO, @OTR_NACIO,
            @ACT_PRINC, @COD_CIIU, @OTR_CIIU, @FEC_EXPE,
@@ -3834,11 +3897,11 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
           CASE n.PART_SOC WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                               AS [${L('¿Tiene participación en alguna sociedad?','Holds participation in a company?')}],
           ISNULL(n.RAZ_SOC,'')               AS [${L('Razón social de la sociedad','Company name')}],
-          ISNULL(CASE WHEN n.TIP_DOC_SOC IS NULL AND n.OTR_TIP_DOC_SOC IS NOT NULL
+          ISNULL(CASE WHEN n.TIP_DOC_SOC IS NULL AND n.OTR_DOC_SOC IS NOT NULL
                       THEN '${L('Sin asignar / Otro tipo','Unassigned / Other type')}'
                       ELSE ${nomTpdoc('td')} END, '')
                                              AS [${L('Tipo de documento','Document type')}],
-          ISNULL(n.OTR_TIP_DOC_SOC,'')      AS [${L('Otro tipo de documento','Other document type')}],
+          ISNULL(n.OTR_DOC_SOC,'')          AS [${L('Otro tipo de documento','Other document type')}],
           ISNULL(n.NUM_DOC_SOC,'')           AS [${L('Número de documento','Document number')}]
         FROM GN_NATUR n
           LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = n.TIP_DOC_SOC
@@ -4618,10 +4681,12 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
       .input('TEL_TERC',   sql.VarChar(30),    b.TEL_TERC  || null)
       .input('TEL_TERC2',  sql.VarChar(40),    b.TEL_TERC2 || null)
       .input('DIR_MAIL',   sql.VarChar(150),b.DIR_MAIL  || null)
+      .input('IND_DECL',   sql.VarChar(1),   b.IND_DECL  || 'N')
       .query(`UPDATE GN_TERCE
               SET COD_TPDOC=@COD_TPDOC, NOM_TERC=@NOM_TERC, SEG_NOMB=@SEG_NOMB,
                   APE_TERC=@APE_TERC, SEG_APEL=@SEG_APEL, NOM_COMP=@NOM_COMP,
-                  DIR_TERC=@DIR_TERC, TEL_TERC=@TEL_TERC, TEL_TERC2=@TEL_TERC2, DIR_MAIL=@DIR_MAIL
+                  DIR_TERC=@DIR_TERC, TEL_TERC=@TEL_TERC, TEL_TERC2=@TEL_TERC2, DIR_MAIL=@DIR_MAIL,
+                  IND_DECL=@IND_DECL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
     // 2. UPDATE GN_NATUR
@@ -4653,7 +4718,7 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
                   COD_PAIS_EXP=@COD_PAIS_EXP, OTR_PAIS_EXP=@OTR_PAIS_EXP,
                   COD_DEPT_EXP=@COD_DEPT_EXP, COD_MPIO_EXP=@COD_MPIO_EXP,
                   PART_SOC=@PART_SOC, RAZ_SOC=@RAZ_SOC, TIP_DOC_SOC=@TIP_DOC_SOC,
-                  OTR_TIP_DOC_SOC=@OTR_TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC,
+                  OTR_DOC_SOC=@OTR_TIP_DOC_SOC, NUM_DOC_SOC=@NUM_DOC_SOC,
                   ID_GMAIL=@ID_GMAIL
               WHERE COD_EMPR=@COD_EMPR AND COD_TERC=@COD_TERC`);
 
@@ -4754,22 +4819,49 @@ app.post('/api/borrador', async (req, res) => {
     const fecVenc  = new Date(Date.now() + BORRADOR_TTL_MS);
     const ahora    = new Date();
     const idGmail  = await _obtenerIdGmail(() => p.request(), gmailVerif);
+
     if (tokenDraft) {
-      const upd = await p.request()
+      // Reusar el código de edición si ya lo tiene; generar uno nuevo solo
+      // la primera vez que el borrador tenga número de documento.
+      const existing = await p.request()
         .input('TOKEN',    sql.UniqueIdentifier, tokenDraft)
         .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
-        .input('NUM_IDEN', sql.VarChar(20),       numIdenTxt || null)
-        .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
-        .input('FEC_GUAR', sql.DateTime,          ahora)
-        .input('FEC_VENC', sql.DateTime,          fecVenc)
-        .input('ID_GMAIL', sql.Int,               idGmail)
-        .query(`UPDATE GN_BORRADOR SET NUM_IDEN_TXT=@NUM_IDEN, DATOS_JSON=@DATOS,
-                FEC_GUAR=@FEC_GUAR, FEC_VENC=@FEC_VENC, ID_GMAIL=@ID_GMAIL
-                WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
-      if (upd.rowsAffected[0] > 0)
-        return res.json({ success: true, tokenDraft, fechaGuardado: ahora.toISOString() });
+        .query(`SELECT COD_EDIT FROM GN_BORRADOR WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
+
+      if (existing.recordset.length) {
+        let codigoEdicion = null;
+        let hashEdicion   = existing.recordset[0].COD_EDIT;
+        if (!hashEdicion && numIdenTxt) {
+          codigoEdicion = _generarCodigoEdicion();
+          hashEdicion   = _hashCodigo(codigoEdicion);
+        }
+        const upd = await p.request()
+          .input('TOKEN',    sql.UniqueIdentifier, tokenDraft)
+          .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
+          .input('NUM_IDEN', sql.VarChar(20),       numIdenTxt || null)
+          .input('DATOS',    sql.NVarChar(sql.MAX), datosJson)
+          .input('FEC_GUAR', sql.DateTime,          ahora)
+          .input('FEC_VENC', sql.DateTime,          fecVenc)
+          .input('ID_GMAIL', sql.Int,               idGmail)
+          .input('COD_EDIT', sql.VarChar(64),       hashEdicion || null)
+          .query(`UPDATE GN_BORRADOR SET NUM_IDEN_TXT=@NUM_IDEN, DATOS_JSON=@DATOS,
+                  FEC_GUAR=@FEC_GUAR, FEC_VENC=@FEC_VENC, ID_GMAIL=@ID_GMAIL, COD_EDIT=@COD_EDIT
+                  WHERE TOKEN_DRAFT=@TOKEN AND COD_EMPR=@COD_EMPR`);
+        if (upd.rowsAffected[0] > 0)
+          return res.json({
+            success: true, tokenDraft, fechaGuardado: ahora.toISOString(),
+            ...(codigoEdicion ? { codigoEdicion } : {}),
+          });
+      }
     }
+
     const newToken = crypto.randomUUID();
+    let codigoEdicion = null;
+    let hashEdicion   = null;
+    if (numIdenTxt) {
+      codigoEdicion = _generarCodigoEdicion();
+      hashEdicion   = _hashCodigo(codigoEdicion);
+    }
     await p.request()
       .input('TOKEN',    sql.UniqueIdentifier, newToken)
       .input('COD_EMPR', sql.SmallInt,         COD_EMPR)
@@ -4779,10 +4871,14 @@ app.post('/api/borrador', async (req, res) => {
       .input('FEC_GUAR', sql.DateTime,          ahora)
       .input('FEC_VENC', sql.DateTime,          fecVenc)
       .input('ID_GMAIL', sql.Int,               idGmail)
+      .input('COD_EDIT', sql.VarChar(64),       hashEdicion)
       .query(`INSERT INTO GN_BORRADOR
-              (TOKEN_DRAFT,COD_EMPR,TIP_TERC,NUM_IDEN_TXT,DATOS_JSON,FEC_GUAR,FEC_VENC,ID_GMAIL)
-              VALUES (@TOKEN,@COD_EMPR,@TIP_TERC,@NUM_IDEN,@DATOS,@FEC_GUAR,@FEC_VENC,@ID_GMAIL)`);
-    res.json({ success: true, tokenDraft: newToken, fechaGuardado: ahora.toISOString() });
+              (TOKEN_DRAFT,COD_EMPR,TIP_TERC,NUM_IDEN_TXT,DATOS_JSON,FEC_GUAR,FEC_VENC,ID_GMAIL,COD_EDIT)
+              VALUES (@TOKEN,@COD_EMPR,@TIP_TERC,@NUM_IDEN,@DATOS,@FEC_GUAR,@FEC_VENC,@ID_GMAIL,@COD_EDIT)`);
+    res.json({
+      success: true, tokenDraft: newToken, fechaGuardado: ahora.toISOString(),
+      ...(codigoEdicion ? { codigoEdicion } : {}),
+    });
   } catch (err) {
     _responderError(res, err, req);
   }

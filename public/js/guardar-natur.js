@@ -34,12 +34,15 @@ function validarTodoNatural() {
   const db = formData.basica;
 
   if (!db.COD_VINC)   errores.push('Sección 1: Tipo de vinculación requerido');
+  if (document.getElementById('row-vinc-otro')?.style.display !== 'none' && !db.OTR_VINC)
+    errores.push('Sección 1: Especifique el tipo de vinculación');
   if (!db.COD_TPDOC)  errores.push('Sección 1: Tipo de documento requerido');
   if (db.COD_TPDOC === 'OTR_TPDOC' && !db.OTR_TPDOC) errores.push('Sección 1: Especifique el tipo de documento');
   if (!db.NUM_IDEN)   errores.push('Sección 1: Número de documento requerido');
   if (!n.NOM_TERC)    errores.push('Sección 1: Primer nombre requerido');
   if (!n.APE_TERC)    errores.push('Sección 1: Primer apellido requerido');
   if (!n.COD_PAIS_EXP) errores.push('Sección 1: País de expedición requerido');
+  if (n.COD_PAIS_EXP === 'OTRO' && !n.OTR_PAIS_EXP) errores.push('Sección 1: Especifique el país de expedición');
   if (!n.COD_DEPT_EXP) errores.push('Sección 1: Departamento de expedición requerido');
   if (!n.COD_MPIO_EXP) errores.push('Sección 1: Ciudad de expedición requerida');
   if (!db.DIR_TERC)   errores.push('Sección 1: Dirección requerida');
@@ -48,10 +51,14 @@ function validarTodoNatural() {
     errores.push('Sección 1: Email corporativo inválido o vacío');
   if (!n.FEC_EXPE)    errores.push('Sección 1: Fecha de expedición requerida');
   if (!n.COD_NACIO)   errores.push('Sección 1: Nacionalidad requerida');
+  if (n.COD_NACIO === 'OTRO' && !n.OTR_NACIO) errores.push('Sección 1: Especifique la nacionalidad');
   if (!n.COD_CIIU)    errores.push('Sección 1: Actividad CIIU requerida');
+  if (n.COD_CIIU === 'OTRO' && !n.OTR_CIIU) errores.push('Sección 1: Especifique la actividad CIIU');
 
   // ── Sección 9N: Participación en sociedades ───────────────────────────────
   const bfn = formDataNatur.beneficiariosN || {};
+  if (!bfn.PART_SOC)
+    errores.push('Sección 9: Indique si tiene participación en alguna sociedad');
   if (bfn.PART_SOC === 'S') {
     if (!bfn.RAZ_SOC     || !String(bfn.RAZ_SOC).trim())     errores.push('Sección 9: Razón social de la sociedad requerida');
     if (!bfn.TIP_DOC_SOC)                                     errores.push('Sección 9: Tipo de documento de la sociedad requerido');
@@ -71,12 +78,34 @@ function validarTodoNatural() {
   // ── Sección 10: Bancaria ──────────────────────────────────────────────────
   if (!formData.bancaria.length || !formData.bancaria[0].COD_BANCO)
     errores.push('Información bancaria: Registre al menos una cuenta bancaria');
+  formData.bancaria.forEach((b, i) => {
+    if (!b.COD_BANCO) errores.push(`Información bancaria: Cuenta ${i + 1} sin entidad bancaria`);
+    if (document.getElementById(`field-banco_${b._id}_banco_otro`)?.style.display !== 'none' && !b.OTR_BANCO)
+      errores.push(`Información bancaria: Cuenta ${i + 1}, especifique la entidad bancaria`);
+    if (!b.TIP_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin tipo de cuenta`);
+    if (document.getElementById(`field-banco_${b._id}_tipcuen_otro`)?.style.display !== 'none' && !b.OTR_CUEN)
+      errores.push(`Información bancaria: Cuenta ${i + 1}, especifique el tipo de cuenta`);
+    if (!b.NUM_CUEN)  errores.push(`Información bancaria: Cuenta ${i + 1} sin número de cuenta`);
+    if (b.CUEN_EXTR === 'S') {
+      if (!b.cuentasExt || b.cuentasExt.length === 0)
+        errores.push(`Información bancaria: Cuenta ${i + 1} debe registrar al menos una cuenta extranjera`);
+      (b.cuentasExt || []).forEach((ext, j) => {
+        if (!ext.COD_PAIS_EXT) errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin país`);
+        if (ext.COD_PAIS_EXT === 'OTRO' && !ext.OTR_PAIS_EXT)
+          errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1}, especifique el país`);
+        if (!ext.NOM_ENT_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin entidad`);
+        if (!ext.TIP_CUE_EXT)  errores.push(`Información bancaria: Cuenta ${i + 1}, cuenta extranjera ${j + 1} sin tipo de cuenta`);
+      });
+    }
+  });
 
   // ── Sección 11: PEP + Actividades ─────────────────────────────────────────
   if (!formData.pep.MAN_RPUB)
     errores.push('PEP: Indique si maneja recursos públicos');
   if (!formData.pep.CAR_PUBL)
     errores.push('PEP: Indique si ejerció cargo público');
+  if (!formData.actividades.OPER_VA)
+    errores.push('Activos virtuales: Debe indicar si opera con activos virtuales');
   if (!document.getElementById('decl_juramento')?.checked)
     errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 
@@ -117,6 +146,7 @@ function _construirPayloadNatural() {
     COD_CIIU:     n.COD_CIIU,
     FEC_EXPE:     n.FEC_EXPE,
     COD_PAIS_EXP: n.COD_PAIS_EXP,
+    OTR_PAIS_EXP: n.OTR_PAIS_EXP,
     COD_DEPT_EXP: n.COD_DEPT_EXP,
     COD_MPIO_EXP: n.COD_MPIO_EXP,
     // ── Participación en sociedades (sección 9N) ────────────────────────────

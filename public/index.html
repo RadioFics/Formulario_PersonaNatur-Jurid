@@ -35,7 +35,7 @@
     }
 
     .landing-wrapper {
-      max-width: 700px;
+      max-width: 980px;
       margin: 60px auto;
       display: flex;
       flex-direction: column;
@@ -45,18 +45,8 @@
     }
     .landing-header { text-align: center; }
     .landing-header h1 { font-size: 1.6rem; font-weight: 700; color: var(--color-primary); }
-    .landing-header p { margin-top: 8px; color: #616161; font-size: 0.9rem; }
+    .landing-header p { margin-top: 8px; color: #616161; font-size: 0.9rem; max-width: 640px; margin-left: auto; margin-right: auto; }
 
-    .terms-box {
-      width: 100%;
-      background: #fffdf4;
-      border: 1px solid #e8d08a;
-      border-radius: 10px;
-      padding: 26px 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
     .terms-policy-preview {
       max-height: 88px;
       overflow-y: auto;
@@ -64,27 +54,28 @@
       color: #5a5a5a;
       line-height: 1.55;
       padding: 8px 12px;
-      background: #fffbee;
-      border: 1px solid #edd99a;
+      background: #f7f7f7;
+      border: 1px solid #e0e0e0;
       border-radius: 6px;
       scrollbar-width: thin;
-      scrollbar-color: #d4b84a #fffbee;
+      scrollbar-color: #bdbdbd #f7f7f7;
+      text-align: left;
     }
     .terms-policy-preview p { margin: 0 0 6px; }
     .terms-policy-preview p:last-child { margin-bottom: 0; }
-    .terms-box label {
+    .landing-card-terms label {
       display: flex; align-items: flex-start; gap: 10px;
-      font-size: 0.88rem; color: #424242; cursor: pointer;
+      font-size: 0.85rem; color: #424242; cursor: pointer; text-align: left;
     }
-    .terms-box input[type="checkbox"] {
+    .landing-card-terms input[type="checkbox"] {
       flex-shrink: 0; margin-top: 2px; width: 17px; height: 17px;
       accent-color: var(--color-primary); cursor: pointer;
     }
-    .terms-box a { color: var(--color-primary); font-weight: 600; }
-    .terms-badge { display: none; align-items: center; gap: 6px; font-size: 0.82rem; color: #2e7d32; font-weight: 600; }
+    .landing-card-terms a { color: var(--color-primary); font-weight: 600; }
+    .terms-badge { display: none; align-items: center; gap: 6px; font-size: 0.8rem; color: #2e7d32; font-weight: 600; text-align: left; }
     .terms-badge.visible { display: flex; }
 
-    .landing-cards { display: flex; gap: 24px; width: 100%; flex-wrap: wrap; justify-content: center; }
+    .landing-cards { display: flex; gap: 24px; width: 100%; flex-wrap: wrap; justify-content: center; align-items: stretch; }
     .landing-card {
       flex: 1 1 260px; max-width: 300px;
       border: 1px solid #C2E4EF; border-radius: 10px; padding: 32px 24px;
@@ -93,6 +84,18 @@
       text-align: center; cursor: pointer; text-decoration: none; color: inherit;
       transition: transform .15s, box-shadow .15s, border-color .15s;
     }
+    .landing-card-terms {
+      width: 100%;
+      border: 1px solid #C2E4EF; border-radius: 10px; padding: 22px 28px;
+      background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .landing-card-terms-header { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .landing-card-terms-header .landing-card-icon { font-size: 1.7rem; }
+    .landing-card-terms-header h2 { margin: 0; }
+    .landing-card-terms-body { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+    .landing-card-terms-body .terms-policy-preview { flex: 1 1 340px; max-height: 96px; }
+    .landing-card-terms-accept { flex: 1 1 300px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
     .landing-card.locked { opacity: .55; pointer-events: none; filter: grayscale(.4); }
     .landing-card.unlocked { opacity: 1; pointer-events: auto; filter: none; }
     .landing-card.unlocked:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.13); border-color: var(--color-accent); }
@@ -191,6 +194,23 @@
     .gmail-err      { font-size: 0.81rem; color: #c62828; min-height: 18px; margin: 4px 0 0; }
     .gmail-otp-hint { font-size: 0.84rem; color: #424242; margin: 0 0 12px; line-height: 1.5; }
 
+    /* ── Modal selector Persona Natural / Jurídica ── */
+    .tipo-persona-options { display: flex; flex-direction: column; gap: 12px; }
+    .tipo-persona-opt {
+      border: 1.5px solid var(--color-border, #e0e0e0); border-radius: 8px;
+      padding: 14px 16px; cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .tipo-persona-opt:hover { border-color: var(--color-accent); background: #f5fbfc; }
+    .tipo-persona-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.95rem; font-weight: 700; color: var(--color-primary); }
+    .ic-info-idx {
+      width: 18px; height: 18px; border-radius: 50%; background: #e0e0e0; color: #616161;
+      font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .ic-info-idx:hover { background: var(--color-accent); color: #fff; }
+    .tipo-persona-desc { display: none; margin: 10px 0 0; font-size: 0.8rem; color: #616161; line-height: 1.55; }
+    .tipo-persona-desc.visible { display: block; }
+
     /* ── Scroll-gate del modal de política ── */
     .pol-scroll-hint { font-size: 0.78rem; color: #757575; text-align: center; margin-top: 4px; display: none; }
     .pol-scroll-hint.visible { display: block; }
@@ -242,25 +262,34 @@
   <div id="main-content" style="display:none">
 
   <!-- T&C -->
-  <div class="terms-box">
-    <div class="terms-policy-preview">
-      <p><strong data-i18n="idx_tc_title">Política de tratamiento de datos personales:</strong><span data-i18n="idx_tc_para1"> Con el fin de dar cumplimiento a las disposiciones legales y regulatorias aplicables en materia de prevención del lavado de activos, la financiación del terrorismo, la financiación de la proliferación de armas de destrucción masiva (LA/FT/FPADM), la corrupción y el soborno transnacional (C/ST), COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA ha desarrollado el presente formulario como instrumento para el conocimiento, identificación y debida diligencia de sus contrapartes, en el marco de su Sistema de Autocontrol y Gestión del Riesgo Integral de LA/FT/FPADM (SAGRILAFT) y su Programa de Transparencia y Ética Empresarial (PTEE).</span></p>
-  
-    <label>
-      <input type="checkbox" id="chk-terms" onclick="onTermsClick(event)" />
-      <span>
-        <span data-i18n="idx_terms_read">He leído y acepto la</span>
-        <a href="#" onclick="abrirModalPolitica(event)" data-i18n="idx_terms_policy_link">Política de tratamiento de datos personales</a>
-        <span data-i18n="idx_terms_authorize">y autorizo el uso de mis datos conforme a los términos indicados.</span>
-      </span>
-    </label>
-    <div class="terms-badge" id="terms-badge">
-      <span data-i18n="idx_terms_badge">✅ Términos aceptados — puede continuar</span>
+  <div class="landing-card-terms" id="card-terms">
+    <div class="landing-card-terms-header">
+      <span class="landing-card-icon">📄</span>
+      <h2 data-i18n="idx_modal_pol_title">Política de tratamiento de datos</h2>
+    </div>
+    <div class="landing-card-terms-body">
+      <div class="terms-policy-preview">
+        <p><strong data-i18n="idx_tc_title">Política de tratamiento de datos personales:</strong><span data-i18n="idx_tc_para1"> Con el fin de dar cumplimiento a las disposiciones legales y regulatorias aplicables en materia de prevención del lavado de activos, la financiación del terrorismo, la financiación de la proliferación de armas de destrucción masiva (LA/FT/FPADM), la corrupción y el soborno transnacional (C/ST), COLLECTIVE MINING LIMITED SUCURSAL COLOMBIA ha desarrollado el presente formulario como instrumento para el conocimiento, identificación y debida diligencia de sus contrapartes, en el marco de su Sistema de Autocontrol y Gestión del Riesgo Integral de LA/FT/FPADM (SAGRILAFT) y su Programa de Transparencia y Ética Empresarial (PTEE).</span></p>
+      </div>
+      <div class="landing-card-terms-accept">
+        <label>
+          <input type="checkbox" id="chk-terms" onclick="onTermsClick(event)" />
+          <span>
+            <span data-i18n="idx_terms_read">He leído y acepto la</span>
+            <a href="#" onclick="abrirModalPolitica(event)" data-i18n="idx_terms_policy_link">Política de tratamiento de datos personales</a>
+            <span data-i18n="idx_terms_authorize">y autorizo el uso de mis datos conforme a los términos indicados.</span>
+          </span>
+        </label>
+        <div class="terms-badge" id="terms-badge">
+          <span data-i18n="idx_terms_badge">✅ Términos aceptados — puede continuar</span>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Tarjetas -->
   <div class="landing-cards">
+
     <a class="landing-card locked" id="card-crear" href="formulario.html"
        onclick="return onCardClick(event, 'formulario.html')">
       <div class="landing-card-icon">📋</div>
@@ -313,6 +342,33 @@
       </button>
     </div>
     <p class="pol-scroll-hint visible" id="pol-scroll-hint">&#8595; Desplácese para leer la política completa</p>
+  </div>
+</div>
+
+<!-- Modal Selector Tipo de Persona -->
+<div class="modal-overlay" id="modal-tipo-persona">
+  <div class="modal-card">
+    <div class="modal-card-header">
+      <h3 data-i18n="idx_modal_tipo_title">¿Qué tipo de registro va a crear?</h3>
+      <button class="modal-close-btn" onclick="cerrarModalTipoPersona()" title="Cerrar">✕</button>
+    </div>
+    <p data-i18n="idx_modal_tipo_body">Seleccione la naturaleza del tercero para iniciar el formulario con esa opción predeterminada. Podrá cambiarla dentro del formulario en cualquier momento.</p>
+    <div class="tipo-persona-options">
+      <div class="tipo-persona-opt" onclick="irAFormulario('J')">
+        <div class="tipo-persona-head">
+          <span data-i18n="sec1_juridica">Persona jurídica</span>
+          <span class="ic-info-idx" onclick="toggleTipoInfo('J', event)" title="Info">i</span>
+        </div>
+        <p class="tipo-persona-desc" id="tipo-desc-J" data-i18n="sec1_tip_juridica">Empresa, sociedad u otra entidad legalmente constituida que, de conformidad con la ley, posee personalidad jurídica propia e independiente de las personas naturales que la conforman, con capacidad para adquirir derechos, contraer obligaciones y actuar por medio de sus representantes legales. En el marco del SAGRILAFT, comprende cualquier persona jurídica que mantenga o pretenda establecer una relación comercial, contractual o de cualquier otra naturaleza con la compañía.</p>
+      </div>
+      <div class="tipo-persona-opt" onclick="irAFormulario('N')">
+        <div class="tipo-persona-head">
+          <span data-i18n="sec1_natural">Persona natural</span>
+          <span class="ic-info-idx" onclick="toggleTipoInfo('N', event)" title="Info">i</span>
+        </div>
+        <p class="tipo-persona-desc" id="tipo-desc-N" data-i18n="sec1_tip_natural">Individuo de la especie humana que, de conformidad con la ley, tiene capacidad para adquirir derechos y contraer obligaciones, y que puede desarrollar actividades económicas a título propio. En el marco del SAGRILAFT, corresponde a cualquier persona natural que mantenga o pretenda establecer una relación comercial, contractual, laboral o de cualquier otra naturaleza con la compañía.</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -506,17 +562,36 @@
   }
 
   function onCardClick(event, url) {
+    if (event) event.preventDefault();
     if (sessionStorage.getItem(TERMS_KEY) !== '1') {
-      event.preventDefault(); mostrarAvisoTerminos(); return false;
+      mostrarAvisoTerminos(); return false;
     }
-    return true;
+    abrirModalTipoPersona();
+    return false;
   }
+
+  /* ── Modal selector Persona Natural / Jurídica ── */
+  function abrirModalTipoPersona() {
+    document.getElementById('modal-tipo-persona').classList.add('show');
+  }
+  function cerrarModalTipoPersona() {
+    document.getElementById('modal-tipo-persona').classList.remove('show');
+  }
+  function toggleTipoInfo(tipo, event) {
+    if (event) event.stopPropagation();
+    const el = document.getElementById('tipo-desc-' + tipo);
+    if (el) el.classList.toggle('visible');
+  }
+  function irAFormulario(tipo) {
+    window.location.href = 'formulario.html?tipo=' + tipo;
+  }
+  document.getElementById('modal-tipo-persona').addEventListener('click', function(e) { if (e.target === this) cerrarModalTipoPersona(); });
   function onActualizarClick() {
     if (sessionStorage.getItem(TERMS_KEY) !== '1') { mostrarAvisoTerminos(); return; }
     abrirModalActualizar();
   }
   function mostrarAvisoTerminos() {
-    const box = document.querySelector('.terms-box');
+    const box = document.querySelector('.landing-card-terms');
     box.style.outline = '2px solid #e53935';
     setTimeout(() => { box.style.outline = ''; }, 1800);
     document.getElementById('chk-terms').focus();
@@ -598,10 +673,11 @@
           </div>`;
           btnIr.disabled = true;
         } else {
+          const estadoLabel = data.esBorrador ? 'Borrador en progreso' : 'Registro encontrado ✔';
           resEl.innerHTML = `<div class="result-found">
             <strong>${data.NOM_COMP || '—'}</strong>
             Documento: ${data.NUM_IDEN} &nbsp;|&nbsp; Tipo doc.: ${data.TIP_TPDOC || '—'}<br>
-            <span style="font-size:.8rem;color:#20A7C9">${tipLabel} — Registro encontrado ✔</span>
+            <span style="font-size:.8rem;color:#20A7C9">${tipLabel} — ${estadoLabel}</span>
           </div>`;
           btnIr.disabled = false;
         }

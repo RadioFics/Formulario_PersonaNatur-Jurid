@@ -557,6 +557,12 @@ function validarSeccionCumplimiento() {
           req.forEach(([fid, v]) => {
             if (!v || !String(v).trim()) { mostrarError(fid); ok = false; }
           });
+          if (o.TIP_DOCU === 'OTR_TPDOC' && !o.OTR_TPDOC) {
+            mostrarError(`field-cump_${o._id}_tipdoc`); ok = false;
+          }
+          if (esOtro && !o.OTR_PAIS) {
+            mostrarError(`field-cump_${o._id}_pais_otro`); ok = false;
+          }
           if (!o.MAIL_RESP || !esEmailValido(o.MAIL_RESP)) {
             mostrarError(`field-cump_${o._id}_mail`); ok = false;
           }

@@ -398,6 +398,7 @@ function _validarMiembroJD(m) {
   let ok = true;
   req.forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
   if (m.TIP_DOCU === 'OTR_TPDOC' && !m.OTR_TPDOC) { mostrarError(`field-jd_${id}_tipdoc`); ok = false; }
+  if (m.COD_PAIS === 'OTRO' && !m.OTR_PAIS) { mostrarError(`field-jd_${id}_pais_otro`); ok = false; }
   if (m.COD_PAIS !== 'OTRO') {
     [
       [`field-jd_${id}_dept`, m.COD_DEPT],

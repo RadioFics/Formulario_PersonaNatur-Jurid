@@ -54,7 +54,30 @@ function actualizarTituloRF(id) {
   if (el) el.innerHTML = `<span data-i18n="card_revisor">${typeof t==='function'?t('card_revisor'):'Revisor'}</span> ${pos} (<span data-i18n="${rol==='S'?'role_suplente':'role_principal'}">${typeof t==='function'?(rol==='S'?t('role_suplente'):t('role_principal')):rol}</span>)${nombre ? ' — ' + nombre : ''}`;
 }
 function _rfRenumerarTodos() {
-  formData.revisores.revisores.forEach(r => actualizarTituloRF(r._id));
+  formData.revisores.revisores.forEach(r => { actualizarTituloRF(r._id); _rfActualizarVisibilidadFirma(r._id); });
+}
+
+/**
+ * "¿Designado por firma auditora?" solo aplica al primer revisor. Muestra/oculta
+ * esa sección según la posición actual (que puede cambiar al agregar/eliminar
+ * revisores) y, al ocultarla, resetea la respuesta para que un revisor que deja
+ * de ser el primero no arrastre una designación que ya no debería tener.
+ */
+function _rfActualizarVisibilidadFirma(id) {
+  const seccion = document.getElementById(`rf_${id}_firma_seccion`);
+  if (!seccion) return;
+  const esPrimero = _rfPos(id) === 0;
+  seccion.style.display = esPrimero ? '' : 'none';
+  if (esPrimero) return;
+
+  const r = _rfGet(id);
+  if (r && r.REVI_FIRMA === 'S') {
+    r.REVI_FIRMA = 'N'; r.RAZ_FIRMA = ''; r.TIP_DOCU_FIR = null; r.OTR_TPDOC_FIR = null; r.NUM_DOCU_FIR = '';
+    const wrap = document.getElementById(`rf_${id}_firma_wrap`);
+    if (wrap) { wrap.style.display = 'none'; wrap.style.opacity = '0'; wrap.style.maxHeight = '0'; }
+    const noRadio = document.querySelector(`input[name="rf_firma_${id}"][value="N"]`);
+    if (noRadio) noRadio.checked = true;
+  }
 }
 
 /* ── Colapsar/expandir ──────────────────────────────────────────────────────── */
@@ -288,46 +311,48 @@ function _rfMiembroHTML(r) {
         </div>
       </div>
 
-      <!-- Firma auditora -->
-      <hr class="rl-divider">
-      <div class="field field-radio">
-        <label><span data-i18n="rf_firm_asked">${typeof t==='function'?t('rf_firm_asked'):'¿El revisor está designado por una firma auditora?'}</span> <span class="req">*</span></label>
-        <div class="radio-group">
-          <label class="radio-option">
-            <input type="radio" name="rf_firma_${id}" value="S"
-                   onchange="onTieneFirmaChange(${id},'S')"> <span><span data-i18n="yes">${typeof t==='function'?t('yes'):'Sí'}</span></span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" name="rf_firma_${id}" value="N" checked
-                   onchange="onTieneFirmaChange(${id},'N')"> <span><span data-i18n="no">${typeof t==='function'?t('no'):'No'}</span></span>
-          </label>
+      <!-- Firma auditora — solo visible para el primer revisor -->
+      <div id="rf_${id}_firma_seccion" style="${_rfPos(id) === 0 ? '' : 'display:none'}">
+        <hr class="rl-divider">
+        <div class="field field-radio">
+          <label><span data-i18n="rf_firm_asked">${typeof t==='function'?t('rf_firm_asked'):'¿El revisor está designado por una firma auditora?'}</span> <span class="req">*</span></label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="rf_firma_${id}" value="S"
+                     onchange="onTieneFirmaChange(${id},'S')"> <span><span data-i18n="yes">${typeof t==='function'?t('yes'):'Sí'}</span></span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="rf_firma_${id}" value="N" checked
+                     onchange="onTieneFirmaChange(${id},'N')"> <span><span data-i18n="no">${typeof t==='function'?t('no'):'No'}</span></span>
+            </label>
+          </div>
         </div>
-      </div>
-      <div id="rf_${id}_firma_wrap" class="firma-wrap"
-           style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s,max-height .3s">
-        <div class="grid-4">
-          <div class="field col-full" id="field-rf_${id}_firma_raz">
-            <label><span data-i18n="rf_firm_raz">${typeof t==='function'?t('rf_firm_raz'):'Razón social de la firma'}</span> <span class="req">*</span></label>
-            <input type="text" id="rf_${id}_firma_raz" maxlength="255"
-                   oninput="actualizarRF(${id},'RAZ_FIRMA',this.value);limpiarError('field-rf_${id}_firma_raz')" />
-            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
-          </div>
-          <div class="field" id="field-rf_${id}_firma_tipdoc">
-            <label><span data-i18n="rf_firm_tipdoc">${typeof t==='function'?t('rf_firm_tipdoc'):'Tipo de documento de la firma'}</span><span class="req">*</span></label>
-            <select id="rf_${id}_firma_tipdoc"
-                    onchange="onRFFirmaTipdocChange(${id},this.value);actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
-              ${_rfFirmaTdOpts()}
-            </select>
-            <input type="text" id="rf_${id}_firma_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
-                   data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
-                   oninput="actualizarRF(${id},'OTR_TPDOC_FIR',this.value)" />
-            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
-          </div>
-          <div class="field" id="field-rf_${id}_firma_numdoc">
-            <label><span data-i18n="rf_firm_numdoc">${typeof t==='function'?t('rf_firm_numdoc'):'Número de documento de la firma'}</span><span class="req">*</span></label>
-            <input type="text" id="rf_${id}_firma_numdoc" maxlength="20" inputmode="numeric"
-                   oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
-            <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+        <div id="rf_${id}_firma_wrap" class="firma-wrap"
+             style="display:none; opacity:0; max-height:0; overflow:hidden; transition:opacity .2s,max-height .3s">
+          <div class="grid-4">
+            <div class="field col-full" id="field-rf_${id}_firma_raz">
+              <label><span data-i18n="rf_firm_raz">${typeof t==='function'?t('rf_firm_raz'):'Razón social de la firma'}</span> <span class="req">*</span></label>
+              <input type="text" id="rf_${id}_firma_raz" maxlength="255"
+                     oninput="actualizarRF(${id},'RAZ_FIRMA',this.value);limpiarError('field-rf_${id}_firma_raz')" />
+              <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+            </div>
+            <div class="field" id="field-rf_${id}_firma_tipdoc">
+              <label><span data-i18n="rf_firm_tipdoc">${typeof t==='function'?t('rf_firm_tipdoc'):'Tipo de documento de la firma'}</span><span class="req">*</span></label>
+              <select id="rf_${id}_firma_tipdoc"
+                      onchange="onRFFirmaTipdocChange(${id},this.value);actualizarRF(${id},'TIP_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_tipdoc')">
+                ${_rfFirmaTdOpts()}
+              </select>
+              <input type="text" id="rf_${id}_firma_tipdoc_otro" class="otro-inp" maxlength="100" style="display:none"
+                     data-i18n-ph="field_specify_doc" placeholder="${typeof t==='function'?t('field_specify_doc'):'Especifique el tipo de documento'}"
+                     oninput="actualizarRF(${id},'OTR_TPDOC_FIR',this.value)" />
+              <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+            </div>
+            <div class="field" id="field-rf_${id}_firma_numdoc">
+              <label><span data-i18n="rf_firm_numdoc">${typeof t==='function'?t('rf_firm_numdoc'):'Número de documento de la firma'}</span><span class="req">*</span></label>
+              <input type="text" id="rf_${id}_firma_numdoc" maxlength="20" inputmode="numeric"
+                     oninput="this.value=this.value.replace(/\D/g,'');actualizarRF(${id},'NUM_DOCU_FIR',this.value);limpiarError('field-rf_${id}_firma_numdoc')" />
+              <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -459,6 +484,7 @@ async function renderListaRF() {
     const el = _crearGrupoRFEl(r);
     list.appendChild(el);
     _hydrateRFFields(r, el);
+    _rfActualizarVisibilidadFirma(r._id);
   }
   _rfSyncEliminar();
 }
@@ -586,6 +612,7 @@ function _validarMiembroRF(r) {
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
 
   if (r.TIP_DOCU === 'OTR_TPDOC' && !r.OTR_TPDOC) { mostrarError(`field-rf_${id}_tipdoc`); ok = false; }
+  if (r.COD_PAIS === 'OTRO' && !r.OTR_PAIS) { mostrarError(`field-rf_${id}_pais_otro`); ok = false; }
 
   if (r.COD_PAIS !== 'OTRO') {
     [

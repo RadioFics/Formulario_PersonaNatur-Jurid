@@ -26,6 +26,7 @@ function _bfCampos() {
     TIP_DOCU: null, NUM_DOCU: '', FEC_EXPE: '',
     COD_PAIS: null, OTR_PAIS: '', COD_DEPT: null, COD_MPIO: null,
     DIR_BENE: '', TEL_BENE: '', MAIL_BENE: '',
+    PCT_PART: '',
   };
 }
 function _bfNuevo()  { return { _id: _bfId++, ..._bfCampos() }; }
@@ -128,8 +129,8 @@ function _crearGrupoBFEl(beneficiario) {
     </div>
     <div class="grupo-body" id="bf_body_${id}">
 
-      <!-- Nombres, Apellidos, Fecha expedición -->
-      <div class="grid-3">
+      <!-- Nombres, Apellidos, Fecha expedición, % participación -->
+      <div class="grid-4">
         <div class="field" id="field-bf_${id}_nom">
           <label><span data-i18n="field_nombres">${typeof t==='function'?t('field_nombres'):'Nombres'}</span> <span class="req">*</span></label>
           <input type="text" id="bf_${id}_nom" maxlength="100"
@@ -149,6 +150,12 @@ function _crearGrupoBFEl(beneficiario) {
           <input type="date" id="bf_${id}_fec"
                  onchange="actualizarBF(${id},'FEC_EXPE',this.value);limpiarError('field-bf_${id}_fec')" />
           <span class="error-msg" data-i18n="required_field">${typeof t==='function'?t('required_field'):'Campo requerido'}</span>
+        </div>
+        <div class="field" id="field-bf_${id}_pct">
+          <label><span data-i18n="field_pct_part">${typeof t==='function'?t('field_pct_part'):'% Participación'}</span></label>
+          <input type="number" id="bf_${id}_pct" min="0.01" max="100" step="0.01"
+                 placeholder="Ej: 25.50"
+                 oninput="actualizarBF(${id},'PCT_PART',this.value)" />
         </div>
       </div>
 
@@ -246,6 +253,7 @@ function _hydrateBFFields(beneficiario, el) {
   }
   set(`#bf_${id}_numdoc`, beneficiario.NUM_DOCU);
   set(`#bf_${id}_fec`,    beneficiario.FEC_EXPE);
+  set(`#bf_${id}_pct`,    beneficiario.PCT_PART);
   set(`#bf_${id}_tel`,    beneficiario.TEL_BENE);
   set(`#bf_${id}_mail`,   beneficiario.MAIL_BENE);
   set(`#bf_${id}_dir`,    beneficiario.DIR_BENE);
@@ -439,6 +447,7 @@ function _validarGrupoBF(id) {
   ].forEach(([fid, v]) => { if (!v || !String(v).trim()) { mostrarError(fid); ok = false; } });
 
   if (b.TIP_DOCU === 'OTR_TPDOC' && !b.OTR_TPDOC) { mostrarError(`field-bf_${id}_tipdoc`); ok = false; }
+  if ((b.COD_PAIS === 'OTRO' || String(b.COD_PAIS) === '52') && !b.OTR_PAIS) { mostrarError(`field-bf_${id}_pais_otro`); ok = false; }
 
   if (b.COD_PAIS !== 'OTRO' && String(b.COD_PAIS) !== '52') {
     [

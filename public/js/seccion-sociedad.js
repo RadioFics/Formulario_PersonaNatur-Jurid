@@ -153,6 +153,21 @@ function onSocPaisChange(codPais) {
   }
 }
 
+/* ── % de participación — visible solo cuando Tipo de empresa = Mixta ───────── */
+
+function onTipoEmpresaChange(valor) {
+  const field = document.getElementById('field-soc_pct_part');
+  if (!field) return;
+  if (valor === 'MIXTA') {
+    field.style.display = '';
+  } else {
+    field.style.display = 'none';
+    actualizarSociedad('PCT_PART_MIXTA', null);
+    const inp = document.getElementById('soc_pct_part');
+    if (inp) inp.value = '';
+  }
+}
+
 /* ── Cascada grupo empresarial ──────────────────────────────────────────────── */
 
 function onGrupEmprChange(valor) {
@@ -267,18 +282,22 @@ function validarYContinuarSociedad() {
 /** Resetea todos los campos de la sección al estado inicial. */
 function limpiarSeccionSociedad() {
   formData.sociedad = {
-    UBIC_SOC: 'N', COD_PAIS_SOC: null, OTR_PAIS_SOC: '',
+    UBIC_SOC: null, COD_PAIS_SOC: null, OTR_PAIS_SOC: '',
     COD_PAIS_ORIG_SOC: null, OTR_PAIS_ORIG_SOC: '',
-    TIP_EMPR: null, GRUP_EMPR: null,
+    TIP_EMPR: null, GRUP_EMPR: null, PCT_PART_MIXTA: null,
     CTRL_DECLA: null, CAL_GRUPO: null, DESC_GRUPO: '',
   };
 
-  document.getElementById('soc_ubic').value      = 'N';
+  document.getElementById('soc_ubic').value      = '';
   document.getElementById('soc_tip_empr').value  = '';
   document.getElementById('soc_grup_empr').value = '';
   document.getElementById('soc_pais').value      = '';
   const inp = document.getElementById('soc_pais_otro_txt');
   if (inp) inp.value = '';
+  const pctInp = document.getElementById('soc_pct_part');
+  if (pctInp) pctInp.value = '';
+  const pctField = document.getElementById('field-soc_pct_part');
+  if (pctField) pctField.style.display = 'none';
 
   // Ocultar / limpiar cascada grupo empresarial
   document.querySelectorAll('input[name="soc_ctrl_decla"]').forEach(r => { r.checked = false; });
