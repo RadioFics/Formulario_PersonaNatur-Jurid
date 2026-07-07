@@ -48,12 +48,12 @@
     .landing-header p { margin-top: 8px; color: #616161; font-size: 0.9rem; max-width: 640px; margin-left: auto; margin-right: auto; }
 
     .terms-policy-preview {
-      max-height: 88px;
+      max-height: 78px;
       overflow-y: auto;
-      font-size: 0.775rem;
+      font-size: 0.76rem;
       color: #5a5a5a;
       line-height: 1.55;
-      padding: 8px 12px;
+      padding: 12px 14px;
       background: #f7f7f7;
       border: 1px solid #e0e0e0;
       border-radius: 6px;
@@ -65,14 +65,14 @@
     .terms-policy-preview p:last-child { margin-bottom: 0; }
     .landing-card-terms label {
       display: flex; align-items: flex-start; gap: 10px;
-      font-size: 0.85rem; color: #424242; cursor: pointer; text-align: left;
+      font-size: 0.82rem; color: #424242; cursor: pointer; text-align: left;
     }
     .landing-card-terms input[type="checkbox"] {
-      flex-shrink: 0; margin-top: 2px; width: 17px; height: 17px;
+      flex-shrink: 0; margin-top: 2px; width: 16px; height: 16px;
       accent-color: var(--color-primary); cursor: pointer;
     }
     .landing-card-terms a { color: var(--color-primary); font-weight: 600; }
-    .terms-badge { display: none; align-items: center; gap: 6px; font-size: 0.8rem; color: #2e7d32; font-weight: 600; text-align: left; }
+    .terms-badge { display: none; align-items: center; gap: 6px; font-size: 0.78rem; color: #2e7d32; font-weight: 600; text-align: left; }
     .terms-badge.visible { display: flex; }
 
     .landing-cards { display: flex; gap: 24px; width: 100%; flex-wrap: wrap; justify-content: center; align-items: stretch; }
@@ -86,16 +86,17 @@
     }
     .landing-card-terms {
       width: 100%;
-      border: 1px solid #C2E4EF; border-radius: 10px; padding: 22px 28px;
+      max-width: 640px;
+      margin-bottom: 14px;
+      border: 1px solid #C2E4EF; border-radius: 10px; padding: 20px 22px;
       background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.08);
-      display: flex; flex-direction: column; gap: 14px;
+      display: flex; flex-direction: column; gap: 12px;
     }
-    .landing-card-terms-header { display: flex; align-items: center; justify-content: center; gap: 10px; }
-    .landing-card-terms-header .landing-card-icon { font-size: 1.7rem; }
-    .landing-card-terms-header h2 { margin: 0; }
-    .landing-card-terms-body { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-    .landing-card-terms-body .terms-policy-preview { flex: 1 1 340px; max-height: 96px; }
-    .landing-card-terms-accept { flex: 1 1 300px; display: flex; flex-direction: column; gap: 10px; justify-content: center; }
+    .landing-card-terms-header { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .landing-card-terms-header .landing-card-icon { font-size: 1.3rem; }
+    .landing-card-terms-header h2 { margin: 0; font-size: 1rem; }
+    .landing-card-terms-body { display: flex; flex-direction: column; gap: 12px; }
+    .landing-card-terms-accept { display: flex; flex-direction: column; gap: 8px; }
     .landing-card.locked { opacity: .55; pointer-events: none; filter: grayscale(.4); }
     .landing-card.unlocked { opacity: 1; pointer-events: auto; filter: none; }
     .landing-card.unlocked:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.13); border-color: var(--color-accent); }

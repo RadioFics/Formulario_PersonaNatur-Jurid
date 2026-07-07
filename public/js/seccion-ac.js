@@ -91,6 +91,7 @@ function onACTipoPersonaChange(id, tipPers) {
   if (tipPers === 'J') {
     if (naturalWrap) { naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; naturalWrap.style.overflow = 'hidden'; setTimeout(() => { naturalWrap.style.display = 'none'; }, 210); }
     if (razReq)      razReq.style.display = '';
+    if (fieldRaz)    fieldRaz.style.display = '';
     a.NOM_ACCI = null; a.APE_ACCI = null; a.FEC_EXPE = null;
     const nomEl = document.getElementById(`ac_${id}_nom`); if (nomEl) nomEl.value = '';
     const apeEl = document.getElementById(`ac_${id}_ape`); if (apeEl) apeEl.value = '';
@@ -101,7 +102,7 @@ function onACTipoPersonaChange(id, tipPers) {
     if (razReq)      razReq.style.display = 'none';
     a.RAZ_ACCI = null;
     const razEl = document.getElementById(`ac_${id}_raz`); if (razEl) razEl.value = '';
-    if (fieldRaz) fieldRaz.classList.remove('error');
+    if (fieldRaz) { fieldRaz.classList.remove('error'); fieldRaz.style.display = 'none'; }
     _acFiltrarTipoDoc(id, false);
   }
   actualizarTituloAC(id);
@@ -204,7 +205,7 @@ function _crearGrupoACEl(accionista) {
 
       <!-- Campos comunes: RAZ, TIP_DOCU, NUM_DOCU -->
       <div class="grid-4">
-        <div class="field" id="field-ac_${id}_raz">
+        <div class="field" id="field-ac_${id}_raz" style="${esJ ? '' : 'display:none'}">
           <label><span data-i18n="field_razon_social">${typeof t==='function'?t('field_razon_social'):'Razón social'}</span> <span class="req" id="ac_${id}_raz_req" style="${razReqDisplay}">*</span></label>
           <input type="text" id="ac_${id}_raz" maxlength="255" placeholder="${typeof t==='function'?(esJ?t('field_raz_ph'):t('field_raz_ph_aplica')):(esJ?'Nombre de la empresa':'Si aplica')}"
                  oninput="actualizarAC(${id},'RAZ_ACCI',this.value);actualizarTituloAC(${id});limpiarError('field-ac_${id}_raz')" />
@@ -327,12 +328,15 @@ function _hydrateACFields(accionista, el) {
   // Aplicar visibilidad sin animación en carga
   const naturalWrap = el.querySelector(`#ac_${id}_natural_wrap`);
   const razReq      = el.querySelector(`#ac_${id}_raz_req`);
+  const fieldRaz    = el.querySelector(`#field-ac_${id}_raz`);
   if (esJ) {
     if (naturalWrap) { naturalWrap.style.display = 'none'; naturalWrap.style.opacity = '0'; naturalWrap.style.maxHeight = '0'; }
     if (razReq)      razReq.style.display = '';
+    if (fieldRaz)    fieldRaz.style.display = '';
   } else {
     if (naturalWrap) { naturalWrap.style.display = ''; naturalWrap.style.opacity = '1'; naturalWrap.style.maxHeight = '99999px'; }
     if (razReq)      razReq.style.display = 'none';
+    if (fieldRaz)    fieldRaz.style.display = 'none';
   }
 
   if (accionista.COD_PAIS) {

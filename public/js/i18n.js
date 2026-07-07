@@ -274,8 +274,8 @@ const I18N_DICT = {
   sec13_act_custo:       { es: 'Custodia y/o administración de activos virtuales', en: 'Custody and/or administration of virtual assets' },
   sec13_act_serv_fin:    { es: 'Participación en servicios financieros relacionados con activos virtuales', en: 'Participation in financial services related to virtual assets' },
   sec13_act_serv_vap:    { es: 'Prestación de servicios financieros como VASP',    en: 'Provision of financial services as a VASP' },
-  sec13_cert_info:       { es: 'He leído y acepto la Política de tratamiento de datos personales de Collective Mining Limited Sucursal Colombia, y autorizo el uso de mis datos personales conforme a los términos indicados.', en: 'I have read and accept the Personal Data Processing Policy of Collective Mining Limited Sucursal Colombia, and authorize the use of my personal data in accordance with the stated terms.' },
-  sec13_cert_info_err:   { es: 'Debe aceptar la política de privacidad para enviar.', en: 'You must accept the privacy policy to submit.' },
+  sec13_cert_info:       { es: 'Certifico que la información reportada en esta sección sobre operaciones con activos virtuales es veraz, completa y exacta.', en: 'I certify that the information reported in this section regarding virtual asset operations is true, complete, and accurate.' },
+  sec13_cert_info_err:   { es: 'Debe certificar la veracidad de la información para continuar.', en: 'You must certify the accuracy of the information to continue.' },
   sec13_btn:             { es: 'Continuar → Sección 14',           en: 'Continue → Section 14' },
 
   /* ── Declaración juramento ──────────────────────────────────────── */

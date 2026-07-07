@@ -15,10 +15,24 @@
 
 /* ─── Datos ficticios fijos ──────────────────────────────────────────────────── */
 
+/**
+ * Genera un número de identificación aleatorio de prueba (mín. 12 dígitos de
+ * aleatoriedad) para que cada clic en "Rellenar prueba" cree un registro
+ * distinto y no choque con corridas de prueba anteriores.
+ * @param {number} digits
+ * @returns {string}
+ */
+function _randomNumIden(digits = 12) {
+  let s = '';
+  for (let i = 0; i < digits; i++) s += Math.floor(Math.random() * 10);
+  if (s[0] === '0') s = String(1 + Math.floor(Math.random() * 9)) + s.slice(1);
+  return s;
+}
+
 const _TEST = {
   // Sección 1 — Básica
-  NUM_IDEN:    '900123456',
-  DIG_VERI:    '7',
+  NUM_IDEN:    _randomNumIden(),
+  DIG_VERI:    String(Math.floor(Math.random() * 10)),
   NOM_COMP:    'EMPRESA DEMO SAGRILAFT S.A.S.',
   DIR_TERC:    'Carrera 15 # 93-47 Oficina 301',
   TEL_TERC:    '3001234567',
@@ -60,12 +74,13 @@ const _TEST = {
 
   // Sección 6 — Junta directiva
   JD: {
-    TIP_MIEM:  'Presidente',
+    TIP_MIEM:  'P', // select con opciones fijas: 'P' Principal | 'S' Suplente
     NOM_MIEM:  'Roberto',
     APE_MIEM:  'Sánchez Pérez',
     NUM_DOCU:  '80234567',
     FEC_EXPE:  '2010-11-05',
     DIR_MIEM:  'Avenida El Dorado # 68C-61',
+    CEL_MIEM:  '3123456789',
     TEL_MIEM:  '6013456789',
     MAIL_MIEM: 'roberto.sanchez@empresademo.co',
   },
@@ -142,6 +157,7 @@ const _TEST = {
     DIR_BENE:  'Calle 134 # 55-20 Casa 12',
     TEL_BENE:  '3012345678',
     MAIL_BENE: 'jorge.ramirez@gmail.com',
+    PCT_PART:  '60.00',
   },
 
   // Sección 13 — Firma
@@ -150,6 +166,42 @@ const _TEST = {
     APE_FIRM:  'Martínez Gómez',
     NUM_DOCU:  '79512345',
     FEC_FIRMA: new Date().toISOString().slice(0, 10),
+  },
+};
+
+/* ─── Datos ficticios — Persona Natural ──────────────────────────────────────── */
+
+const _TEST_N = {
+  // Sección 1 — Básica (persona natural)
+  NUM_IDEN:  '',   // se regenera aleatorio en cada corrida
+  FEC_EXPE:  '2015-06-10',
+  NOM_TERC:  'María Fernanda',
+  SEG_NOMB:  'Isabel',
+  APE_TERC:  'Rodríguez',
+  SEG_APEL:  'Castañeda',
+  DIR_TERC:  'Calle 85 # 15-40 Apto 302',
+  TEL_TERC:  '3009876543',
+  DIR_MAIL:  'maria.rodriguez@correodemo.co',
+
+  // Sección 10 — Financiera
+  FIN: {
+    ACT_TOTAL:  '120000000',
+    ING_MENS:   '60000000',
+    PAS_TOTAL:  '20000000',
+    EGR_MENS:   '35000000',
+    PATRIMONIO: '100000000',
+    OTR_ING:    '2000000',
+  },
+
+  // Sección 11 — Bancaria
+  BANCO: {
+    NUM_CUEN: '30098765432',
+  },
+
+  // Sección 12 — PEP
+  PEP: {
+    MAN_RPUB: 'N',
+    CAR_PUBL: 'N',
   },
 };
 
@@ -197,6 +249,17 @@ function _primero(arr, key) {
   return arr && arr.length ? arr[0][key] : null;
 }
 
+/**
+ * Como _primero(), pero evita las opciones sintéticas "Otro"/"Sin asignar"
+ * (identificadas por su nombre, vía nameKey) para no forzar de paso el
+ * campo de texto libre asociado, que este relleno de prueba no completa.
+ */
+function _primeroReal(arr, key, nameKey) {
+  if (!arr || !arr.length) return null;
+  const real = arr.find(o => !/^otro|^sin\s|^other|^unassigned/i.test((o[nameKey] || '').trim()));
+  return (real || arr[0])[key];
+}
+
 /** Espera ms milisegundos. */
 const _esperar = ms => new Promise(r => setTimeout(r, ms));
 
@@ -238,9 +301,24 @@ async function _fillGeoCascade(idPais, idDept, idMpio, codPais, ref, campoDept, 
 
 /* ─── Función principal de relleno ──────────────────────────────────────────── */
 
+/**
+ * Punto de entrada del botón 🧪 — despacha al relleno de Jurídica o de
+ * Natural según el modo activo en el formulario (window.modoPersona),
+ * para que un solo botón sirva en ambos flujos.
+ */
 async function rellenarPrueba() {
+  if (window.modoPersona === 'N') return _rellenarPruebaNatural();
+  return _rellenarPruebaJuridica();
+}
+
+async function _rellenarPruebaJuridica() {
   const btn = document.getElementById('_dev_fill_btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Cargando catálogos…'; }
+
+  // Nuevo número de identificación aleatorio en cada corrida, para que cada
+  // clic cree un registro distinto en vez de chocar con pruebas anteriores.
+  _TEST.NUM_IDEN = _randomNumIden();
+  _TEST.DIG_VERI = String(Math.floor(Math.random() * 10));
 
   try {
     /* ── Cargar todos los catálogos en paralelo ───────────────────────────── */
@@ -278,7 +356,7 @@ async function rellenarPrueba() {
     _setInput('dig_veri', _TEST.DIG_VERI);  actualizarFormData('basica', 'DIG_VERI', _TEST.DIG_VERI);
     _setInput('nom_comp', _TEST.NOM_COMP);  actualizarFormData('basica', 'NOM_COMP', _TEST.NOM_COMP);
 
-    const codVinc = _primero(vinculaciones, 'COD_VINC');
+    const codVinc = _primeroReal(vinculaciones, 'COD_VINC', 'NOM_VINC');
     if (codVinc != null) {
       // COD_VINC es int en el catálogo; se convierte a string porque TIP_VINC es varchar
       _setSelect('cod_vinc', codVinc);
@@ -307,6 +385,10 @@ async function rellenarPrueba() {
         actualizarFormData('basica', 'COD_CIIU', codCiiu);
       }
     }
+
+    // ¿Cotiza en bolsa de valores? — requerido, sin default desde Parte 1
+    actualizarFormData('basica', 'COT_BOLSA', 'N');
+    _setRadio('cot_bolsa', 'N');
 
     if (btn) btn.textContent = '⏳ Sección 2 — Rep. legal…';
 
@@ -371,12 +453,16 @@ async function rellenarPrueba() {
     /* ════════════════════════════════════════════════════════════════════════
        SECCIÓN 5 — Sistema de cumplimiento
     ════════════════════════════════════════════════════════════════════════ */
+    formData.cumplimiento.TIE_NORM  = 'S';
     formData.cumplimiento.DESC_NORM = _TEST.DESC_NORM;
     formData.cumplimiento.NORM_LAFT = _TEST.NORM_LAFT;
     formData.cumplimiento.TIE_JUNTA = 'N';
     formData.cumplimiento.SIS_PREVE = null;
 
-    // IDs correctos: cump_desc_norm (textarea), cump_norm_laft (input), cump_tie_sist (radio name)
+    // IDs correctos: cump_tie_norm (radio, ¿sujeta a normatividad?, requerido desde
+    // Parte 1), cump_desc_norm (textarea), cump_norm_laft (input), cump_tie_sist
+    // (radio, ¿tiene sistema implementado?)
+    _setRadio('cump_tie_norm',  'S');
     _setInput('cump_desc_norm', _TEST.DESC_NORM);
     _setInput('cump_norm_laft', _TEST.NORM_LAFT);
     _setRadio('cump_tie_sist',  'N');
@@ -409,16 +495,18 @@ async function rellenarPrueba() {
         FEC_EXPE:  _TEST.JD.FEC_EXPE,
         COD_PAIS:  codPais,
         DIR_MIEM:  _TEST.JD.DIR_MIEM,
+        CEL_MIEM:  _TEST.JD.CEL_MIEM,
         TEL_MIEM:  _TEST.JD.TEL_MIEM,
         MAIL_MIEM: _TEST.JD.MAIL_MIEM,
       });
-      // IDs reales: jd_{id}_tipmiem, jd_{id}_nom, jd_{id}_ape, etc.
-      _setInput( `jd_${jdId}_tipmiem`, _TEST.JD.TIP_MIEM);
+      // IDs reales: jd_{id}_tipmiem (select P/S), jd_{id}_nom, jd_{id}_ape, etc.
+      _setSelect(`jd_${jdId}_tipmiem`, _TEST.JD.TIP_MIEM);
       _setInput( `jd_${jdId}_nom`,     _TEST.JD.NOM_MIEM);
       _setInput( `jd_${jdId}_ape`,     _TEST.JD.APE_MIEM);
       _setInput( `jd_${jdId}_numdoc`,  _TEST.JD.NUM_DOCU);
       _setInput( `jd_${jdId}_fec`,     _TEST.JD.FEC_EXPE);
       _setInput( `jd_${jdId}_dir`,     _TEST.JD.DIR_MIEM);
+      _setInput( `jd_${jdId}_cel`,     _TEST.JD.CEL_MIEM);
       _setInput( `jd_${jdId}_tel`,     _TEST.JD.TEL_MIEM);
       _setInput( `jd_${jdId}_mail`,    _TEST.JD.MAIL_MIEM);
       _setSelect(`jd_${jdId}_tipdoc`,  codTpdoc);
@@ -558,8 +646,8 @@ async function rellenarPrueba() {
     if (formData.bancaria.length > 0) {
       const banco     = formData.bancaria[0];
       const bId       = banco._id;
-      const codBanco   = _primero(bancos,     'COD_BANCO');
-      const codTipCuen = _primero(tiposCuenta, 'COD_TPCTA');
+      const codBanco   = _primeroReal(bancos,     'COD_BANCO', 'NOM_BANCO');
+      const codTipCuen = _primeroReal(tiposCuenta, 'COD_TPCTA', 'NOM_TPCTA');
 
       Object.assign(banco, {
         COD_BANCO:   codBanco,
@@ -634,6 +722,7 @@ async function rellenarPrueba() {
       _setInput( `bf_${bfId}_fec`,    _TEST.BF.FEC_EXPE);
       _setInput( `bf_${bfId}_tel`,    _TEST.BF.TEL_BENE);
       _setInput( `bf_${bfId}_mail`,   _TEST.BF.MAIL_BENE);
+      _setInput( `bf_${bfId}_pct`,    _TEST.BF.PCT_PART);
       _setSelect(`bf_${bfId}_tipdoc`, codTpdoc);
       // Cascada País → Dept → Ciudad
       await _fillGeoCascade(
@@ -658,6 +747,15 @@ async function rellenarPrueba() {
     _setInput( 'firma_fec',    _TEST.FIRMA.FEC_FIRMA);
     _setSelect('firma_tipdoc', codTpdoc);
 
+    /* ════════════════════════════════════════════════════════════════════════
+       Declaración final bajo gravedad de juramento (requerida para enviar)
+    ════════════════════════════════════════════════════════════════════════ */
+    const chkDecl = document.getElementById('decl_juramento');
+    if (chkDecl) {
+      chkDecl.checked = true;
+      chkDecl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     /* ── Listo ─────────────────────────────────────────────────────────────── */
     console.log('✅ [dev-fill] formData final:', JSON.parse(JSON.stringify(formData)));
     if (btn) {
@@ -669,6 +767,210 @@ async function rellenarPrueba() {
 
   } catch (err) {
     console.error('[dev-fill] Error:', err);
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = '❌ Error — ver consola';
+      setTimeout(() => { btn.textContent = '🧪 Rellenar prueba'; }, 3000);
+    }
+    mostrarToast('Error en relleno automático: ' + err.message, 'error');
+  }
+}
+
+/**
+ * Relleno de prueba — Persona Natural.
+ * Cubre solo las secciones visibles en este modo: 1 (básica natural),
+ * 9N (participación en sociedades), 10 (financiera), 11 (bancaria),
+ * 12 (PEP), 13 (activos virtuales) y la declaración final. Las secciones
+ * 2-8 (representante legal, sociedad, países, cumplimiento, junta
+ * directiva, revisores, accionistas, beneficiarios) son exclusivas de
+ * Jurídica y no aplican aquí.
+ */
+async function _rellenarPruebaNatural() {
+  const btn = document.getElementById('_dev_fill_btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Cargando catálogos…'; }
+
+  // Nuevo número de identificación aleatorio en cada corrida.
+  _TEST_N.NUM_IDEN = _randomNumIden();
+
+  try {
+    /* ── Cargar todos los catálogos en paralelo ───────────────────────────── */
+    const [tiposDoc, paises, vinculaciones, ciius, bancos, tiposCuenta] =
+      await Promise.all([
+        _fetch('/api/catalogo/tipos-documento?todos=1'),
+        _fetch('/api/catalogo/paises'),
+        _fetch('/api/catalogo/vinculaciones'),
+        _fetch('/api/catalogo/ciiu'),
+        _fetch('/api/catalogo/bancos'),
+        _fetch('/api/catalogo/tipos-cuenta'),
+      ]);
+
+    if (btn) btn.textContent = '⏳ Activando modo Natural…';
+
+    // Asegurar modo Natural activo (repuebla tipos de documento sin filtrar a NIT,
+    // reordena vinculaciones, muestra/oculta secciones .solo-natural/.solo-juridica).
+    if (window.modoPersona !== 'N') {
+      _setSelect('tip_terc', 'N');
+      await _esperar(200);
+    }
+
+    if (btn) btn.textContent = '⏳ Sección 1 — Básica (Natural)…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 1 — Información básica de la persona natural
+    ════════════════════════════════════════════════════════════════════════ */
+    const codTpdoc = _primeroReal(tiposDoc, 'COD_TPDOC', 'NOM_TPDOC');
+    const codPais  = _primero(paises, 'COD_PAIS') ?? COD_COLOMBIA;
+
+    if (codTpdoc != null) {
+      _setSelect('cod_tpdoc', codTpdoc);
+      actualizarFormData('basica', 'COD_TPDOC', codTpdoc);
+    }
+
+    _setInput('num_iden', _TEST_N.NUM_IDEN); actualizarFormData('basica', 'NUM_IDEN', _TEST_N.NUM_IDEN);
+    const _devModo = new URLSearchParams(window.location.search).get('modo');
+    if (typeof verificarDuplicado === 'function' && _devModo !== 'actualizar') {
+      verificarDuplicado(_TEST_N.NUM_IDEN);
+    }
+
+    const codVinc = _primeroReal(vinculaciones, 'COD_VINC', 'NOM_VINC');
+    if (codVinc != null) {
+      _setSelect('cod_vinc', codVinc);
+      actualizarFormData('basica', 'COD_VINC', String(codVinc));
+    }
+
+    _setInput('fec_expe_n', _TEST_N.FEC_EXPE); actualizarNatur('FEC_EXPE', _TEST_N.FEC_EXPE);
+    _setInput('nom_terc_n', _TEST_N.NOM_TERC); actualizarNatur('NOM_TERC', _TEST_N.NOM_TERC);
+    _setInput('seg_nomb_n', _TEST_N.SEG_NOMB); actualizarNatur('SEG_NOMB', _TEST_N.SEG_NOMB);
+    _setInput('ape_terc_n', _TEST_N.APE_TERC); actualizarNatur('APE_TERC', _TEST_N.APE_TERC);
+    _setInput('seg_apel_n', _TEST_N.SEG_APEL); actualizarNatur('SEG_APEL', _TEST_N.SEG_APEL);
+
+    // País de expedición del documento → cascada Departamento → Ciudad
+    actualizarNatur('COD_PAIS_EXP', codPais);
+    await _fillGeoCascade(
+      'cod_pais_exp', 'cod_dept_exp', 'cod_mpio_exp',
+      codPais, formDataNatur.basica, 'COD_DEPT_EXP', 'COD_MPIO_EXP'
+    );
+
+    _setInput('dir_terc', _TEST_N.DIR_TERC); actualizarFormData('basica', 'DIR_TERC', _TEST_N.DIR_TERC);
+    _setInput('tel_terc', _TEST_N.TEL_TERC); actualizarFormData('basica', 'TEL_TERC', _TEST_N.TEL_TERC);
+    _setInput('dir_mail', _TEST_N.DIR_MAIL); actualizarFormData('basica', 'DIR_MAIL', _TEST_N.DIR_MAIL);
+
+    // Nacionalidad (select propio de Natural, reutiliza el catálogo de países)
+    if (codPais != null) {
+      _setSelect('cod_nacio_n', codPais);
+      actualizarNatur('COD_NACIO', codPais);
+    }
+
+    // CIIU (select propio de Natural)
+    if (ciius.length) {
+      const codCiiuN = _primero(ciius, 'COD_CIIU');
+      if (codCiiuN != null) {
+        _setSelect('cod_ciiu_n', codCiiuN);
+        actualizarNatur('COD_CIIU', codCiiuN);
+      }
+    }
+
+    if (btn) btn.textContent = '⏳ Sección 9N — Participación en sociedades…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 9N — Participación en sociedades
+       Camino simple: sin participación, evita los sub-campos condicionales.
+    ════════════════════════════════════════════════════════════════════════ */
+    formDataNatur.beneficiariosN.PART_SOC = 'N';
+    _setRadio('part_soc', 'N');
+
+    if (btn) btn.textContent = '⏳ Sección 10 — Financiera…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 10 — Información financiera (compartida con Jurídica)
+    ════════════════════════════════════════════════════════════════════════ */
+    Object.entries(_TEST_N.FIN).forEach(([campo, val]) => {
+      formData.financiera[campo] = Number(val);
+      _setInput(campo.toLowerCase(), val);
+    });
+
+    if (btn) btn.textContent = '⏳ Sección 11 — Bancaria…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 11 — Información bancaria (compartida con Jurídica)
+    ════════════════════════════════════════════════════════════════════════ */
+    formData.bancaria.length = 0;
+    if (typeof renderListaBancaria === 'function') {
+      renderListaBancaria();
+      await _esperar(150);
+    } else if (typeof agregarBanco === 'function') {
+      agregarBanco(); await _esperar(150);
+    }
+
+    if (formData.bancaria.length > 0) {
+      const banco      = formData.bancaria[0];
+      const bId        = banco._id;
+      const codBanco   = _primeroReal(bancos,     'COD_BANCO', 'NOM_BANCO');
+      const codTipCuen = _primeroReal(tiposCuenta, 'COD_TPCTA', 'NOM_TPCTA');
+
+      Object.assign(banco, {
+        COD_BANCO:   codBanco,
+        TIP_CUEN:    codTipCuen,
+        NUM_CUEN:    _TEST_N.BANCO.NUM_CUEN,
+        CUEN_EXTR:   'N',
+        NOM_ENT_EXT: null,
+        TIP_CUE_EXT: null,
+      });
+
+      _setSelect(`banco_${bId}_banco`,   codBanco);
+      _setSelect(`banco_${bId}_tipcuen`, codTipCuen);
+      _setInput( `banco_${bId}_numcuen`, _TEST_N.BANCO.NUM_CUEN);
+      _setRadio( `banco_extr_${bId}`,   'N');
+    }
+
+    if (btn) btn.textContent = '⏳ Sección 12 — PEP…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 12 — PEP (compartida con Jurídica)
+    ════════════════════════════════════════════════════════════════════════ */
+    formData.pep.MAN_RPUB = _TEST_N.PEP.MAN_RPUB;
+    formData.pep.CAR_PUBL = _TEST_N.PEP.CAR_PUBL;
+    _setRadio('pep_man_rpub', _TEST_N.PEP.MAN_RPUB);
+    _setRadio('pep_car_publ', _TEST_N.PEP.CAR_PUBL);
+
+    if (btn) btn.textContent = '⏳ Sección 13 — Activos virtuales…';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       SECCIÓN 13 — Actividades con activos virtuales (compartida con Jurídica)
+    ════════════════════════════════════════════════════════════════════════ */
+    if (formData.actividades) {
+      Object.keys(formData.actividades).forEach(k => {
+        formData.actividades[k] = k === 'CERT_INFO' ? 'S' : 'N';
+        _setRadio(k.toLowerCase(), formData.actividades[k]);
+      });
+    }
+    const chkCert = document.getElementById('cert_info');
+    if (chkCert) {
+      chkCert.checked = true;
+      chkCert.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (formData.actividades) formData.actividades.CERT_INFO = 'S';
+
+    /* ════════════════════════════════════════════════════════════════════════
+       Declaración final bajo gravedad de juramento (requerida para enviar)
+    ════════════════════════════════════════════════════════════════════════ */
+    const chkDecl = document.getElementById('decl_juramento');
+    if (chkDecl) {
+      chkDecl.checked = true;
+      chkDecl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    /* ── Listo ─────────────────────────────────────────────────────────────── */
+    console.log('✅ [dev-fill] formDataNatur final:', JSON.parse(JSON.stringify(formDataNatur)));
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = '✅ Relleno completado';
+      setTimeout(() => { btn.textContent = '🧪 Rellenar prueba'; }, 3000);
+    }
+    mostrarToast('Formulario de prueba (Persona Natural) rellenado correctamente.', 'success');
+
+  } catch (err) {
+    console.error('[dev-fill natural] Error:', err);
     if (btn) {
       btn.disabled    = false;
       btn.textContent = '❌ Error — ver consola';

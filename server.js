@@ -1764,9 +1764,24 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
   const nomTpdoc = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_TPDOC)` : `${a}.NOM_TPDOC`;
   const nomVinc  = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_VINC)`  : `${a}.NOM_VINC`;
   const nomCiiu  = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_CIIU)`  : `${a}.NOM_CIIU`;
-  const nomSocie = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_SOCIE)` : `${a}.NOM_SOCIE`;
   const nomTpcta = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_TPCTA)` : `${a}.NOM_TPCTA`;
   const nomSist  = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_SIST)`  : `${a}.NOM_SIST`;
+
+  // Etiquetas de documentos requeridos (Sección 14), a partir del código TIP_DOC
+  const DOC_LABELS = {
+    RUT:       L('RUT — Registro Único Tributario', 'RUT — Tax ID Registration'),
+    CERT_BANC: L('Certificación bancaria', 'Bank certification'),
+    CERT_EXIS: L('Certificado de existencia y representación legal', 'Certificate of legal existence and representation'),
+    CERT_ACCI: L('Certificado de composición accionaria', 'Shareholding certificate'),
+    EST_FIN_1: L('Estados financieros — Año 1', 'Financial statements — Year 1'),
+    EST_FIN_2: L('Estados financieros — Año 2', 'Financial statements — Year 2'),
+    CART_ACEP: L('Carta de aceptación y autorización', 'Acceptance and authorization letter'),
+  };
+  const docLabel = (tipDoc) => {
+    const m = /^DOC_ID_RL_(\d+)$/.exec(tipDoc || '');
+    if (m) return L(`Documento de identidad — Representante ${Number(m[1]) + 1}`, `Identity document — Representative ${Number(m[1]) + 1}`);
+    return DOC_LABELS[tipDoc] || tipDoc;
+  };
 
   try {
     const pool = await getPool();
@@ -1777,9 +1792,22 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
       return (await rq.query(query)).recordset;
     };
 
-    const [empresa, financiera, bancaria, pep, act, rl, jd, rf, ac, bf, cump, paises, firma, documentos] = await Promise.all([
+    // Catálogo de países en memoria — usado para resolver las cuentas bancarias
+    // en el exterior, que llegan serializadas como JSON (GN_TERCE_BANCO.CUENTAS_EXT)
+    // y no pueden resolverse con un JOIN directo.
+    const paisMapRes = await pool.request().query(
+      `SELECT COD_PAIS, NOM_PAIS, NOM_EN FROM MAE_PAIS`);
+    const paisMap = new Map(paisMapRes.recordset.map(p =>
+      [String(p.COD_PAIS), (lang === 'en' && p.NOM_EN) ? p.NOM_EN : p.NOM_PAIS]));
+    const resolverPais = (cod, otro) => {
+      if (!cod) return '';
+      if (String(cod) === 'OTRO') return otro || '';
+      return paisMap.get(String(cod)) || '';
+    };
 
-      // ── Datos de la empresa (GN_TERCE + GN_JURID) ────────────────────────
+    const [basica, sociedad, rl, paises, cump, jd, rf, ac, bf, financiera, bancaria, pep, act, documentos] = await Promise.all([
+
+      // ── Sección 1 — Información básica de la empresa (GN_TERCE + GN_JURID) ──
       q(`SELECT
           ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
           t.NUM_IDEN                                    AS [${L('Número de identificación / NIT','Identification number / NIT')}],
@@ -1796,23 +1824,11 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           j.COD_CIIU + CASE WHEN ${nomCiiu('ci')} IS NOT NULL THEN ' — ' + ${nomCiiu('ci')} ELSE '' END
                                                         AS [${L('Actividad CIIU','CIIU activity')}],
           ISNULL(j.OTR_CIIU,'')                         AS [${L('Otra actividad CIIU','Other CIIU activity')}],
-          ISNULL(${nomSocie('ts')}, j.TIP_SOCIE)        AS [${L('Tipo de sociedad','Company type')}],
-          ISNULL(j.OTR_SOCIE,'')                        AS [${L('Otro tipo de sociedad','Other company type')}],
-          CASE j.UBIC_SOC WHEN 'N' THEN '${L('Nacional','National')}' WHEN 'E' THEN '${L('Extranjera','Foreign')}' WHEN 'SC' THEN '${L('Sucursal en Colombia','Branch in Colombia')}' ELSE ISNULL(j.UBIC_SOC,'') END
-                                                        AS [${L('Ubicación de la sociedad','Company location')}],
-          ISNULL(${nomPais('ps')},'')                   AS [${L('País de constitución','Country of incorporation')}],
-          ISNULL(j.OTR_PAIS_SOC,'')                     AS [${L('Otro país de constitución','Other country of incorporation')}],
-          CASE j.TIP_EMPR WHEN 'PUBLICA' THEN '${L('Pública','Public')}' WHEN 'PRIVADA' THEN '${L('Privada','Private')}' WHEN 'MIXTA' THEN '${L('Mixta','Mixed')}' ELSE ISNULL(j.TIP_EMPR,'') END
-                                                        AS [${L('Tipo de empresa','Company category')}],
-          ISNULL(CONVERT(VARCHAR,j.PCT_PART_MIXTA),'')  AS [${L('% de participación','% of participation')}],
-          CASE j.GRUP_EMPR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
-                                                        AS [${L('Pertenece a grupo empresarial','Belongs to business group')}],
-          CASE j.CTRL_DECLA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
-                                                        AS [${L('Situaciones declaradas en CERL','Situations declared in CERL')}],
-          CASE j.CAL_GRUPO WHEN 'MATRIZ' THEN '${L('Matriz','Parent company')}' WHEN 'FILIAL' THEN '${L('Filial','Subsidiary')}' WHEN 'SUBSIDIARIA' THEN '${L('Subsidiaria','Affiliated')}' ELSE ISNULL(j.CAL_GRUPO,'') END
-                                                        AS [${L('Calidad en el grupo','Group role')}],
-          ISNULL(j.DESC_GRUPO,'')                       AS [${L('Descripción del grupo empresarial','Business group description')}],
+          CASE j.COT_BOLSA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
+                                                        AS [${L('¿Cotiza en bolsa de valores?','Publicly traded?')}],
+          ISNULL(j.NOM_BOLSA,'')                        AS [${L('Bolsa de valores','Stock exchange')}],
           ISNULL(${nomPais('pe')},'')                   AS [${L('País de expedición del documento','Country of document issuance')}],
+          ISNULL(j.OTR_PAIS_EXP,'')                     AS [${L('Otro país de expedición','Other country of issuance')}],
           ISNULL(dp.NOM_DEPT,'')                        AS [${L('Departamento de expedición','State/Dept. of issuance')}],
           ISNULL(mn.NOM_MUNI,'')                        AS [${L('Ciudad de expedición','City of issuance')}]
         FROM GN_TERCE t
@@ -1820,62 +1836,35 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           LEFT JOIN MAE_TPDOC   td ON td.COD_TPDOC = t.COD_TPDOC
           LEFT JOIN MAE_VINC     v ON CAST(v.COD_VINC AS VARCHAR) = j.TIP_VINC
           LEFT JOIN MAE_CIIU    ci ON ci.COD_CIIU  = j.COD_CIIU
-          LEFT JOIN MAE_TIP_SOCIE ts ON CAST(ts.COD_SOCIE AS VARCHAR) = j.TIP_SOCIE
-          LEFT JOIN MAE_PAIS    ps ON ps.COD_PAIS  = j.COD_PAIS_SOC
           LEFT JOIN MAE_PAIS    pe ON pe.COD_PAIS  = j.COD_PAIS_EXP
           LEFT JOIN MAE_DEPT    dp ON dp.COD_DEPT  = j.COD_DEPT_EXP
           LEFT JOIN MAE_MUNI    mn ON mn.COD_MUNI  = j.COD_MPIO_EXP
         WHERE t.COD_EMPR = @COD_EMPR AND t.COD_TERC = @COD_TERC
           AND t.TIP_TERC = 'E'`),
 
-      // ── Información financiera ────────────────────────────────────────────
+      // ── Sección 3 — Información de la sociedad (GN_JURID) ───────────────────
       q(`SELECT
-          ACT_TOTAL  AS [${L('Activos totales ($)','Total assets ($)')}],
-          ING_MENS   AS [${L('Ingresos mensuales ($)','Monthly income ($)')}],
-          PAS_TOTAL  AS [${L('Pasivos totales ($)','Total liabilities ($)')}],
-          EGR_MENS   AS [${L('Egresos mensuales ($)','Monthly expenses ($)')}],
-          PATRIMONIO AS [${L('Patrimonio ($)','Net worth ($)')}],
-          OTR_ING    AS [${L('Otros ingresos ($)','Other income ($)')}]
-        FROM GN_JURID_FIN
-        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+          CASE j.UBIC_SOC WHEN 'N' THEN '${L('Nacional','National')}' WHEN 'E' THEN '${L('Extranjera','Foreign')}' WHEN 'SC' THEN '${L('Sucursal en Colombia','Branch in Colombia')}' ELSE ISNULL(j.UBIC_SOC,'') END
+                                                        AS [${L('Ubicación de la sociedad','Company location')}],
+          ISNULL(${nomPais('ps')},'')                   AS [${L('País de constitución','Country of incorporation')}],
+          ISNULL(j.OTR_PAIS_SOC,'')                     AS [${L('Otro país de constitución','Other country of incorporation')}],
+          ISNULL(${nomPais('po')},'')                   AS [${L('País de origen (sucursal)','Country of origin (branch)')}],
+          CASE j.TIP_EMPR WHEN 'PUBLICA' THEN '${L('Pública','Public')}' WHEN 'PRIVADA' THEN '${L('Privada','Private')}' WHEN 'MIXTA' THEN '${L('Mixta','Mixed')}' ELSE ISNULL(j.TIP_EMPR,'') END
+                                                        AS [${L('Tipo de empresa','Company category')}],
+          ISNULL(CONVERT(VARCHAR,j.PCT_PART_MIXTA),'')  AS [${L('% de participación (empresa mixta)','% of participation (mixed company)')}],
+          CASE j.GRUP_EMPR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
+                                                        AS [${L('Pertenece a grupo empresarial','Belongs to business group')}],
+          CASE j.CTRL_DECLA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
+                                                        AS [${L('Situaciones declaradas en CERL','Situations declared in CERL')}],
+          CASE j.CAL_GRUPO WHEN 'MATRIZ' THEN '${L('Matriz','Parent company')}' WHEN 'FILIAL' THEN '${L('Filial','Subsidiary')}' WHEN 'SUBSIDIARIA' THEN '${L('Subsidiaria','Affiliated')}' ELSE ISNULL(j.CAL_GRUPO,'') END
+                                                        AS [${L('Calidad en el grupo','Group role')}],
+          ISNULL(j.DESC_GRUPO,'')                       AS [${L('Descripción del grupo empresarial','Business group description')}]
+        FROM GN_JURID j
+          LEFT JOIN MAE_PAIS ps ON ps.COD_PAIS = j.COD_PAIS_SOC
+          LEFT JOIN MAE_PAIS po ON po.COD_PAIS = j.COD_PAIS_ORI
+        WHERE j.COD_EMPR = @COD_EMPR AND j.COD_TERC = @COD_TERC`),
 
-      // ── Cuentas bancarias ─────────────────────────────────────────────────
-      q(`SELECT
-          mb.NOM_BANCO                                  AS [${L('Entidad bancaria','Bank')}],
-          ISNULL(${nomTpcta('tc')},'')                  AS [${L('Tipo de cuenta','Account type')}],
-          b.NUM_CUEN                                    AS [${L('Número de cuenta','Account number')}],
-          CASE b.CUEN_EXTR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
-                                                        AS [${L('¿Cuenta extranjera?','Foreign account?')}],
-          ISNULL(b.NOM_ENT_EXT,'')                      AS [${L('Nombre entidad extranjera','Foreign entity name')}],
-          ISNULL(b.TIP_CUE_EXT,'')                      AS [${L('Tipo cuenta extranjera','Foreign account type')}],
-          ISNULL(${nomPais('px')},'')                   AS [${L('País cuenta extranjera','Foreign account country')}],
-          ISNULL(b.OTR_PAIS_EXT,'')                     AS [${L('Otro país cuenta extranjera','Other foreign account country')}]
-        FROM GN_TERCE_BANCO b
-          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
-          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
-          LEFT JOIN MAE_PAIS  px ON px.COD_PAIS  = b.COD_PAIS_EXT
-        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC`),
-
-      // ── Exposición política (PEP) ─────────────────────────────────────────
-      q(`SELECT
-          CASE MAN_RPUB WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('¿Maneja recursos públicos?','Handles public resources?')}],
-          CASE CAR_PUBL WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('¿Ejerció cargo público?','Held public office?')}]
-        FROM GN_JURID_PEP
-        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
-
-      // ── Actividades con activos virtuales ─────────────────────────────────
-      q(`SELECT
-          CASE ACT_VA_FIAT  WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Compra/venta activos virtuales (fiat)','Purchase/sale of virtual assets (fiat)')}],
-          CASE ACT_VA_VA    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Compra/venta activos virtuales (VA x VA)','Purchase/sale of virtual assets (VA x VA)')}],
-          CASE ACT_TRANS    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Transferencia y canje de activos virtuales','Transfer and exchange of virtual assets')}],
-          CASE ACT_CUSTO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Custodia de activos virtuales','Custody of virtual assets')}],
-          CASE ACT_SERV_FIN WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios financieros para PSAV','Financial services for VASPs')}],
-          CASE ACT_SERV_VAP WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios de participación VAP','VAP participation services')}],
-          CASE CERT_INFO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Certifica veracidad de la información','Certifies accuracy of information')}]
-        FROM GN_JURID_ACT
-        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
-
-      // ── Representantes legales ────────────────────────────────────────────
+      // ── Sección 2 — Representantes legales ───────────────────────────────────
       q(`SELECT
           CASE r.TIP_REPR WHEN 'P' THEN '${L('Principal','Principal')}' WHEN 'S' THEN '${L('Suplente','Alternate')}' ELSE r.TIP_REPR END
                                                         AS [${L('Rol','Role')}],
@@ -1886,6 +1875,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           r.NUM_DOCU                                    AS [${L('Número de documento','Document number')}],
           CONVERT(varchar, r.FEC_EXPE, 103)             AS [${L('Fecha de expedición','Issuance date')}],
           ISNULL(${nomPais('p')},'')                    AS [${L('País de expedición','Country of issuance')}],
+          ISNULL(r.OTR_PAIS,'')                         AS [${L('Otro país de expedición','Other country of issuance')}],
           ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento de expedición','State/Dept. of issuance')}],
           ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad de expedición','City of issuance')}],
           r.DIR_REPR                                    AS [${L('Dirección','Address')}],
@@ -1897,116 +1887,18 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = r.COD_PAIS
           LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = r.COD_DEPT
           LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = r.COD_MPIO
-        WHERE r.COD_EMPR = @COD_EMPR AND r.COD_TERC = @COD_TERC`),
+        WHERE r.COD_EMPR = @COD_EMPR AND r.COD_TERC = @COD_TERC
+        ORDER BY CASE r.TIP_REPR WHEN 'P' THEN 0 ELSE 1 END, r.COD_JRL`),
 
-      // ── Junta directiva ───────────────────────────────────────────────────
+      // ── Sección 4 — Países de operación ──────────────────────────────────────
       q(`SELECT
-          CASE jd.TIP_REPR WHEN 'P' THEN '${L('Principal','Principal')}' WHEN 'S' THEN '${L('Suplente','Alternate')}' ELSE jd.TIP_REPR END
-                                                        AS [${L('Rol','Role')}],
-          jd.TIP_MIEM                                   AS [${L('Tipo de miembro','Member type')}],
-          jd.NOM_MIEM                                   AS [${L('Nombre','First name')}],
-          jd.APE_MIEM                                   AS [${L('Apellido','Last name')}],
-          jd.RAZ_MIEM                                   AS [${L('Razón social','Company name')}],
-          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
-          ISNULL(jd.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
-          jd.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
-          CONVERT(varchar, jd.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
-          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
-          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
-          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
-          jd.DIR_MIEM                                   AS [${L('Dirección','Address')}],
-          jd.CEL_MIEM                                   AS [${L('Celular','Mobile')}],
-          jd.TEL_MIEM                                   AS [${L('Teléfono','Phone')}],
-          jd.MAIL_MIEM                                  AS [${L('Email','Email')}]
-        FROM GN_JURID_JD jd
-          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = jd.TIP_DOCU
-          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = jd.COD_PAIS
-          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = jd.COD_DEPT
-          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = jd.COD_MPIO
-        WHERE jd.COD_EMPR = @COD_EMPR AND jd.COD_TERC = @COD_TERC`),
+          ISNULL(${nomPais('p')}, gp.OTR_PAIS) AS [${L('País','Country')}]
+        FROM GN_JURID_PAIS gp
+          LEFT JOIN MAE_PAIS p ON p.COD_PAIS = gp.COD_PAIS
+        WHERE gp.COD_EMPR = @COD_EMPR AND gp.COD_TERC = @COD_TERC
+        ORDER BY gp.COD_JPAIS`),
 
-      // ── Revisores fiscales ────────────────────────────────────────────────
-      q(`SELECT
-          CASE rf.TIP_REPR WHEN 'P' THEN '${L('Principal','Principal')}' WHEN 'S' THEN '${L('Suplente','Alternate')}' ELSE rf.TIP_REPR END
-                                                        AS [${L('Rol','Role')}],
-          CASE ISNULL(rf.TIP_PERS,'N') WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE '${L('Natural','Natural person')}' END
-                                                        AS [${L('Tipo de persona','Person type')}],
-          CASE rf.TIE_REVIS WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
-                                                        AS [${L('¿Tiene revisor fiscal?','Has statutory auditor?')}],
-          rf.NOM_REVI                                   AS [${L('Nombre','First name')}],
-          rf.APE_REVI                                   AS [${L('Apellido','Last name')}],
-          rf.RAZ_REVI                                   AS [${L('Razón social','Company name')}],
-          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
-          ISNULL(rf.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
-          rf.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
-          CONVERT(varchar, rf.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
-          rf.DIR_REVI                                   AS [${L('Dirección','Address')}],
-          rf.CEL_REVI                                   AS [${L('Celular','Mobile')}],
-          rf.TEL_REVI                                   AS [${L('Teléfono','Phone')}],
-          rf.MAIL_REVI                                  AS [${L('Email','Email')}],
-          ISNULL(rf.OBS_REVI,'')                        AS [${L('Observaciones del revisor','Auditor remarks')}],
-          CASE rf.REVI_FIRMA WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
-                                                        AS [${L('¿Firmó declaración?','Signed declaration?')}],
-          ISNULL(rf.RAZ_FIRMA,'')                       AS [${L('Razón de no firma','Reason for not signing')}],
-          ISNULL(${nomTpdoc('tdf')},'')                 AS [${L('Tipo doc. firmante','Signer document type')}],
-          ISNULL(rf.NUM_DOCU_FIR,'')                    AS [${L('N° doc. firmante','Signer document number')}]
-        FROM GN_JURID_RF rf
-          LEFT JOIN MAE_TPDOC td  ON td.COD_TPDOC  = rf.TIP_DOCU
-          LEFT JOIN MAE_TPDOC tdf ON tdf.COD_TPDOC = rf.TIP_DOCU_FIR
-        WHERE rf.COD_EMPR = @COD_EMPR AND rf.COD_TERC = @COD_TERC`),
-
-      // ── Accionistas ───────────────────────────────────────────────────────
-      q(`SELECT
-          CASE ISNULL(ac.TIP_PERS,'N') WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE '${L('Natural','Natural person')}' END
-                                                        AS [${L('Tipo de persona','Person type')}],
-          ac.NOM_ACCI                                   AS [${L('Nombre','First name')}],
-          ac.APE_ACCI                                   AS [${L('Apellido','Last name')}],
-          ac.RAZ_ACCI                                   AS [${L('Razón social','Company name')}],
-          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
-          ISNULL(ac.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
-          ac.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
-          CONVERT(varchar, ac.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
-          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
-          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
-          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
-          ac.DIR_ACCI                                   AS [${L('Dirección','Address')}],
-          ac.CEL_ACCI                                   AS [${L('Celular','Mobile')}],
-          ac.TEL_ACCI                                   AS [${L('Teléfono','Phone')}],
-          ac.MAIL_ACCI                                  AS [${L('Email','Email')}],
-          ac.PCT_PART                                   AS [${L('Porcentaje de participación (%)','Ownership percentage (%)')}]
-        FROM GN_JURID_AC ac
-          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = ac.TIP_DOCU
-          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = ac.COD_PAIS
-          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = ac.COD_DEPT
-          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = ac.COD_MPIO
-        WHERE ac.COD_EMPR = @COD_EMPR AND ac.COD_TERC = @COD_TERC`),
-
-      // ── Beneficiarios finales ─────────────────────────────────────────────
-      q(`SELECT
-          CASE bf.TIP_BENE WHEN 'N' THEN '${L('Natural','Natural person')}' WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE bf.TIP_BENE END
-                                                        AS [${L('Tipo','Type')}],
-          bf.NOM_BENE                                   AS [${L('Nombre','First name')}],
-          bf.APE_BENE                                   AS [${L('Apellido','Last name')}],
-          ISNULL(CONVERT(VARCHAR,bf.PCT_PART),'')       AS [${L('% de participación','% of participation')}],
-          bf.RAZ_BENE                                   AS [${L('Razón social','Company name')}],
-          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
-          ISNULL(bf.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
-          bf.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
-          CONVERT(varchar, bf.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
-          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
-          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
-          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
-          bf.DIR_BENE                                   AS [${L('Dirección','Address')}],
-          bf.TEL_BENE                                   AS [${L('Teléfono','Phone')}],
-          bf.MAIL_BENE                                  AS [${L('Email','Email')}]
-        FROM GN_JURID_BF bf
-          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = bf.TIP_DOCU
-          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = bf.COD_PAIS
-          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = bf.COD_DEPT
-          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = bf.COD_MPIO
-        WHERE bf.COD_EMPR = @COD_EMPR AND bf.COD_TERC = @COD_TERC`),
-
-      // ── Cumplimiento LAFT ─────────────────────────────────────────────────
+      // ── Sección 5 — Sistema de cumplimiento LA/FT ────────────────────────────
       q(`SELECT
           CASE c.TIE_NORM WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
                                                         AS [${L('¿Sujeta a normatividad LA/FT?','Subject to AML/CTF regulations?')}],
@@ -2024,6 +1916,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           ISNULL(c.OTR_TPDOC,'')                        AS [${L('Otro tipo de documento','Other document type')}],
           ISNULL(c.NUM_DOCU,'')                         AS [${L('Número de documento','Document number')}],
           ISNULL(${nomPais('p')},'')                    AS [${L('País del oficial','Official country')}],
+          ISNULL(c.OTR_PAIS,'')                         AS [${L('Otro país del oficial','Other official country')}],
           ISNULL(c.DIR_RESP,'')                         AS [${L('Dirección','Address')}],
           ISNULL(c.CEL_RESP,'')                         AS [${L('Celular','Mobile')}],
           ISNULL(c.TEL_RESP,'')                         AS [${L('Teléfono','Phone')}],
@@ -2034,36 +1927,210 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
           LEFT JOIN MAE_PAIS       p ON p.COD_PAIS   = c.COD_PAIS
         WHERE c.COD_EMPR = @COD_EMPR AND c.COD_TERC = @COD_TERC`),
 
-      // ── Países de operación ───────────────────────────────────────────────
+      // ── Sección 6 — Junta directiva ──────────────────────────────────────────
       q(`SELECT
-          ISNULL(${nomPais('p')},'') AS [${L('País','Country')}]
-        FROM GN_JURID_PAIS gp
-          LEFT JOIN MAE_PAIS p ON p.COD_PAIS = gp.COD_PAIS
-        WHERE gp.COD_EMPR = @COD_EMPR AND gp.COD_TERC = @COD_TERC`),
+          CASE jd.TIP_REPR WHEN 'P' THEN '${L('Principal','Principal')}' WHEN 'S' THEN '${L('Suplente','Alternate')}' ELSE jd.TIP_REPR END
+                                                        AS [${L('Rol','Role')}],
+          jd.TIP_MIEM                                   AS [${L('Tipo de miembro','Member type')}],
+          jd.NOM_MIEM                                   AS [${L('Nombre','First name')}],
+          jd.APE_MIEM                                   AS [${L('Apellido','Last name')}],
+          jd.RAZ_MIEM                                   AS [${L('Razón social','Company name')}],
+          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
+          ISNULL(jd.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
+          jd.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
+          CONVERT(varchar, jd.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
+          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
+          ISNULL(jd.OTR_PAIS,'')                        AS [${L('Otro país','Other country')}],
+          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
+          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
+          jd.DIR_MIEM                                   AS [${L('Dirección','Address')}],
+          jd.CEL_MIEM                                   AS [${L('Celular','Mobile')}],
+          jd.TEL_MIEM                                   AS [${L('Teléfono','Phone')}],
+          jd.MAIL_MIEM                                  AS [${L('Email','Email')}]
+        FROM GN_JURID_JD jd
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = jd.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = jd.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = jd.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = jd.COD_MPIO
+        WHERE jd.COD_EMPR = @COD_EMPR AND jd.COD_TERC = @COD_TERC
+        ORDER BY CASE jd.TIP_REPR WHEN 'P' THEN 0 ELSE 1 END, jd.COD_JJD`),
 
-      // ── Firma del representante legal ─────────────────────────────────────
+      // ── Sección 7 — Revisores fiscales ───────────────────────────────────────
       q(`SELECT
-          ISNULL(f.NOM_FIRM,'')                         AS [${L('Nombre del firmante','Signer first name')}],
-          ISNULL(f.APE_FIRM,'')                         AS [${L('Apellido del firmante','Signer last name')}],
-          ISNULL(${nomTpdoc('td')},'')                  AS [${L('Tipo de documento','Document type')}],
-          ISNULL(f.NUM_DOCU,'')                         AS [${L('Número de documento','Document number')}],
-          CONVERT(varchar, f.FEC_FIRMA, 103)            AS [${L('Fecha de firma','Signature date')}]
-        FROM GN_JURID_FIRMA f
-          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = f.TIP_DOCU
+          CASE rf.TIP_REPR WHEN 'P' THEN '${L('Principal','Principal')}' WHEN 'S' THEN '${L('Suplente','Alternate')}' ELSE rf.TIP_REPR END
+                                                        AS [${L('Rol','Role')}],
+          CASE ISNULL(rf.TIP_PERS,'N') WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE '${L('Natural','Natural person')}' END
+                                                        AS [${L('Tipo de persona','Person type')}],
+          rf.NOM_REVI                                   AS [${L('Nombre','First name')}],
+          rf.APE_REVI                                   AS [${L('Apellido','Last name')}],
+          rf.RAZ_REVI                                   AS [${L('Razón social','Company name')}],
+          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
+          ISNULL(rf.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
+          rf.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
+          CONVERT(varchar, rf.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
+          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
+          ISNULL(rf.OTR_PAIS,'')                        AS [${L('Otro país','Other country')}],
+          rf.DIR_REVI                                   AS [${L('Dirección','Address')}],
+          rf.CEL_REVI                                   AS [${L('Celular','Mobile')}],
+          rf.TEL_REVI                                   AS [${L('Teléfono','Phone')}],
+          rf.MAIL_REVI                                  AS [${L('Email','Email')}],
+          ISNULL(rf.OBS_REVI,'')                        AS [${L('Observaciones del revisor','Auditor remarks')}],
+          CASE rf.REVI_FIRMA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
+                                                        AS [${L('¿Designado por firma auditora?','Appointed by audit firm?')}],
+          ISNULL(rf.RAZ_FIRMA,'')                       AS [${L('Razón social de la firma auditora','Audit firm name')}],
+          ISNULL(${nomTpdoc('tdf')},'')                 AS [${L('Tipo doc. firmante','Signer document type')}],
+          ISNULL(rf.OTR_TPDOC_FIR,'')                   AS [${L('Otro tipo doc. firmante','Other signer document type')}],
+          ISNULL(rf.NUM_DOCU_FIR,'')                    AS [${L('N° doc. firmante','Signer document number')}]
+        FROM GN_JURID_RF rf
+          LEFT JOIN MAE_TPDOC td  ON td.COD_TPDOC  = rf.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p  ON p.COD_PAIS    = rf.COD_PAIS
+          LEFT JOIN MAE_TPDOC tdf ON tdf.COD_TPDOC = rf.TIP_DOCU_FIR
+        WHERE rf.COD_EMPR = @COD_EMPR AND rf.COD_TERC = @COD_TERC
+        ORDER BY CASE rf.TIP_REPR WHEN 'P' THEN 0 ELSE 1 END, rf.COD_JRF`),
+
+      // ── Sección 8 — Composición accionaria ───────────────────────────────────
+      q(`SELECT
+          CASE ISNULL(ac.TIP_PERS,'N') WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE '${L('Natural','Natural person')}' END
+                                                        AS [${L('Tipo de persona','Person type')}],
+          ac.PCT_PART                                   AS [${L('% de participación','% of participation')}],
+          ac.NOM_ACCI                                   AS [${L('Nombre','First name')}],
+          ac.APE_ACCI                                   AS [${L('Apellido','Last name')}],
+          ac.RAZ_ACCI                                   AS [${L('Razón social','Company name')}],
+          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
+          ISNULL(ac.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
+          ac.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
+          CONVERT(varchar, ac.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
+          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
+          ISNULL(ac.OTR_PAIS,'')                        AS [${L('Otro país','Other country')}],
+          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
+          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
+          ac.DIR_ACCI                                   AS [${L('Dirección','Address')}],
+          ac.CEL_ACCI                                   AS [${L('Celular','Mobile')}],
+          ac.TEL_ACCI                                   AS [${L('Teléfono','Phone')}],
+          ac.MAIL_ACCI                                  AS [${L('Email','Email')}]
+        FROM GN_JURID_AC ac
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = ac.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = ac.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = ac.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = ac.COD_MPIO
+        WHERE ac.COD_EMPR = @COD_EMPR AND ac.COD_TERC = @COD_TERC
+        ORDER BY ac.COD_JAC`),
+
+      // ── Sección 9 — Beneficiarios finales ────────────────────────────────────
+      q(`SELECT
+          CASE bf.TIP_BENE WHEN 'N' THEN '${L('Natural','Natural person')}' WHEN 'J' THEN '${L('Jurídica','Legal entity')}' ELSE bf.TIP_BENE END
+                                                        AS [${L('Tipo','Type')}],
+          ISNULL(CONVERT(VARCHAR,bf.PCT_PART),'')       AS [${L('% de participación','% of participation')}],
+          bf.NOM_BENE                                   AS [${L('Nombre','First name')}],
+          bf.APE_BENE                                   AS [${L('Apellido','Last name')}],
+          bf.RAZ_BENE                                   AS [${L('Razón social','Company name')}],
+          ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
+          ISNULL(bf.OTR_TPDOC,'')                       AS [${L('Otro tipo de documento','Other document type')}],
+          bf.NUM_DOCU                                   AS [${L('Número de documento','Document number')}],
+          CONVERT(varchar, bf.FEC_EXPE, 103)            AS [${L('Fecha de expedición','Issuance date')}],
+          ISNULL(${nomPais('p')},'')                    AS [${L('País','Country')}],
+          ISNULL(bf.OTR_PAIS,'')                        AS [${L('Otro país','Other country')}],
+          ISNULL(d.NOM_DEPT,'')                         AS [${L('Departamento','State/Dept.')}],
+          ISNULL(m.NOM_MUNI,'')                         AS [${L('Ciudad','City')}],
+          bf.DIR_BENE                                   AS [${L('Dirección','Address')}],
+          bf.TEL_BENE                                   AS [${L('Teléfono','Phone')}],
+          bf.MAIL_BENE                                  AS [${L('Email','Email')}]
+        FROM GN_JURID_BF bf
+          LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = bf.TIP_DOCU
+          LEFT JOIN MAE_PAIS   p ON p.COD_PAIS   = bf.COD_PAIS
+          LEFT JOIN MAE_DEPT   d ON d.COD_DEPT   = bf.COD_DEPT
+          LEFT JOIN MAE_MUNI   m ON m.COD_MUNI   = bf.COD_MPIO
+        WHERE bf.COD_EMPR = @COD_EMPR AND bf.COD_TERC = @COD_TERC
+        ORDER BY bf.COD_JBF`),
+
+      // ── Sección 10 — Información financiera ──────────────────────────────────
+      q(`SELECT
+          ISNULL(mo.INI_MONE + ' — ' + mo.NOM_MONE, '') AS [${L('Moneda de reporte','Reporting currency')}],
+          f.ACT_TOTAL  AS [${L('Activos totales ($)','Total assets ($)')}],
+          f.ING_MENS   AS [${L('Ingresos mensuales ($)','Monthly income ($)')}],
+          f.PAS_TOTAL  AS [${L('Pasivos totales ($)','Total liabilities ($)')}],
+          f.EGR_MENS   AS [${L('Egresos mensuales ($)','Monthly expenses ($)')}],
+          f.PATRIMONIO AS [${L('Patrimonio ($)','Net worth ($)')}],
+          f.OTR_ING    AS [${L('Otros ingresos ($)','Other income ($)')}]
+        FROM GN_JURID_FIN f
+          LEFT JOIN MAE_MONED mo ON mo.COD_MONE = f.COD_MONE
         WHERE f.COD_EMPR = @COD_EMPR AND f.COD_TERC = @COD_TERC`),
 
-      // ── Documentos adjuntos ───────────────────────────────────────────────
+      // ── Sección 11 — Información bancaria ─────────────────────────────────────
       q(`SELECT
-          d.TIP_DOC                                     AS [${L('Tipo de documento','Document type')}],
-          ISNULL(d.NOM_DOC,'')                          AS [${L('Nombre del documento','Document name')}],
+          ISNULL(mb.NOM_BANCO,'')                       AS [${L('Entidad bancaria','Bank')}],
+          ISNULL(b.OTR_BANCO,'')                        AS [${L('Otra entidad bancaria','Other bank')}],
+          ISNULL(${nomTpcta('tc')},'')                  AS [${L('Tipo de cuenta','Account type')}],
+          ISNULL(b.OTR_CUEN,'')                         AS [${L('Otro tipo de cuenta','Other account type')}],
+          b.NUM_CUEN                                    AS [${L('Número de cuenta','Account number')}],
+          CASE b.CUEN_EXTR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
+                                                        AS [${L('¿Tiene cuentas en el exterior?','Has foreign accounts?')}],
+          b.CUENTAS_EXT                                 AS [_CUENTAS_EXT_RAW]
+        FROM GN_TERCE_BANCO b
+          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
+          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
+        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC
+        ORDER BY b.COD_TBANCO`),
+
+      // ── Sección 12 — Exposición política (PEP) ───────────────────────────────
+      q(`SELECT
+          CASE MAN_RPUB WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Maneja recursos públicos?','Handles public resources?')}],
+          CASE CAR_PUBL WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Ejerció cargo público?','Held public office?')}]
+        FROM GN_JURID_PEP
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Sección 13 — Actividades con activos virtuales ───────────────────────
+      q(`SELECT
+          CASE OPER_VA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Realiza operaciones con activos virtuales?','Performs virtual asset operations?')}],
+          CASE ACT_VA_FIAT  WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Intercambio entre activos virtuales y monedas fiduciarias','Exchange between virtual assets and fiat currencies')}],
+          CASE ACT_VA_VA    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Intercambio entre una o más formas de activos virtuales','Exchange between one or more forms of virtual assets')}],
+          CASE ACT_TRANS    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Transferencia de activos virtuales','Transfer of virtual assets')}],
+          CASE ACT_CUSTO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Custodia y/o administración de activos virtuales','Custody and/or administration of virtual assets')}],
+          CASE ACT_SERV_FIN WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Participación en servicios financieros relacionados con activos virtuales','Participation in financial services related to virtual assets')}],
+          CASE ACT_SERV_VAP WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios de proveedores de activos virtuales (VASP)','Provision of financial services as a VASP')}],
+          CASE CERT_INFO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Certifica veracidad de la información','Certifies accuracy of information')}]
+        FROM GN_JURID_ACT
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Sección 14 — Documentos adjuntos ─────────────────────────────────────
+      q(`SELECT
+          d.TIP_DOC                                     AS [_TIP_DOC_RAW],
           ISNULL(d.NOM_ARCH,'')                         AS [${L('Nombre del archivo','File name')}],
           CONVERT(varchar, d.FEC_CARG, 103)             AS [${L('Fecha de carga','Upload date')}],
           '/api/documentos/' + CAST(t.NUM_IDEN AS VARCHAR) + '/' + d.TIP_DOC
                                                         AS [URL de descarga]
         FROM GN_TERCE_DOC d
           JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
-        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC`),
+        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC
+        ORDER BY d.COD_DOC`),
     ]);
+
+    // ── Cuentas bancarias en el exterior (serializadas como JSON en CUENTAS_EXT) ──
+    const TIPO_DOC_COL    = L('Tipo de documento', 'Document type');
+    const NOMBRE_ARCH_COL = L('Nombre del archivo', 'File name');
+    const cuentasExterior = [];
+    bancaria.forEach(b => {
+      const raw = b['_CUENTAS_EXT_RAW'];
+      delete b['_CUENTAS_EXT_RAW'];
+      if (!raw) return;
+      let lista = [];
+      try { lista = JSON.parse(raw) || []; } catch (_) { lista = []; }
+      lista.forEach(ext => {
+        cuentasExterior.push({
+          [L('Cuenta de referencia','Reference account')]:    b[L('Número de cuenta','Account number')] || '',
+          [L('País','Country')]:                               ext.COD_PAIS_EXT === 'OTRO' ? '' : resolverPais(ext.COD_PAIS_EXT),
+          [L('Otro país','Other country')]:                    ext.COD_PAIS_EXT === 'OTRO' ? (ext.OTR_PAIS_EXT || '') : '',
+          [L('Entidad','Institution')]:                        ext.NOM_ENT_EXT || '',
+          [L('Tipo de cuenta','Account type')]:                 ext.TIP_CUE_EXT || '',
+        });
+      });
+    });
+    const documentosProc = documentos.map(d => ({
+      [TIPO_DOC_COL]: docLabel(d['_TIP_DOC_RAW']),
+      [NOMBRE_ARCH_COL]: d[NOMBRE_ARCH_COL] || '',
+      [L('Fecha de carga','Upload date')]: d[L('Fecha de carga','Upload date')] || '',
+      'URL de descarga': d['URL de descarga'] || '',
+    }));
 
     // ── Construir libro Excel ─────────────────────────────────────────────────
     const wb    = new ExcelJS.Workbook();
@@ -2196,29 +2263,33 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
       L('Otros ingresos ($)','Other income ($)'),
     ];
 
-    addSheetJ(L('Datos de la Empresa','Company Information'),             empresa);
-    addSheetJ(L('Información Financiera','Financial Information'),        financiera, CURRENCY_COLS);
-    addSheetJ(L('Cuentas Bancarias','Bank Accounts'),                     bancaria);
-    addSheetJ(L('PEP','PEP'),                                             pep);
-    addSheetJ(L('Act. Activos Virtuales','Virtual Asset Activities'), act);
-    addSheetJ(L('Representantes Legales','Legal Representatives'),        rl);
-    addSheetJ(L('Junta Directiva','Board of Directors'),                  jd);
-    addSheetJ(L('Revisores Fiscales','Statutory Auditors'),               rf);
-    addSheetJ(L('Accionistas','Shareholders'),                            ac);
-    addSheetJ(L('Beneficiarios Finales','Ultimate Beneficial Owners'),    bf);
-    addSheetJ(L('Cumplimiento LAFT','AML/CTF Compliance'),                cump);
-    addSheetJ(L('Países de Operación','Countries of Operation'),          paises);
-    addSheetJ(L('Firma del Representante','Representative Signature'),    firma);
+    // Orden de hojas = orden de secciones del formulario (1 → 14)
+    addSheetJ(L('1. Información Básica','1. Basic Information'),           basica);
+    addSheetJ(L('2. Representante Legal','2. Legal Representative'),      rl);
+    addSheetJ(L('3. Sociedad','3. Company'),                              sociedad);
+    addSheetJ(L('4. Países de Operación','4. Countries of Operation'),    paises);
+    addSheetJ(L('5. Cumplimiento LAFT','5. AML/CTF Compliance'),          cump);
+    addSheetJ(L('6. Junta Directiva','6. Board of Directors'),            jd);
+    addSheetJ(L('7. Revisores Fiscales','7. Statutory Auditors'),         rf);
+    addSheetJ(L('8. Composición Accionaria','8. Shareholders'),           ac);
+    addSheetJ(L('9. Beneficiarios Finales','9. Ultimate Beneficial Owners'), bf);
+    addSheetJ(L('10. Información Financiera','10. Financial Information'), financiera, CURRENCY_COLS);
+    addSheetJ(L('11. Información Bancaria','11. Bank Accounts'),          bancaria);
+    if (cuentasExterior.length) {
+      addSheetJ(L('11b. Cuentas en el Exterior','11b. Foreign Accounts'), cuentasExterior);
+    }
+    addSheetJ(L('12. PEP','12. PEP'),                                     pep);
+    addSheetJ(L('13. Activos Virtuales','13. Virtual Assets'),            act);
 
     // ── Hoja de documentos con hipervínculo ───────────────────────────────────
     const URL_COL      = 'URL de descarga';
-    const FILE_COL     = L('Nombre del archivo', 'File name');
-    const DOC_SHEET    = L('Documentos Adjuntos', 'Attached Documents');
+    const FILE_COL     = NOMBRE_ARCH_COL;
+    const DOC_SHEET    = L('14. Documentos Adjuntos', '14. Attached Documents');
     const LINK_HEADER  = L('Acceder al archivo', 'Open file');
 
-    if (documentos.length > 0) {
+    if (documentosProc.length > 0) {
       const wsDoc  = wb.addWorksheet(DOC_SHEET);
-      const dCols  = Object.keys(documentos[0]).filter(c => c !== URL_COL);
+      const dCols  = Object.keys(documentosProc[0]).filter(c => c !== URL_COL);
       const allCols = [...dCols, LINK_HEADER];
 
       wsDoc.mergeCells(1, 1, 1, allCols.length);
@@ -2235,7 +2306,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
       });
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      documentos.forEach((doc, ri) => {
+      documentosProc.forEach((doc, ri) => {
         const values = dCols.map(c => doc[c] ?? '');
         values.push(doc[FILE_COL] || '');
         const dRow = wsDoc.addRow(values);
@@ -2262,7 +2333,7 @@ app.get('/api/exportar-excel/:codTerc', async (req, res) => {
 
     // ── Guardar copia en disco y enviar ───────────────────────────────────────
     const RAZON_KEY = L('Razón social', 'Company name');
-    const nomComp = (empresa[0]?.[RAZON_KEY] || `TERC_${codTerc}`)
+    const nomComp = (basica[0]?.[RAZON_KEY] || `TERC_${codTerc}`)
       .replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
     const filename = `SAGRILAFT_Juridica_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
 
@@ -2877,7 +2948,7 @@ app.put('/api/actualizar-completo', async (req, res) => {
     // 10. GN_TERCE_BANCO
     await del('GN_TERCE_BANCO');
     for (const b of (Array.isArray(d.bancaria)?d.bancaria:[])) {
-      if (!b.COD_BANCO) continue;
+      if (b.COD_BANCO === null || b.COD_BANCO === undefined || b.COD_BANCO === '') continue;
       await r()
         .input('COD_EMPR',    sql.SmallInt,    COD_EMPR).input('COD_TERC',sql.BigInt,COD_TERC)
         .input('COD_BANCO',   sql.Int,          toInt(b.COD_BANCO))
@@ -3380,7 +3451,7 @@ app.post('/api/guardar-completo', async (req, res) => {
     // ── 10. GN_TERCE_BANCO — Cuentas bancarias ────────────────────────────────
     const bancos = Array.isArray(d.bancaria) ? d.bancaria : [];
     for (const b of bancos) {
-      if (!b.COD_BANCO) continue;
+      if (b.COD_BANCO === null || b.COD_BANCO === undefined || b.COD_BANCO === '') continue;
       await r()
         .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',    sql.BigInt,      COD_TERC)
@@ -3670,21 +3741,23 @@ app.post('/api/guardar-completo-natural', async (req, res) => {
     //                  NOM_ENT_EXT, TIP_CUE_EXT
     const bancos = Array.isArray(b.bancaria) ? b.bancaria : [];
     for (const cuenta of bancos) {
-      if (!cuenta.COD_BANCO) continue;
+      if (cuenta.COD_BANCO === null || cuenta.COD_BANCO === undefined || cuenta.COD_BANCO === '') continue;
       await r()
         .input('COD_EMPR',    sql.SmallInt,    COD_EMPR)
         .input('COD_TERC',    sql.BigInt,      COD_TERC)
         .input('COD_BANCO',   sql.Int,         toInt(cuenta.COD_BANCO))
+        .input('OTR_BANCO',   sql.VarChar(255),cuenta.OTR_BANCO  || null)
         .input('TIP_CUEN',    sql.Int,         toInt(cuenta.TIP_CUEN))
+        .input('OTR_CUEN',    sql.VarChar(255),cuenta.OTR_CUEN   || null)
         .input('NUM_CUEN',    sql.VarChar(30), cuenta.NUM_CUEN   || null)
         .input('CUEN_EXTR',   sql.VarChar(1),           cuenta.CUEN_EXTR || 'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX),  Array.isArray(cuenta.cuentasExt) && cuenta.cuentasExt.length > 0 ? JSON.stringify(cuenta.cuentasExt) : null)
         .query(`
           INSERT INTO GN_TERCE_BANCO
-            (COD_EMPR, COD_TERC, COD_BANCO, TIP_CUEN, NUM_CUEN,
+            (COD_EMPR, COD_TERC, COD_BANCO, OTR_BANCO, TIP_CUEN, OTR_CUEN, NUM_CUEN,
              CUEN_EXTR, CUENTAS_EXT)
           VALUES
-            (@COD_EMPR, @COD_TERC, @COD_BANCO, @TIP_CUEN, @NUM_CUEN,
+            (@COD_EMPR, @COD_TERC, @COD_BANCO, @OTR_BANCO, @TIP_CUEN, @OTR_CUEN, @NUM_CUEN,
              @CUEN_EXTR, @CUENTAS_EXT)
         `);
     }
@@ -3789,6 +3862,16 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
   const nomCiiu  = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_CIIU)`  : `${a}.NOM_CIIU`;
   const nomTpcta = (a) => lang === 'en' ? `ISNULL(${a}.NOM_EN, ${a}.NOM_TPCTA)` : `${a}.NOM_TPCTA`;
 
+  // Etiquetas de documentos requeridos (Sección 14), a partir del código TIP_DOC
+  const DOC_LABELS = {
+    RUT:       L('RUT — Registro Único Tributario', 'RUT — Tax ID Registration'),
+    CERT_BANC: L('Certificación bancaria', 'Bank certification'),
+    DOC_ID_RL: L('Copia del documento de identidad', 'Copy of identity document'),
+    EST_FIN:   L('Declaración de renta o juramentada', 'Tax return or sworn statement'),
+    CART_ACEP: L('Carta declaración origen de fondos y autorización', 'Funds-origin declaration and authorization letter'),
+  };
+  const docLabel = (tipDoc) => DOC_LABELS[tipDoc] || tipDoc;
+
   try {
     const pool = await getPool();
     const q = async (query) => {
@@ -3798,9 +3881,19 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
       return (await rq.query(query)).recordset;
     };
 
-    const [personales, financiera, bancaria, pepAct, documentos, participacion] = await Promise.all([
+    const paisMapRes = await pool.request().query(
+      `SELECT COD_PAIS, NOM_PAIS, NOM_EN FROM MAE_PAIS`);
+    const paisMap = new Map(paisMapRes.recordset.map(p =>
+      [String(p.COD_PAIS), (lang === 'en' && p.NOM_EN) ? p.NOM_EN : p.NOM_PAIS]));
+    const resolverPais = (cod, otro) => {
+      if (!cod) return '';
+      if (String(cod) === 'OTRO') return otro || '';
+      return paisMap.get(String(cod)) || '';
+    };
 
-      // ── Datos personales (GN_TERCE + GN_NATUR) ───────────────────────────
+    const [basica, participacion, financiera, bancaria, pep, act, documentos] = await Promise.all([
+
+      // ── Sección 1 — Información básica de la persona natural ────────────────
       q(`SELECT
           ${nomTpdoc('td')}                             AS [${L('Tipo de documento','Document type')}],
           t.NUM_IDEN                                    AS [${L('Número de identificación','Identification number')}],
@@ -3816,7 +3909,6 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
           n.MAIL_SARL                                   AS [${L('Email SAGRILAFT','SAGRILAFT email')}],
           ISNULL(${nomPais('pn')},'')                   AS [${L('Nacionalidad','Nationality')}],
           ISNULL(n.OTR_NACIO,'')                        AS [${L('Otra nacionalidad','Other nationality')}],
-          ISNULL(n.ACT_PRINC,'')                        AS [${L('Actividad principal','Main activity')}],
           ISNULL(n.COD_CIIU,'') + CASE WHEN ${nomCiiu('ci')} IS NOT NULL THEN ' — ' + ${nomCiiu('ci')} ELSE '' END
                                                         AS [${L('Actividad CIIU','CIIU activity')}],
           ISNULL(n.OTR_CIIU,'')                         AS [${L('Otra actividad CIIU','Other CIIU activity')}],
@@ -3837,76 +3929,109 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
         WHERE t.COD_EMPR = @COD_EMPR AND t.COD_TERC = @COD_TERC
           AND t.TIP_TERC = 'N'`),
 
-      // ── Información financiera ────────────────────────────────────────────
+      // ── Sección 9N — Participación en sociedades ─────────────────────────────
       q(`SELECT
-          ACT_TOTAL  AS [${L('Activos totales ($)','Total assets ($)')}],
-          ING_MENS   AS [${L('Ingresos mensuales ($)','Monthly income ($)')}],
-          PAS_TOTAL  AS [${L('Pasivos totales ($)','Total liabilities ($)')}],
-          EGR_MENS   AS [${L('Egresos mensuales ($)','Monthly expenses ($)')}],
-          PATRIMONIO AS [${L('Patrimonio ($)','Net worth ($)')}],
-          OTR_ING    AS [${L('Otros ingresos ($)','Other income ($)')}]
-        FROM GN_NATUR_FIN
-        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
-
-      // ── Cuentas bancarias ─────────────────────────────────────────────────
-      q(`SELECT
-          mb.NOM_BANCO                                  AS [${L('Entidad bancaria','Bank')}],
-          ISNULL(${nomTpcta('tc')},'')                  AS [${L('Tipo de cuenta','Account type')}],
-          b.NUM_CUEN                                    AS [${L('Número de cuenta','Account number')}],
-          CASE b.CUEN_EXTR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
-                                                        AS [${L('¿Cuenta extranjera?','Foreign account?')}],
-          ISNULL(b.NOM_ENT_EXT,'')                      AS [${L('Nombre entidad extranjera','Foreign entity name')}],
-          ISNULL(b.TIP_CUE_EXT,'')                      AS [${L('Tipo cuenta extranjera','Foreign account type')}],
-          ISNULL(${nomPais('px')},'')                   AS [${L('País cuenta extranjera','Foreign account country')}],
-          ISNULL(b.OTR_PAIS_EXT,'')                     AS [${L('Otro país cuenta extranjera','Other foreign account country')}]
-        FROM GN_TERCE_BANCO b
-          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
-          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
-          LEFT JOIN MAE_PAIS  px ON px.COD_PAIS  = b.COD_PAIS_EXT
-        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC`),
-
-      // ── PEP y Actividades con activos virtuales ───────────────────────────
-      q(`SELECT
-          CASE p.MAN_RPUB WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('¿Maneja recursos públicos?','Handles public resources?')}],
-          CASE p.CAR_PUBL WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('¿Ejerció cargo público?','Held public office?')}],
-          CASE a.ACT_VA_FIAT  WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Compra/venta activos virtuales (fiat)','Purchase/sale of virtual assets (fiat)')}],
-          CASE a.ACT_VA_VA    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Compra/venta activos virtuales (VA x VA)','Purchase/sale of virtual assets (VA x VA)')}],
-          CASE a.ACT_TRANS    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Transferencia y canje de activos virtuales','Transfer and exchange of virtual assets')}],
-          CASE a.ACT_CUSTO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Custodia de activos virtuales','Custody of virtual assets')}],
-          CASE a.ACT_SERV_FIN WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios financieros para PSAV','Financial services for VASPs')}],
-          CASE a.ACT_SERV_VAP WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios de participación VAP','VAP participation services')}],
-          CASE a.CERT_INFO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Certifica veracidad de la información','Certifies accuracy of information')}]
-        FROM GN_NATUR_PEP p
-          LEFT JOIN GN_NATUR_ACT a ON a.COD_EMPR = p.COD_EMPR AND a.COD_TERC = p.COD_TERC
-        WHERE p.COD_EMPR = @COD_EMPR AND p.COD_TERC = @COD_TERC`),
-
-      // ── Documentos adjuntos ───────────────────────────────────────────────
-      q(`SELECT
-          d.TIP_DOC                                     AS [${L('Tipo de documento','Document type')}],
-          ISNULL(d.NOM_DOC,'')                          AS [${L('Nombre del documento','Document name')}],
-          ISNULL(d.NOM_ARCH,'')                         AS [${L('Nombre del archivo','File name')}],
-          CONVERT(varchar, d.FEC_CARG, 103)             AS [${L('Fecha de carga','Upload date')}],
-          '/api/documentos/' + t.NUM_IDEN + '/' + d.TIP_DOC
-                                                        AS [URL de descarga]
-        FROM GN_TERCE_DOC d
-          JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
-        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC`),
-
-      // ── Participación en sociedades ───────────────────────────────────────
-      q(`SELECT
-          CASE n.PART_SOC WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
+          CASE n.PART_SOC WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END
                                               AS [${L('¿Tiene participación en alguna sociedad?','Holds participation in a company?')}],
           ISNULL(n.RAZ_SOC,'')               AS [${L('Razón social de la sociedad','Company name')}],
           ISNULL(CASE WHEN n.TIP_DOC_SOC IS NULL AND n.OTR_DOC_SOC IS NOT NULL
                       THEN '${L('Sin asignar / Otro tipo','Unassigned / Other type')}'
                       ELSE ${nomTpdoc('td')} END, '')
                                              AS [${L('Tipo de documento','Document type')}],
-          ISNULL(n.OTR_DOC_SOC,'')          AS [${L('Otro tipo de documento','Other document type')}],
+          ISNULL(n.OTR_DOC_SOC,'')           AS [${L('Otro tipo de documento','Other document type')}],
           ISNULL(n.NUM_DOC_SOC,'')           AS [${L('Número de documento','Document number')}]
         FROM GN_NATUR n
           LEFT JOIN MAE_TPDOC td ON td.COD_TPDOC = n.TIP_DOC_SOC
         WHERE n.COD_EMPR = @COD_EMPR AND n.COD_TERC = @COD_TERC`),
+
+      // ── Sección 10 — Información financiera ──────────────────────────────────
+      q(`SELECT
+          ISNULL(mo.INI_MONE + ' — ' + mo.NOM_MONE, '') AS [${L('Moneda de reporte','Reporting currency')}],
+          f.ACT_TOTAL  AS [${L('Activos totales ($)','Total assets ($)')}],
+          f.ING_MENS   AS [${L('Ingresos mensuales ($)','Monthly income ($)')}],
+          f.PAS_TOTAL  AS [${L('Pasivos totales ($)','Total liabilities ($)')}],
+          f.EGR_MENS   AS [${L('Egresos mensuales ($)','Monthly expenses ($)')}],
+          f.PATRIMONIO AS [${L('Patrimonio ($)','Net worth ($)')}],
+          f.OTR_ING    AS [${L('Otros ingresos ($)','Other income ($)')}]
+        FROM GN_NATUR_FIN f
+          LEFT JOIN MAE_MONED mo ON mo.COD_MONE = f.COD_MONE
+        WHERE f.COD_EMPR = @COD_EMPR AND f.COD_TERC = @COD_TERC`),
+
+      // ── Sección 11 — Información bancaria ─────────────────────────────────────
+      q(`SELECT
+          ISNULL(mb.NOM_BANCO,'')                       AS [${L('Entidad bancaria','Bank')}],
+          ISNULL(b.OTR_BANCO,'')                        AS [${L('Otra entidad bancaria','Other bank')}],
+          ISNULL(${nomTpcta('tc')},'')                  AS [${L('Tipo de cuenta','Account type')}],
+          ISNULL(b.OTR_CUEN,'')                         AS [${L('Otro tipo de cuenta','Other account type')}],
+          b.NUM_CUEN                                    AS [${L('Número de cuenta','Account number')}],
+          CASE b.CUEN_EXTR WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END
+                                                        AS [${L('¿Tiene cuentas en el exterior?','Has foreign accounts?')}],
+          b.CUENTAS_EXT                                 AS [_CUENTAS_EXT_RAW]
+        FROM GN_TERCE_BANCO b
+          LEFT JOIN MAE_BANCO mb ON mb.COD_BANCO = b.COD_BANCO
+          LEFT JOIN MAE_TPCTA tc ON tc.COD_TPCTA = b.TIP_CUEN
+        WHERE b.COD_EMPR = @COD_EMPR AND b.COD_TERC = @COD_TERC
+        ORDER BY b.COD_TBANCO`),
+
+      // ── Sección 12 — Exposición política (PEP) ───────────────────────────────
+      q(`SELECT
+          CASE MAN_RPUB WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Maneja recursos públicos?','Handles public resources?')}],
+          CASE CAR_PUBL WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Ejerció cargo público?','Held public office?')}]
+        FROM GN_NATUR_PEP
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Sección 13 — Actividades con activos virtuales ───────────────────────
+      q(`SELECT
+          CASE OPER_VA WHEN 'S' THEN '${L('Sí','Yes')}' WHEN 'N' THEN 'No' ELSE '' END AS [${L('¿Realiza operaciones con activos virtuales?','Performs virtual asset operations?')}],
+          CASE ACT_VA_FIAT  WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Intercambio entre activos virtuales y monedas fiduciarias','Exchange between virtual assets and fiat currencies')}],
+          CASE ACT_VA_VA    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Intercambio entre una o más formas de activos virtuales','Exchange between one or more forms of virtual assets')}],
+          CASE ACT_TRANS    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Transferencia de activos virtuales','Transfer of virtual assets')}],
+          CASE ACT_CUSTO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Custodia y/o administración de activos virtuales','Custody and/or administration of virtual assets')}],
+          CASE ACT_SERV_FIN WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Participación en servicios financieros relacionados con activos virtuales','Participation in financial services related to virtual assets')}],
+          CASE ACT_SERV_VAP WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Servicios de proveedores de activos virtuales (VASP)','Provision of financial services as a VASP')}],
+          CASE CERT_INFO    WHEN 'S' THEN '${L('Sí','Yes')}' ELSE 'No' END AS [${L('Certifica veracidad de la información','Certifies accuracy of information')}]
+        FROM GN_NATUR_ACT
+        WHERE COD_EMPR = @COD_EMPR AND COD_TERC = @COD_TERC`),
+
+      // ── Sección 14 — Documentos adjuntos ─────────────────────────────────────
+      q(`SELECT
+          d.TIP_DOC                                     AS [_TIP_DOC_RAW],
+          ISNULL(d.NOM_ARCH,'')                         AS [${L('Nombre del archivo','File name')}],
+          CONVERT(varchar, d.FEC_CARG, 103)             AS [${L('Fecha de carga','Upload date')}],
+          '/api/documentos/' + CAST(t.NUM_IDEN AS VARCHAR) + '/' + d.TIP_DOC
+                                                        AS [URL de descarga]
+        FROM GN_TERCE_DOC d
+          JOIN GN_TERCE t ON t.COD_EMPR = d.COD_EMPR AND t.COD_TERC = d.COD_TERC
+        WHERE d.COD_EMPR = @COD_EMPR AND d.COD_TERC = @COD_TERC
+        ORDER BY d.COD_DOC`),
     ]);
+
+    // ── Cuentas bancarias en el exterior (serializadas como JSON en CUENTAS_EXT) ──
+    const TIPO_DOC_COL    = L('Tipo de documento', 'Document type');
+    const NOMBRE_ARCH_COL = L('Nombre del archivo', 'File name');
+    const cuentasExterior = [];
+    bancaria.forEach(b => {
+      const raw = b['_CUENTAS_EXT_RAW'];
+      delete b['_CUENTAS_EXT_RAW'];
+      if (!raw) return;
+      let lista = [];
+      try { lista = JSON.parse(raw) || []; } catch (_) { lista = []; }
+      lista.forEach(ext => {
+        cuentasExterior.push({
+          [L('Cuenta de referencia','Reference account')]:    b[L('Número de cuenta','Account number')] || '',
+          [L('País','Country')]:                               ext.COD_PAIS_EXT === 'OTRO' ? '' : resolverPais(ext.COD_PAIS_EXT),
+          [L('Otro país','Other country')]:                    ext.COD_PAIS_EXT === 'OTRO' ? (ext.OTR_PAIS_EXT || '') : '',
+          [L('Entidad','Institution')]:                        ext.NOM_ENT_EXT || '',
+          [L('Tipo de cuenta','Account type')]:                 ext.TIP_CUE_EXT || '',
+        });
+      });
+    });
+    const documentosProc = documentos.map(d => ({
+      [TIPO_DOC_COL]: docLabel(d['_TIP_DOC_RAW']),
+      [NOMBRE_ARCH_COL]: d[NOMBRE_ARCH_COL] || '',
+      [L('Fecha de carga','Upload date')]: d[L('Fecha de carga','Upload date')] || '',
+      'URL de descarga': d['URL de descarga'] || '',
+    }));
 
     // ── Construir libro Excel ─────────────────────────────────────────────────
     const wb    = new ExcelJS.Workbook();
@@ -4038,21 +4163,26 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
       L('Otros ingresos ($)','Other income ($)'),
     ];
 
-    addSheetN(L('Datos Personales','Personal Information'),           personales);
-    addSheetN(L('Información Financiera','Financial Information'),    financiera, CURRENCY_COLS);
-    addSheetN(L('Cuentas Bancarias','Bank Accounts'),                 bancaria);
-    addSheetN(L('PEP y Actividades','PEP and Activities'),            pepAct);
-    addSheetN(L('Participación en Sociedades','Company Participation'), participacion);
+    // Orden de hojas = orden de secciones visibles en modo Persona Natural
+    addSheetN(L('1. Información Básica','1. Basic Information'),             basica);
+    addSheetN(L('2. Participación Societaria','2. Company Participation'),   participacion);
+    addSheetN(L('3. Información Financiera','3. Financial Information'),     financiera, CURRENCY_COLS);
+    addSheetN(L('4. Información Bancaria','4. Bank Accounts'),               bancaria);
+    if (cuentasExterior.length) {
+      addSheetN(L('4b. Cuentas en el Exterior','4b. Foreign Accounts'), cuentasExterior);
+    }
+    addSheetN(L('5. PEP','5. PEP'),                                          pep);
+    addSheetN(L('6. Activos Virtuales','6. Virtual Assets'),                 act);
 
     // ── Hoja de documentos con hipervínculo ───────────────────────────────────
     const URL_COL     = 'URL de descarga';
-    const FILE_COL    = L('Nombre del archivo', 'File name');
-    const DOC_SHEET   = L('Documentos Adjuntos', 'Attached Documents');
+    const FILE_COL    = NOMBRE_ARCH_COL;
+    const DOC_SHEET   = L('7. Documentos Adjuntos', '7. Attached Documents');
     const LINK_HEADER = L('Acceder al archivo', 'Open file');
 
-    if (documentos.length > 0) {
+    if (documentosProc.length > 0) {
       const wsDoc = wb.addWorksheet(DOC_SHEET);
-      const dCols = Object.keys(documentos[0]).filter(c => c !== URL_COL);
+      const dCols = Object.keys(documentosProc[0]).filter(c => c !== URL_COL);
       const allCols = [...dCols, LINK_HEADER];
 
       wsDoc.mergeCells(1, 1, 1, allCols.length);
@@ -4069,7 +4199,7 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
       });
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      documentos.forEach((doc, ri) => {
+      documentosProc.forEach((doc, ri) => {
         const values = dCols.map(c => doc[c] ?? '');
         values.push(doc[FILE_COL] || '');
         const dRow = wsDoc.addRow(values);
@@ -4097,7 +4227,7 @@ app.get('/api/exportar-excel-natural/:codTerc', async (req, res) => {
     // ── Guardar copia en disco y enviar ───────────────────────────────────────
     const FNAME_KEY = L('Primer nombre', 'First name');
     const LNAME_KEY = L('Primer apellido', 'Last name');
-    const nomComp = ((personales[0]?.[FNAME_KEY] || '') + ' ' + (personales[0]?.[LNAME_KEY] || '') || `TERC_${codTerc}`)
+    const nomComp = ((basica[0]?.[FNAME_KEY] || '') + ' ' + (basica[0]?.[LNAME_KEY] || '') || `TERC_${codTerc}`)
       .replace(/[^a-zA-Z0-9_\-\s]/g, '').trim().replace(/\s+/g, '_');
     const filename = `SAGRILAFT_Natural_${nomComp}_${new Date().toISOString().slice(0,10)}.xlsx`;
 
@@ -4746,18 +4876,20 @@ app.put('/api/actualizar-completo-natural', async (req, res) => {
     // 4. GN_TERCE_BANCO — reemplazar
     await del('GN_TERCE_BANCO');
     for (const ban of (Array.isArray(b.bancaria) ? b.bancaria : [])) {
-      if (!ban.COD_BANCO) continue;
+      if (ban.COD_BANCO === null || ban.COD_BANCO === undefined || ban.COD_BANCO === '') continue;
       await r()
         .input('COD_EMPR',    sql.SmallInt,   COD_EMPR)
         .input('COD_TERC',    sql.BigInt,     COD_TERC)
         .input('COD_BANCO',   sql.Int,        toInt(ban.COD_BANCO))
-        .input('TIP_CUEN',    sql.VarChar(20),toChar(ban.TIP_CUEN))
+        .input('OTR_BANCO',   sql.VarChar(255),ban.OTR_BANCO  || null)
+        .input('TIP_CUEN',    sql.Int,        toInt(ban.TIP_CUEN))
+        .input('OTR_CUEN',    sql.VarChar(255),ban.OTR_CUEN   || null)
         .input('NUM_CUEN',    sql.VarChar(30),toChar(ban.NUM_CUEN))
         .input('CUEN_EXTR',   sql.VarChar(1),          ban.CUEN_EXTR || 'N')
         .input('CUENTAS_EXT', sql.NVarChar(sql.MAX), Array.isArray(ban.cuentasExt) && ban.cuentasExt.length > 0 ? JSON.stringify(ban.cuentasExt) : null)
-        .query(`INSERT INTO GN_TERCE_BANCO (COD_EMPR,COD_TERC,COD_BANCO,TIP_CUEN,
+        .query(`INSERT INTO GN_TERCE_BANCO (COD_EMPR,COD_TERC,COD_BANCO,OTR_BANCO,TIP_CUEN,OTR_CUEN,
                 NUM_CUEN,CUEN_EXTR,CUENTAS_EXT)
-                VALUES (@COD_EMPR,@COD_TERC,@COD_BANCO,@TIP_CUEN,
+                VALUES (@COD_EMPR,@COD_TERC,@COD_BANCO,@OTR_BANCO,@TIP_CUEN,@OTR_CUEN,
                 @NUM_CUEN,@CUEN_EXTR,@CUENTAS_EXT)`);
     }
 

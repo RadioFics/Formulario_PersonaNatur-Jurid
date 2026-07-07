@@ -1411,6 +1411,17 @@
         </div>
       </div>
 
+      <div class="field" id="field-cert_info">
+        <div class="cert-wrapper">
+          <label class="checkbox-opcion">
+            <input type="checkbox" id="cert_info"
+                   onchange="actualizarActividad('CERT_INFO', this.checked ? 'S' : 'N')" />
+            <span data-i18n="sec13_cert_info">Certifico que la información reportada en esta sección sobre operaciones con activos virtuales es veraz, completa y exacta.</span>
+          </label>
+        </div>
+        <span class="error-msg" data-i18n="sec13_cert_info_err">Debe certificar la veracidad de la información para continuar.</span>
+      </div>
+
       <div id="va-checkboxes-wrap" style="display:none">
         <div class="checkbox-lista">
 

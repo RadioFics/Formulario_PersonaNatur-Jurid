@@ -191,6 +191,8 @@ function validarTodo() {
     errores.push('PEP: Debe indicar si algún representante ejerció cargo público');
   if (!formData.actividades.OPER_VA)
     errores.push('Activos virtuales: Debe indicar si opera con activos virtuales');
+  if (formData.actividades.CERT_INFO !== 'S')
+    errores.push('Activos virtuales: Debe certificar la veracidad de la información');
   if (!document.getElementById('decl_juramento')?.checked)
     errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 

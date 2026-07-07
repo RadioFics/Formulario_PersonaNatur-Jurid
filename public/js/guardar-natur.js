@@ -106,6 +106,8 @@ function validarTodoNatural() {
     errores.push('PEP: Indique si ejerció cargo público');
   if (!formData.actividades.OPER_VA)
     errores.push('Activos virtuales: Debe indicar si opera con activos virtuales');
+  if (formData.actividades.CERT_INFO !== 'S')
+    errores.push('Activos virtuales: Debe certificar la veracidad de la información');
   if (!document.getElementById('decl_juramento')?.checked)
     errores.push('Declaración: Debe declarar bajo juramento que la información es verídica');
 
@@ -163,13 +165,14 @@ function _construirPayloadNatural() {
       CAR_PUBL: pep.CAR_PUBL,
     },
     actividades: {
+      OPER_VA:      act.OPER_VA      || 'N',
       ACT_VA_FIAT:  act.ACT_VA_FIAT  || 'N',
       ACT_VA_VA:    act.ACT_VA_VA    || 'N',
       ACT_TRANS:    act.ACT_TRANS    || 'N',
       ACT_CUSTO:    act.ACT_CUSTO    || 'N',
       ACT_SERV_FIN: act.ACT_SERV_FIN || 'N',
       ACT_SERV_VAP: act.ACT_SERV_VAP || 'N',
-      CERT_INFO:    'S', // aceptado en index.html
+      CERT_INFO:    act.CERT_INFO    || 'N',
     },
     documentos: formData.documentos,
     ACE_POLI:   true,  // T&C aceptados (verificado en index.html)
