@@ -775,9 +775,19 @@ async function hidratarFormularioVisual() {
     }
 
     // Sección 1: cascada/OTRO para País de expedición del documento
+    // Natural guarda estos campos en formDataNatur.basica, no en formData.basica.
     {
-      const cpe = formData.basica.COD_PAIS_EXP;
+      const esNatPaisExp = window.modoPersona === 'N';
+      const srcPaisExp = (esNatPaisExp && window.formDataNatur) ? formDataNatur.basica : formData.basica;
+      let cpe = srcPaisExp.COD_PAIS_EXP;
+      // La columna COD_PAIS_EXP es int en la BD: si se guardó "Otro país" no puede
+      // almacenar 'OTRO' y vuelve NULL al recargar. Reconstruir a partir de OTR_PAIS_EXP.
+      if (!cpe && srcPaisExp.OTR_PAIS_EXP) cpe = 'OTRO';
+      const selPaisExp = document.getElementById('cod_pais_exp');
       if (cpe === 'OTRO') {
+        if (selPaisExp) selPaisExp.value = 'OTRO';
+        if (esNatPaisExp) { if (typeof actualizarNatur === 'function') actualizarNatur('COD_PAIS_EXP', 'OTRO'); }
+        else formData.basica.COD_PAIS_EXP = 'OTRO';
         const fieldOtro = document.getElementById('field-pais_exp_otro');
         const fieldDept = document.getElementById('field-cod_dept_exp');
         const fieldMpio = document.getElementById('field-cod_mpio_exp');
@@ -785,22 +795,23 @@ async function hidratarFormularioVisual() {
         if (fieldMpio) fieldMpio.style.display = 'none';
         if (fieldOtro) { fieldOtro.style.display = ''; fieldOtro.style.gridColumn = 'span 2'; }
         const inp = document.getElementById('pais_exp_otro_txt');
-        if (inp) inp.value = formData.basica.OTR_PAIS_EXP || '';
+        if (inp) inp.value = srcPaisExp.OTR_PAIS_EXP || '';
       } else if (cpe) {
+        if (selPaisExp) selPaisExp.value = cpe;
         if (cpe === COD_COLOMBIA) {
           await cargarCatalogo('/api/catalogo/departamentos', 'cod_dept_exp',
             'COD_DEPT', 'NOM_DEPT', 'select_ph_dept', { cod_pais: cpe });
           const selDept = document.getElementById('cod_dept_exp');
           if (selDept) {
             selDept.disabled = false;
-            if (formData.basica.COD_DEPT_EXP) {
-              selDept.value = formData.basica.COD_DEPT_EXP;
-              if (formData.basica.COD_MPIO_EXP) {
+            if (srcPaisExp.COD_DEPT_EXP) {
+              selDept.value = srcPaisExp.COD_DEPT_EXP;
+              if (srcPaisExp.COD_MPIO_EXP) {
                 await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
                   'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad',
-                  { cod_dept: formData.basica.COD_DEPT_EXP, cod_pais: cpe });
+                  { cod_dept: srcPaisExp.COD_DEPT_EXP, cod_pais: cpe });
                 const selMpio = document.getElementById('cod_mpio_exp');
-                if (selMpio) { selMpio.disabled = false; selMpio.value = formData.basica.COD_MPIO_EXP; }
+                if (selMpio) { selMpio.disabled = false; selMpio.value = srcPaisExp.COD_MPIO_EXP; }
               }
             }
           }
@@ -817,8 +828,8 @@ async function hidratarFormularioVisual() {
             await cargarCatalogo('/api/catalogo/ciudades', 'cod_mpio_exp',
               'COD_MUNI', 'NOM_MUNI', 'select_ph_ciudad', { cod_pais: cpe });
             const hadNoCities2 = _autoNoAplicaCiudad(selMpio2);
-            if (!hadNoCities2 && formData.basica.COD_MPIO_EXP && formData.basica.COD_MPIO_EXP !== 'NA') {
-              selMpio2.value = formData.basica.COD_MPIO_EXP;
+            if (!hadNoCities2 && srcPaisExp.COD_MPIO_EXP && srcPaisExp.COD_MPIO_EXP !== 'NA') {
+              selMpio2.value = srcPaisExp.COD_MPIO_EXP;
             }
           }
         }
